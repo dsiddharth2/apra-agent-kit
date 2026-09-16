@@ -43,6 +43,7 @@ export async function runTask(task, {
         const check = budgets.check();
         if (!check.ok) {
           status = 'budget_exceeded';
+          result = { budgetReason: check.reason, limit: check.limit, actual: check.actual };
           break;
         }
       }

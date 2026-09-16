@@ -41,23 +41,24 @@ export function createBudgets(config = {}) {
 
   function check() {
     if (typeof config.maxIterations === 'number' && iterations >= config.maxIterations) {
-      return { ok: false, reason: 'max_iterations' };
+      return { ok: false, reason: 'max_iterations', limit: config.maxIterations, actual: iterations };
     }
     const totalTokens = totalInputTokens + totalOutputTokens;
     if (typeof config.maxTokens === 'number' && totalTokens >= config.maxTokens) {
-      return { ok: false, reason: 'max_tokens' };
+      return { ok: false, reason: 'max_tokens', limit: config.maxTokens, actual: totalTokens };
     }
     if (typeof config.maxCostUsd === 'number') {
       const cost =
         (totalInputTokens / 1000) * pricing.inputPer1k +
         (totalOutputTokens / 1000) * pricing.outputPer1k;
       if (cost > config.maxCostUsd) {
-        return { ok: false, reason: 'max_cost' };
+        return { ok: false, reason: 'max_cost', limit: config.maxCostUsd, actual: cost };
       }
     }
     if (typeof config.timeoutMs === 'number') {
-      if (Date.now() - startTime >= config.timeoutMs) {
-        return { ok: false, reason: 'timeout' };
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= config.timeoutMs) {
+        return { ok: false, reason: 'timeout', limit: config.timeoutMs, actual: elapsed };
       }
     }
     return { ok: true };

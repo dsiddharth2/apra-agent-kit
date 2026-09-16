@@ -192,7 +192,8 @@ export const defaultRegistry = [
   {
     name: 'country-info',
     description:
-      'Fetches country information: capital, region, population, languages, currencies, and timezones. ' +
+      'Fetches country information from Wikipedia: name, description, and summary extract. ' +
+      'Accepts full country names (e.g. Japan) or ISO alpha-2/3 codes (e.g. JP, IND). ' +
       'Read-only, no LLM tokens.',
     inputSchema: z.object({
       country: z.string().describe('Country name (e.g. Japan, France).'),

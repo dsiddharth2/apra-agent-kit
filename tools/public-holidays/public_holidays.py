@@ -25,6 +25,8 @@ def fetch_holidays(country_code, year=None):
         data = _get(f"https://date.nager.at/api/v3/PublicHolidays/{year}/{urllib.request.quote(country_code.upper())}")
     except (urllib.error.URLError, TimeoutError) as exc:
         return json.dumps({"ok": False, "error": f"holidays fetch failed: {exc}"})
+    except (json.JSONDecodeError, ValueError):
+        return json.dumps({"ok": False, "error": f"No holiday data available for {country_code.upper()} {year} (API returned empty response)"})
 
     if not isinstance(data, list):
         return json.dumps({"ok": False, "error": f"No holiday data for {country_code} {year}"})

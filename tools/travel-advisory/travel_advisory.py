@@ -17,11 +17,23 @@ def _get(url):
         return json.loads(resp.read().decode())
 
 
+def _get_insecure(url):
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    req = urllib.request.Request(url, headers={"User-Agent": "workflow-kit/1.0"})
+    with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+        return json.loads(resp.read().decode())
+
+
 def fetch_advisory(country_code):
     try:
         data = _get(f"https://www.travel-advisory.info/api?countrycode={urllib.request.quote(country_code.upper())}")
-    except (urllib.error.URLError, TimeoutError) as exc:
-        return json.dumps({"ok": False, "error": f"advisory fetch failed: {exc}"})
+    except (urllib.error.URLError, TimeoutError):
+        try:
+            data = _get_insecure(f"https://www.travel-advisory.info/api?countrycode={urllib.request.quote(country_code.upper())}")
+        except (urllib.error.URLError, TimeoutError) as exc:
+            return json.dumps({"ok": False, "error": f"advisory fetch failed: {exc}"})
 
     api_status = data.get("api_status", {})
     if api_status.get("reply", {}).get("code") != 200:

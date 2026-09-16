@@ -17,31 +17,44 @@ def _get(url):
         return json.loads(resp.read().decode())
 
 
+def _wiki_summary(topic):
+    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.request.quote(topic)}"
+    return _get(url)
+
+
+def _resolve_country_name(query):
+    if len(query) in (2, 3) and query.isalpha() and query == query.upper():
+        try:
+            geo = _get(
+                f"https://nominatim.openstreetmap.org/search?"
+                f"country={urllib.request.quote(query)}&format=json&limit=1&accept-language=en"
+            )
+            if geo and isinstance(geo, list) and len(geo) > 0:
+                name = geo[0].get("display_name", "").split(",")[0].strip()
+                if name:
+                    return name
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            pass
+    return query
+
+
 def fetch_country(name):
+    country_name = _resolve_country_name(name)
+
     try:
-        data = _get(f"https://restcountries.com/v3.1/name/{urllib.request.quote(name)}?fields=name,capital,region,subregion,population,languages,currencies,timezones,flags")
+        wiki = _wiki_summary(country_name)
     except (urllib.error.URLError, TimeoutError) as exc:
         return json.dumps({"ok": False, "error": f"country fetch failed: {exc}"})
 
-    if not isinstance(data, list) or len(data) == 0:
+    if wiki.get("type") == "disambiguation" or not wiki.get("extract"):
         return json.dumps({"ok": False, "error": f"Country not found: {name}"})
-
-    c = data[0]
-    langs = list((c.get("languages") or {}).values())
-    currs = c.get("currencies") or {}
-    currency_list = [{"code": k, "name": v.get("name"), "symbol": v.get("symbol")} for k, v in currs.items()]
 
     return json.dumps({
         "ok": True,
-        "name": c.get("name", {}).get("common", name),
-        "official_name": c.get("name", {}).get("official", ""),
-        "capital": (c.get("capital") or [None])[0],
-        "region": c.get("region"),
-        "subregion": c.get("subregion"),
-        "population": c.get("population"),
-        "languages": langs,
-        "currencies": currency_list,
-        "timezones": c.get("timezones", []),
+        "name": wiki.get("title", country_name),
+        "description": wiki.get("description", ""),
+        "summary": wiki.get("extract", ""),
+        "thumbnail": wiki.get("thumbnail", {}).get("source", ""),
     })
 
 
