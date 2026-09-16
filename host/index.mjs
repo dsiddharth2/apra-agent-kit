@@ -9,6 +9,9 @@ import { loadConfig } from './config.mjs';
 import { extendRegistry } from './tools/registry.mjs';
 import { executeTool } from './tools/executor.mjs';
 import { createExpressAdapter } from '../comm/express.mjs';
+import { runTask } from './run-loop.mjs';
+import { createBudgets } from './budgets.mjs';
+import { createGuardrails } from './guardrails.mjs';
 
 const SUPPORTED_ADAPTERS = { express: createExpressAdapter };
 
@@ -20,6 +23,60 @@ function resolveAdapter(name) {
 
 function defaultConfigDir() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+}
+
+function resolvePhase2Modules(config, { runLoop, budgets, guardrails } = {}) {
+  return {
+    runLoopConfig: runLoop ?? config.modules?.runLoop,
+    budgetsConfig: budgets ?? config.modules?.budgets,
+    guardrailsConfig: guardrails ?? config.modules?.guardrails,
+  };
+}
+
+function createPhase2Modules(toolRegistry, { runLoopConfig, budgetsConfig, guardrailsConfig }) {
+  const runLoopEnabled = runLoopConfig?.enabled ?? !!runLoopConfig?.strategy;
+  const budgetsEnabled = budgetsConfig && (budgetsConfig.enabled ?? true);
+  const guardrailsEnabled = guardrailsConfig && (guardrailsConfig.enabled ?? true);
+  const guardrailsMod = guardrailsEnabled
+    ? createGuardrails(guardrailsConfig, toolRegistry, executeTool)
+    : null;
+  const budgetsMod = budgetsEnabled ? createBudgets(budgetsConfig) : null;
+  return { runLoopEnabled, runLoopConfig, budgetsMod, guardrailsMod };
+}
+
+async function executeHostedTask(task, {
+  api,
+  activeDispatcher,
+  toolRegistry,
+  runLoopConfig,
+  budgetsMod,
+  guardrailsMod,
+  signal,
+}) {
+  const fullTask = { id: task.id ?? `t-${Date.now().toString(36)}`, ...task };
+  let lease;
+  try {
+    lease = await activeDispatcher.dispatch({ signal });
+  } catch (err) {
+    return {
+      status: 'failed',
+      result: { error: 'dispatch_failed', message: String(err?.message ?? err) },
+    };
+  }
+  try {
+    const pooledApi = createPooledFleetApi(api, lease);
+    return await runTask(fullTask, {
+      strategy: runLoopConfig.strategy ?? 'open-ended',
+      tools: toolRegistry,
+      fleetApi: pooledApi,
+      budgets: budgetsMod,
+      guardrails: guardrailsMod,
+      ...runLoopConfig,
+      signal,
+    });
+  } finally {
+    await lease.release();
+  }
 }
 
 // Thin entry point mirroring startMcpServer's injection pattern.
@@ -36,6 +93,9 @@ export async function startHost({
   registry,
   configDir,
   authenticate = defaultAuthenticate,
+  runLoop: runLoopOption,
+  budgets: budgetsOption,
+  guardrails: guardrailsOption,
 } = {}) {
   const config = await loadConfig(configDir ?? defaultConfigDir(), env);
 
@@ -62,6 +122,15 @@ export async function startHost({
   }
 
   const toolRegistry = registry ?? extendRegistry();
+  const phase2 = createPhase2Modules(
+    toolRegistry,
+    resolvePhase2Modules(config, {
+      runLoop: runLoopOption,
+      budgets: budgetsOption,
+      guardrails: guardrailsOption,
+    }),
+  );
+  const { runLoopEnabled, runLoopConfig, budgetsMod, guardrailsMod } = phase2;
 
   const mcpHandler = async (req, res) => {
     const server = buildMcpServer({
@@ -88,7 +157,39 @@ export async function startHost({
     await adapter.start({
       routes: {
         mcp: mcpHandler,
-        task: null,
+        task: runLoopEnabled
+          ? async (req, res) => {
+              const task = {
+                id: `t-${Date.now().toString(36)}`,
+                ...req.body,
+              };
+              let lease;
+              try {
+                lease = await activeDispatcher.dispatch({});
+              } catch (err) {
+                res.status(503).json({
+                  ok: false,
+                  error: 'dispatch_failed',
+                  message: String(err?.message ?? err),
+                });
+                return;
+              }
+              try {
+                const pooledApi = createPooledFleetApi(api, lease);
+                const result = await runTask(task, {
+                  strategy: runLoopConfig.strategy ?? 'open-ended',
+                  tools: toolRegistry,
+                  fleetApi: pooledApi,
+                  budgets: budgetsMod,
+                  guardrails: guardrailsMod,
+                  ...runLoopConfig,
+                });
+                res.json({ taskId: task.id, ...result });
+              } finally {
+                await lease.release();
+              }
+            }
+          : null,
         jobs: null,
         health: (req, res) => res.json({ ok: true }),
       },
@@ -124,13 +225,16 @@ export async function startHost({
       };
     }
     try {
-      return await executeTool(tool, {
+      const executorArgs = {
         fleetApi: createPooledFleetApi(api, lease),
         args,
         signal: lease.signal ?? signal,
         reportPhase: () => {},
         workspace: { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer },
-      });
+      };
+      return guardrailsMod
+        ? await guardrailsMod.execute(tool, executorArgs)
+        : await executeTool(tool, executorArgs);
     } finally {
       await lease.release();
     }
@@ -170,9 +274,41 @@ export function createHost(options = {}) {
       }
       return builder;
     },
+    runLoop(config)    { overrides.runLoop = { enabled: true, ...config }; return builder; },
+    budget(config)     { overrides.budgets = config; return builder; },
+    guardrails(config) { overrides.guardrails = config; return builder; },
     build() {
+      const hostOptions = overrides;
       return {
-        start: () => startHost(overrides),
+        start: (startOpts = {}) => startHost({ ...hostOptions, ...startOpts }),
+        run: async (task, runOpts = {}) => {
+          const config = await loadConfig(
+            hostOptions.configDir ?? defaultConfigDir(),
+            hostOptions.env ?? process.env,
+          );
+          const toolRegistry = hostOptions.registry ?? extendRegistry();
+          const { runLoopEnabled, runLoopConfig, budgetsMod, guardrailsMod } = createPhase2Modules(
+            toolRegistry,
+            resolvePhase2Modules(config, hostOptions),
+          );
+          if (!runLoopEnabled) {
+            throw new Error('run loop is not enabled');
+          }
+          const api = hostOptions.fleetApi;
+          const activeDispatcher = hostOptions.dispatcher;
+          if (!api || !activeDispatcher) {
+            throw new Error('fleetApi and dispatcher are required for agent.run()');
+          }
+          return executeHostedTask(task, {
+            api,
+            activeDispatcher,
+            toolRegistry,
+            runLoopConfig,
+            budgetsMod,
+            guardrailsMod,
+            signal: runOpts.signal,
+          });
+        },
       };
     },
   };
