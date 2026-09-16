@@ -52,8 +52,8 @@ The kit also ships with ready-to-use tools and workflows:
 | `demo` | End-to-end smoke test: fleet status, python command, transform, agent prompt | Yes |
 | `inspect-members` | Reports on the worker pair: registration, work folders | No |
 | `city-briefing` | Fetches live weather + local time, composes a briefing with an agent | Yes |
-| `weather` | Current weather for a city via wttr.in | No |
-| `timezone` | Local time and timezone for a city via World Time API | No |
+| `weather` | Current weather for a city via Open-Meteo | No |
+| `timezone` | Local time and timezone for a city via timeapi.io | No |
 | `textstats` | Character, word, and sentence counts for a text string | No |
 
 ---
@@ -321,8 +321,8 @@ workflows/
   city-briefing/        # multi-tool workflow: weather + timezone + agent briefing
     main.mjs, city-briefing.js, workflow.json
 tools/
-  weather/weather.py    # current weather via wttr.in
-  timezone/timezone.py  # local time via World Time API
+  weather/weather.py    # current weather via Open-Meteo
+  timezone/timezone.py  # local time via timeapi.io
   textstats/textstats.py # character, word, sentence counts
 transport/
   stdio-fleet.mjs       # spawn apra-fleet over stdio, wrap as fleetApi
