@@ -277,7 +277,10 @@ test('POST /task executes a task through the run loop', async () => {
 test('POST /task returns 404 when run loop is disabled', async () => {
   const fleetApi = createMockFleetApi({ members: rosterNames(2) });
   const dispatcher = await makeDispatcher();
-  const { host, close } = await startHost({ fleetApi, dispatcher, port: 0 });
+  const { host, close } = await startHost({
+    fleetApi, dispatcher, port: 0,
+    runLoop: { enabled: false },
+  });
 
   try {
     const res = await httpPost(host.port(), '/task', { goal: 'test' });
