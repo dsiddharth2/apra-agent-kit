@@ -5,6 +5,7 @@
 | [architecture.md](architecture.md) | You want to understand what this repo is, how the layers fit together, and why the non-obvious decisions were made. Start here — it includes a primer on Fleet concepts for people who have never used Fleet. |
 | [development.md](development.md) | You are setting up, running tests, adding a workflow, or debugging a failure. |
 | [mcp-interface.md](mcp-interface.md) | You are setting up or extending the MCP server — tool catalog, registry contract, timeouts, auth, and hosting. |
+| [phase2-run-loop.md](phase2-run-loop.md) | You want the detailed reference for the autonomous run loop: strategies, budgets, guardrails, prompt templates, the `/task` API, and Docker deployment. |
 | [specs/2026-09-09-fleet-agent-kit-spec.md](specs/2026-09-09-fleet-agent-kit-spec.md) | You want to see what has been built, the development roadmap, and where the project is heading. |
 
 ### Specs
