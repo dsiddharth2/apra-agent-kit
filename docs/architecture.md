@@ -167,8 +167,8 @@ injected.
 
 | File | Responsibility |
 |---|---|
-| `weather/weather.py` | Fetches current weather from wttr.in for a city. Returns JSON with temperature, humidity, wind, UV index. No external Python dependencies. |
-| `timezone/timezone.py` | Fetches local time from worldtimeapi.org for a city. Returns JSON with datetime, UTC offset, abbreviation. No external Python dependencies. |
+| `weather/weather.py` | Fetches current weather from Open-Meteo (geocoding + forecast) for a city. Returns JSON with temperature, humidity, wind, UV index. Uses `certifi` when available for SSL. |
+| `timezone/timezone.py` | Fetches local time from timeapi.io (via Open-Meteo geocoding) for a city. Returns JSON with datetime, UTC offset, abbreviation. Uses `certifi` and `zoneinfo` for proper offsets. |
 | `textstats/textstats.py` | Analyzes a text string. Returns JSON with character count, word count, sentence count, unique words, average word length. Pure stdlib. |
 
 These scripts are called by workflows via `command()` on a Fleet member and are also

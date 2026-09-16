@@ -37,8 +37,8 @@ on PATH.
 | `demo` | None | Runs the complete demo: fleet status, dummy python command, transform, and agent smoke test. Spends LLM tokens. Not read-only. |
 | `inspect-members` | `roles`, `includeFiles` | Reports on the worker pair the call is running on. Read-only, no LLM tokens. |
 | `city-briefing` | `city` | Fetches live weather and local time, composes a short city briefing using an agent, and analyzes the briefing text. Spends LLM tokens. |
-| `weather` | `city` | Fetches current weather for a city from wttr.in. Returns temperature, humidity, wind, UV index. Read-only, no LLM tokens. |
-| `timezone` | `city` | Fetches current local time and timezone for a city from World Time API. Returns datetime, UTC offset, abbreviation. Read-only, no LLM tokens. |
+| `weather` | `city` | Fetches current weather for a city from Open-Meteo. Returns temperature, humidity, wind, UV index. Read-only, no LLM tokens. |
+| `timezone` | `city` | Fetches current local time and timezone for a city via timeapi.io. Returns datetime, UTC offset, abbreviation. Read-only, no LLM tokens. |
 | `textstats` | `text` | Analyzes a text string: character count, word count, sentence count, unique words, average word length. Read-only, no LLM tokens. |
 
 `inspect-members` accepts:
