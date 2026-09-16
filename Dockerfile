@@ -2,7 +2,9 @@ FROM node:22-bookworm-slim
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-     python3 ca-certificates git make g++ \
+     python3 python3-pip ca-certificates git make g++ \
+  && update-ca-certificates \
+  && pip install --no-cache-dir --break-system-packages certifi \
   && npm install -g @apralabs/apra-fleet @anthropic-ai/claude-code \
   && apra-fleet install --skill none \
   && apt-get purge -y --auto-remove make g++ \
