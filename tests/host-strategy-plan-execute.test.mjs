@@ -189,6 +189,137 @@ test('step review: reviewer rejects step, doer retries', async () => {
   assert.equal(stepReviews.length, 2);
 });
 
+test('partial args: doer resolves incomplete args at execution time', async () => {
+  const api = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: [
+      // doer: plan with partial args on step 2
+      '```plan\n{"steps": [{"type": "tool", "tool": "weather", "args": {"city": "London"}, "reason": "data", "review": false}, {"type": "tool", "tool": "textstats", "args": {"text": ""}, "reason": "analyze", "review": false}]}\n```',
+      // reviewer: approve
+      '```review\n{"approved": true}\n```',
+      // doer: resolve args for textstats
+      '```tool_call\n{"tool": "textstats", "args": {"text": "London is 15 degrees"}}\n```',
+      // doer: done
+      '```done\n{"result": "done", "summary": "done"}\n```',
+    ],
+  });
+  const strategy = createPlanExecuteStrategy({
+    task: { id: 't-1', goal: 'Test' },
+    tools: makeTools(),
+    fleetApi: api,
+    maxReplanAttempts: 3,
+    maxReviewAttempts: 2,
+    maxStepReviewAttempts: 2,
+    maxNoActionTurns: 3,
+  });
+  const events = [];
+  for await (const event of strategy.iterate()) {
+    events.push(event);
+  }
+  const textstatsObs = events.find(e => e.type === 'observation' && e.tool === 'textstats');
+  assert.ok(textstatsObs);
+  assert.equal(textstatsObs.args.text, 'London is 15 degrees');
+  const resolveCall = api.promptCalls.find(c => c.prompt.includes('empty or partial args'));
+  assert.ok(resolveCall, 'expected resolve-args prompt for partial args');
+});
+
+test('reason step review: reviewer rejects once, doer retries, reviewer approves', async () => {
+  const api = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: [
+      // doer: plan with reviewed reason step
+      '```plan\n{"steps": [{"type": "reason", "prompt": "Compose briefing", "review": true}]}\n```',
+      // reviewer: approve plan
+      '```review\n{"approved": true}\n```',
+      // doer: first reason attempt
+      'Bad briefing draft.',
+      // reviewer: reject reason result
+      '```step_review\n{"approved": false, "feedback": "Too terse"}\n```',
+      // doer: retry reason step
+      'London is 15°C and cloudy. A light jacket is recommended.',
+      // reviewer: approve reason result
+      '```step_review\n{"approved": true}\n```',
+      // doer: done
+      '```done\n{"result": "briefing complete", "summary": "done"}\n```',
+    ],
+  });
+  const strategy = createPlanExecuteStrategy({
+    task: { id: 't-1', goal: 'Briefing' },
+    tools: makeTools(),
+    fleetApi: api,
+    maxReplanAttempts: 3,
+    maxReviewAttempts: 2,
+    maxStepReviewAttempts: 2,
+    maxNoActionTurns: 3,
+  });
+  const events = [];
+  for await (const event of strategy.iterate()) {
+    events.push(event);
+  }
+  const reasonObs = events.filter(e => e.type === 'observation' && e.stepType === 'reason');
+  assert.equal(reasonObs.length, 2);
+  assert.ok(reasonObs[1].text.includes('15°C'));
+  const stepReviews = events.filter(e => e.type === 'step_review' && e.step === 'reason');
+  assert.equal(stepReviews.length, 2);
+  assert.equal(stepReviews[0].approved, false);
+  assert.equal(stepReviews[1].approved, true);
+});
+
+test('step review exhausted: replan is reviewed and new plan executed', async () => {
+  const callCount = { weather: 0, textstats: 0 };
+  const tools = [
+    { name: 'weather', description: 'Get weather', reversible: true, timeout: 5000,
+      run: async ({ args }) => {
+        callCount.weather++;
+        return { temp_c: 'WRONG', city: args.city };
+      },
+    },
+    { name: 'textstats', description: 'Text stats', reversible: true, timeout: 5000,
+      run: async ({ args }) => {
+        callCount.textstats++;
+        return { word_count: 3, text: args.text ?? '' };
+      },
+    },
+  ];
+  const api = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: [
+      // doer: initial plan
+      '```plan\n{"steps": [{"type": "tool", "tool": "weather", "args": {"city": "Paris"}, "reason": "data", "review": true}]}\n```',
+      // reviewer: approve plan
+      '```review\n{"approved": true}\n```',
+      // reviewer: reject step (maxStepReviewAttempts: 0 triggers replan)
+      '```step_review\n{"approved": false, "feedback": "Wrong result"}\n```',
+      // doer: replan with different steps
+      '```plan\n{"steps": [{"type": "tool", "tool": "textstats", "args": {"text": "hello"}, "reason": "analyze", "review": false}]}\n```',
+      // reviewer: approve revised plan
+      '```review\n{"approved": true}\n```',
+      // doer: done
+      '```done\n{"result": "done", "summary": "done"}\n```',
+    ],
+  });
+  const strategy = createPlanExecuteStrategy({
+    task: { id: 't-1', goal: 'Test replan' },
+    tools,
+    fleetApi: api,
+    maxReplanAttempts: 3,
+    maxReviewAttempts: 2,
+    maxStepReviewAttempts: 0,
+    maxNoActionTurns: 3,
+  });
+  const events = [];
+  for await (const event of strategy.iterate()) {
+    events.push(event);
+  }
+  const plans = events.filter(e => e.type === 'plan');
+  assert.equal(plans.length, 2);
+  assert.equal(callCount.weather, 1);
+  assert.equal(callCount.textstats, 1);
+  const textstatsObs = events.find(e => e.type === 'observation' && e.tool === 'textstats');
+  assert.ok(textstatsObs);
+  assert.equal(textstatsObs.args.text, 'hello');
+});
+
 test('history returns all observations', async () => {
   const api = createMockFleetApi({
     members: rosterNames(1),

@@ -12,8 +12,10 @@ function extractText(mcpResult) {
   return (mcpResult.content ?? []).map(p => p.text ?? '').join('\n');
 }
 
-function hasEmptyArgs(step) {
-  return step.type === 'tool' && (!step.args || Object.keys(step.args).length === 0);
+function needsArgsResolution(step) {
+  if (step.type !== 'tool') return false;
+  if (!step.args || Object.keys(step.args).length === 0) return true;
+  return Object.values(step.args).some(v => v === undefined || v === null || v === '');
 }
 
 export function createPlanExecuteStrategy({
@@ -63,52 +65,33 @@ export function createPlanExecuteStrategy({
     let replanCount = 0;
     let currentPlan = null;
 
-    // Phase 1: Plan
-    planLoop: while (true) {
-      const planPrompt = currentPlan
-        ? buildReplanPrompt({
-            task, plan: currentPlan, history: observations,
-            failedStep: null, reviewerFeedback: null, systemPrompt,
-          })
-        : buildPlanPrompt({ task, tools: toolCatalog, systemPrompt });
+    async function* reviewPlan(plan) {
+      let workingPlan = plan;
 
-      const planText = await callPrompt('doer', planPrompt);
-      yield { type: 'prompt_usage', text: planText };
-      const planParsed = parseResponse(planText);
-
-      if (planParsed.type !== 'plan') {
-        yield { type: 'error', reason: 'invalid_plan', message: 'Doer did not produce a plan block' };
-        return;
-      }
-
-      currentPlan = planParsed.payload;
-      yield { type: 'plan', plan: currentPlan };
-
-      // Phase 2: Review plan
       for (let reviewRound = 0; reviewRound < maxReviewAttempts; reviewRound++) {
-        const reviewPrompt = buildReviewPrompt({ task, plan: currentPlan, tools: toolCatalog, systemPrompt });
+        const reviewPrompt = buildReviewPrompt({ task, plan: workingPlan, tools: toolCatalog, systemPrompt });
         const reviewText = await callPrompt('reviewer', reviewPrompt);
         yield { type: 'prompt_usage', text: reviewText };
         const reviewParsed = parseResponse(reviewText);
 
         if (reviewParsed.type !== 'review') {
           yield { type: 'review', approved: true, note: 'Reviewer did not produce review block, treating as approved' };
-          break;
+          return workingPlan;
         }
 
         const { approved, feedback } = reviewParsed.payload;
         yield { type: 'review', approved, feedback };
 
-        if (approved) break;
+        if (approved) return workingPlan;
 
         replanCount++;
         if (replanCount > maxReplanAttempts) {
           yield { type: 'error', reason: 'max_replans', message: `Exceeded ${maxReplanAttempts} replan attempts` };
-          return;
+          return null;
         }
 
         const replanPrompt = buildReplanPrompt({
-          task, plan: currentPlan, history: observations,
+          task, plan: workingPlan, history: observations,
           failedStep: null, reviewerFeedback: feedback, systemPrompt,
         });
         const replanText = await callPrompt('doer', replanPrompt);
@@ -117,106 +100,180 @@ export function createPlanExecuteStrategy({
 
         if (replanParsed.type !== 'plan') {
           yield { type: 'error', reason: 'invalid_replan', message: 'Doer did not produce a revised plan block' };
-          return;
+          return null;
         }
-        currentPlan = replanParsed.payload;
-        yield { type: 'plan', plan: currentPlan };
+        workingPlan = replanParsed.payload;
+        yield { type: 'plan', plan: workingPlan };
       }
 
-      break planLoop;
+      return workingPlan;
     }
 
-    // Phase 3: Execute steps
-    const steps = currentPlan.steps;
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
+    async function* replanAfterStepFailure(failedStep, feedback) {
+      replanCount++;
+      if (replanCount > maxReplanAttempts) {
+        yield { type: 'error', reason: 'max_replans', message: 'Exceeded replan attempts after step review rejection' };
+        return null;
+      }
 
-      if (step.type === 'tool') {
-        let args = step.args;
+      const replanPrompt = buildReplanPrompt({
+        task, plan: currentPlan, history: observations,
+        failedStep, reviewerFeedback: feedback, systemPrompt,
+      });
+      const rpText = await callPrompt('doer', replanPrompt);
+      yield { type: 'prompt_usage', text: rpText };
+      const rpParsed = parseResponse(rpText);
 
-        if (hasEmptyArgs(step)) {
-          const resolvePrompt = buildResolveArgsPrompt({ task, step, history: observations, systemPrompt });
-          const resolveText = await callPrompt('doer', resolvePrompt);
-          yield { type: 'prompt_usage', text: resolveText };
-          const resolved = parseResponse(resolveText);
-          if (resolved.type === 'tool_call') {
-            args = resolved.payload.args;
+      if (rpParsed.type !== 'plan') {
+        yield { type: 'error', reason: 'invalid_replan', message: 'Doer did not produce a revised plan block' };
+        return null;
+      }
+
+      const revisedPlan = rpParsed.payload;
+      yield { type: 'plan', plan: revisedPlan };
+
+      return yield* reviewPlan(revisedPlan);
+    }
+
+    // Phase 1: Plan
+    const planPrompt = buildPlanPrompt({ task, tools: toolCatalog, systemPrompt });
+    const planText = await callPrompt('doer', planPrompt);
+    yield { type: 'prompt_usage', text: planText };
+    const planParsed = parseResponse(planText);
+
+    if (planParsed.type !== 'plan') {
+      yield { type: 'error', reason: 'invalid_plan', message: 'Doer did not produce a plan block' };
+      return;
+    }
+
+    currentPlan = planParsed.payload;
+    yield { type: 'plan', plan: currentPlan };
+
+    const reviewedPlan = yield* reviewPlan(currentPlan);
+    if (!reviewedPlan) return;
+    currentPlan = reviewedPlan;
+
+    // Phase 3: Execute steps (restarts from the beginning after step-review replan)
+    executeLoop: while (true) {
+      const steps = currentPlan.steps;
+      let restartExecution = false;
+
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+
+        if (step.type === 'tool') {
+          let args = step.args;
+
+          if (needsArgsResolution(step)) {
+            const resolvePrompt = buildResolveArgsPrompt({ task, step, history: observations, systemPrompt });
+            const resolveText = await callPrompt('doer', resolvePrompt);
+            yield { type: 'prompt_usage', text: resolveText };
+            const resolved = parseResponse(resolveText);
+            if (resolved.type === 'tool_call') {
+              args = resolved.payload.args;
+            }
           }
-        }
 
-        let result = await runTool(step.tool, args);
-        observations.push({ type: 'observation', stepType: 'tool', tool: step.tool, args, result });
-        yield { type: 'observation', stepType: 'tool', tool: step.tool, args, ...result };
+          let result = await runTool(step.tool, args);
+          observations.push({ type: 'observation', stepType: 'tool', tool: step.tool, args, result });
+          yield { type: 'observation', stepType: 'tool', tool: step.tool, args, ...result };
 
-        // Step review
-        if (shouldReview(step)) {
-          for (let retryRound = 0; retryRound <= maxStepReviewAttempts; retryRound++) {
-            const srPrompt = buildStepReviewPrompt({ task, step, result, history: observations, systemPrompt });
-            const srText = await callPrompt('reviewer', srPrompt);
-            yield { type: 'prompt_usage', text: srText };
-            const srParsed = parseResponse(srText);
+          if (shouldReview(step)) {
+            for (let retryRound = 0; retryRound <= maxStepReviewAttempts; retryRound++) {
+              const srPrompt = buildStepReviewPrompt({ task, step, result, history: observations, systemPrompt });
+              const srText = await callPrompt('reviewer', srPrompt);
+              yield { type: 'prompt_usage', text: srText };
+              const srParsed = parseResponse(srText);
 
-            const approved = srParsed.type === 'step_review' ? srParsed.payload.approved : true;
-            const feedback = srParsed.type === 'step_review' ? srParsed.payload.feedback : undefined;
-            yield { type: 'step_review', approved, feedback, step: step.tool };
+              const approved = srParsed.type === 'step_review' ? srParsed.payload.approved : true;
+              const feedback = srParsed.type === 'step_review' ? srParsed.payload.feedback : undefined;
+              yield { type: 'step_review', approved, feedback, step: step.tool };
 
-            if (approved) break;
+              if (approved) break;
 
-            if (retryRound >= maxStepReviewAttempts) {
-              replanCount++;
-              if (replanCount > maxReplanAttempts) {
-                yield { type: 'error', reason: 'max_replans', message: 'Exceeded replan attempts after step review rejection' };
-                return;
+              if (retryRound >= maxStepReviewAttempts) {
+                const replannedPlan = yield* replanAfterStepFailure(step, feedback);
+                if (!replannedPlan) return;
+                currentPlan = replannedPlan;
+                restartExecution = true;
+                break;
               }
-              const replanPrompt = buildReplanPrompt({
-                task, plan: currentPlan, history: observations,
-                failedStep: step, reviewerFeedback: feedback, systemPrompt,
+
+              const retryPrompt = buildResolveArgsPrompt({
+                task,
+                step: { ...step, reason: `Retry: ${feedback}` },
+                history: observations,
+                systemPrompt,
               });
-              const rpText = await callPrompt('doer', replanPrompt);
-              yield { type: 'prompt_usage', text: rpText };
-              const rpParsed = parseResponse(rpText);
-              if (rpParsed.type === 'plan') {
-                currentPlan = rpParsed.payload;
-                yield { type: 'plan', plan: currentPlan };
+              const retryText = await callPrompt('doer', retryPrompt);
+              yield { type: 'prompt_usage', text: retryText };
+              const retryParsed = parseResponse(retryText);
+              if (retryParsed.type === 'tool_call') {
+                args = retryParsed.payload.args;
               }
-              break;
+              result = await runTool(step.tool, args);
+              observations.push({ type: 'observation', stepType: 'tool', tool: step.tool, args, result, retry: retryRound + 1 });
+              yield { type: 'observation', stepType: 'tool', tool: step.tool, args, ...result };
             }
 
-            // Retry: ask doer to redo
-            const retryPrompt = buildResolveArgsPrompt({ task, step: { ...step, reason: `Retry: ${feedback}` }, history: observations, systemPrompt });
-            const retryText = await callPrompt('doer', retryPrompt);
-            yield { type: 'prompt_usage', text: retryText };
-            const retryParsed = parseResponse(retryText);
-            if (retryParsed.type === 'tool_call') {
-              args = retryParsed.payload.args;
-            }
-            result = await runTool(step.tool, args);
-            observations.push({ type: 'observation', stepType: 'tool', tool: step.tool, args, result, retry: retryRound + 1 });
-            yield { type: 'observation', stepType: 'tool', tool: step.tool, args, ...result };
+            if (restartExecution) break;
           }
-        }
-      } else if (step.type === 'reason') {
-        const reasonPrompt = buildReasonPrompt({ task, step, history: observations, systemPrompt });
-        const reasonText = await callPrompt('doer', reasonPrompt);
-        yield { type: 'prompt_usage', text: reasonText };
-        observations.push({ type: 'observation', stepType: 'reason', text: reasonText });
-        yield { type: 'observation', stepType: 'reason', text: reasonText };
+        } else if (step.type === 'reason') {
+          const reasonPrompt = buildReasonPrompt({ task, step, history: observations, systemPrompt });
+          let reasonText = await callPrompt('doer', reasonPrompt);
+          yield { type: 'prompt_usage', text: reasonText };
+          observations.push({ type: 'observation', stepType: 'reason', text: reasonText });
+          yield { type: 'observation', stepType: 'reason', text: reasonText };
 
-        if (shouldReview(step)) {
-          const srPrompt = buildStepReviewPrompt({ task, step, result: { text: reasonText }, history: observations, systemPrompt });
-          const srText = await callPrompt('reviewer', srPrompt);
-          yield { type: 'prompt_usage', text: srText };
-          const srParsed = parseResponse(srText);
-          const approved = srParsed.type === 'step_review' ? srParsed.payload.approved : true;
-          const feedback = srParsed.type === 'step_review' ? srParsed.payload.feedback : undefined;
-          yield { type: 'step_review', approved, feedback, step: 'reason' };
+          if (shouldReview(step)) {
+            for (let retryRound = 0; retryRound <= maxStepReviewAttempts; retryRound++) {
+              const srPrompt = buildStepReviewPrompt({
+                task, step, result: { text: reasonText }, history: observations, systemPrompt,
+              });
+              const srText = await callPrompt('reviewer', srPrompt);
+              yield { type: 'prompt_usage', text: srText };
+              const srParsed = parseResponse(srText);
+
+              const approved = srParsed.type === 'step_review' ? srParsed.payload.approved : true;
+              const feedback = srParsed.type === 'step_review' ? srParsed.payload.feedback : undefined;
+              yield { type: 'step_review', approved, feedback, step: 'reason' };
+
+              if (approved) break;
+
+              if (retryRound >= maxStepReviewAttempts) {
+                const replannedPlan = yield* replanAfterStepFailure(step, feedback);
+                if (!replannedPlan) return;
+                currentPlan = replannedPlan;
+                restartExecution = true;
+                break;
+              }
+
+              const retryPrompt = buildReasonPrompt({
+                task,
+                step: { ...step, prompt: `Retry: ${feedback}. ${step.prompt}` },
+                history: observations,
+                systemPrompt,
+              });
+              reasonText = await callPrompt('doer', retryPrompt);
+              yield { type: 'prompt_usage', text: reasonText };
+              observations.push({ type: 'observation', stepType: 'reason', text: reasonText, retry: retryRound + 1 });
+              yield { type: 'observation', stepType: 'reason', text: reasonText };
+            }
+
+            if (restartExecution) break;
+          }
         }
       }
+
+      if (restartExecution) {
+        continue executeLoop;
+      }
+      break executeLoop;
     }
 
     // Phase 4: Done
     const donePrompt = buildExecutePrompt({
-      task, plan: currentPlan, stepIndex: steps.length - 1,
+      task, plan: currentPlan, stepIndex: currentPlan.steps.length - 1,
       observation: observations[observations.length - 1], systemPrompt,
     });
     const doneText = await callPrompt('doer', donePrompt);
