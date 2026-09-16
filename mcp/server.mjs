@@ -25,7 +25,7 @@ function makePhaseReporter(ctx) {
   };
 }
 
-export function buildMcpServer({ fleetApi, dispatcher, registry = defaultRegistry } = {}) {
+export function buildMcpServer({ fleetApi, dispatcher, registry = defaultRegistry, execute } = {}) {
   if (!fleetApi) throw new Error('buildMcpServer requires fleetApi');
   if (!dispatcher) throw new Error('buildMcpServer requires dispatcher');
   const server = new McpServer(SERVER_INFO);
@@ -42,15 +42,28 @@ export function buildMcpServer({ fleetApi, dispatcher, registry = defaultRegistr
       const reportPhase = makePhaseReporter(ctx);
       const lease = await dispatcher.dispatch({ signal: ctx.mcpReq.signal, reportPhase });
       try {
-        const result = toToolResult(
-          await entry.run({
-            fleetApi: createPooledFleetApi(fleetApi, lease),
-            args,
-            signal: lease.signal,
-            reportPhase,
-            workspace: { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer },
-          }),
-        );
+        const executorArgs = {
+          fleetApi: createPooledFleetApi(fleetApi, lease),
+          args,
+          signal: lease.signal,
+          reportPhase,
+          workspace: { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer },
+        };
+
+        if (execute) {
+          const execResult = await execute(entry, executorArgs);
+          if (!execResult.ok) {
+            const text = execResult.error === 'guardrail_denied'
+              ? `guardrail_denied: ${execResult.reason}`
+              : JSON.stringify(execResult);
+            return { content: [{ type: 'text', text }], isError: true };
+          }
+          const result = toToolResult(execResult.result);
+          result.content.push({ type: 'text', text: `\n[worker:${lease.workerId}]` });
+          return result;
+        }
+
+        const result = toToolResult(await entry.run(executorArgs));
         result.content.push({ type: 'text', text: `\n[worker:${lease.workerId}]` });
         return result;
       } finally {

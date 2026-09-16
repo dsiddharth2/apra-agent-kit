@@ -134,7 +134,7 @@ test('unimplemented module with enabled:true logs warning', async () => {
     name: 'x',
     fleet: {},
     comm: { adapter: 'express' },
-    modules: { runLoop: { enabled: true } },
+    modules: { memory: { enabled: true } },
   };`);
   const warnings = [];
   const origWarn = console.warn;
@@ -144,5 +144,82 @@ test('unimplemented module with enabled:true logs warning', async () => {
   } finally {
     console.warn = origWarn;
   }
-  assert.ok(warnings.some(w => /runLoop/i.test(w) && /not implemented/i.test(w)));
+  assert.ok(warnings.some(w => /memory/i.test(w) && /not implemented/i.test(w)));
+});
+
+test('runLoop module accepted when enabled', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default {
+    name: 'x',
+    fleet: {},
+    comm: { adapter: 'express' },
+    modules: { runLoop: { enabled: true, strategy: 'plan-execute' } },
+  };`);
+  const warnings = [];
+  const origWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    const config = await loadConfig(dir);
+    assert.equal(config.modules.runLoop.enabled, true);
+    assert.ok(!warnings.some(w => /runLoop/i.test(w) && /not implemented/i.test(w)));
+  } finally {
+    console.warn = origWarn;
+  }
+});
+
+test('budgets module accepted when enabled', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default {
+    name: 'x',
+    fleet: {},
+    comm: { adapter: 'express' },
+    modules: { budgets: { enabled: true, maxIterations: 25 } },
+  };`);
+  const warnings = [];
+  const origWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    await loadConfig(dir);
+    assert.ok(!warnings.some(w => /budgets/i.test(w) && /not implemented/i.test(w)));
+  } finally {
+    console.warn = origWarn;
+  }
+});
+
+test('guardrails module accepted when enabled', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default {
+    name: 'x',
+    fleet: {},
+    comm: { adapter: 'express' },
+    modules: { guardrails: { enabled: true, defaultPolicy: 'allow' } },
+  };`);
+  const warnings = [];
+  const origWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    await loadConfig(dir);
+    assert.ok(!warnings.some(w => /guardrails/i.test(w) && /not implemented/i.test(w)));
+  } finally {
+    console.warn = origWarn;
+  }
+});
+
+test('budgets without runLoop logs dependency warning', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default {
+    name: 'x',
+    fleet: {},
+    comm: { adapter: 'express' },
+    modules: { budgets: { enabled: true } },
+  };`);
+  const warnings = [];
+  const origWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    await loadConfig(dir);
+    assert.ok(warnings.some(w => /budgets/i.test(w) && /runLoop/i.test(w)));
+  } finally {
+    console.warn = origWarn;
+  }
 });
