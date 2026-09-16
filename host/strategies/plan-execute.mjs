@@ -175,6 +175,26 @@ export function createPlanExecuteStrategy({
           }
 
           let result = await runTool(step.tool, args);
+          if (result.ok === false) {
+            const toolDef = tools.find(t => t.name === step.tool);
+            if (toolDef?.retryable) {
+              const retryLimit = toolDef.retryLimit ?? 1;
+              for (let retry = 0; retry < retryLimit && result.ok === false; retry++) {
+                result = await runTool(step.tool, args);
+              }
+            }
+            if (result.ok === false) {
+              const replannedPlan = yield* replanAfterStepFailure(
+                step,
+                result.message ?? result.error ?? 'Tool execution failed',
+              );
+              if (!replannedPlan) return;
+              currentPlan = replannedPlan;
+              restartExecution = true;
+              break;
+            }
+          }
+
           observations.push({ type: 'observation', stepType: 'tool', tool: step.tool, args, result });
           yield { type: 'observation', stepType: 'tool', tool: step.tool, args, ...result };
 

@@ -10,6 +10,10 @@ const toolsDir = path.resolve(
   '../tools',
 );
 
+function shellEscape(value) {
+  return value.replace(/"/g, '\\"').replace(/\n/g, ' ');
+}
+
 function parseToolOutput(raw) {
   let text;
   if (typeof raw === 'string') {
@@ -174,8 +178,8 @@ export const defaultRegistry = [
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     async run({ fleetApi, args }) {
-      const from = args.from || 'USD';
-      const to = args.to || 'EUR';
+      const from = shellEscape(args.from || 'USD');
+      const to = shellEscape(args.to || 'EUR');
       const amount = args.amount ?? 1;
       const script = path.join(toolsDir, 'currency', 'currency.py');
       const raw = await fleetApi.executeCommand({
@@ -195,10 +199,11 @@ export const defaultRegistry = [
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     async run({ fleetApi, args }) {
+      const country = shellEscape(args.country);
       const script = path.join(toolsDir, 'country-info', 'country_info.py');
       const raw = await fleetApi.executeCommand({
         member_name: 'doer',
-        command: `python3 "${script}" "${args.country}"`,
+        command: `python3 "${script}" "${country}"`,
       });
       return parseToolOutput(raw);
     },
@@ -213,10 +218,11 @@ export const defaultRegistry = [
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     async run({ fleetApi, args }) {
+      const country = shellEscape(args.country);
       const script = path.join(toolsDir, 'travel-advisory', 'travel_advisory.py');
       const raw = await fleetApi.executeCommand({
         member_name: 'doer',
-        command: `python3 "${script}" "${args.country}"`,
+        command: `python3 "${script}" "${country}"`,
       });
       return parseToolOutput(raw);
     },
@@ -238,7 +244,7 @@ export const defaultRegistry = [
       if (typeof args.lat === 'number' && typeof args.lon === 'number') {
         command = `python3 "${script}" ${args.lat} ${args.lon}`;
       } else {
-        const city = args.city || 'London';
+        const city = shellEscape(args.city || 'London');
         command = `python3 "${script}" "${city}"`;
       }
       const raw = await fleetApi.executeCommand({ member_name: 'doer', command });
@@ -256,7 +262,7 @@ export const defaultRegistry = [
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     async run({ fleetApi, args }) {
-      const city = args.city || 'London';
+      const city = shellEscape(args.city || 'London');
       const days = args.days ?? 7;
       const script = path.join(toolsDir, 'forecast', 'forecast.py');
       const raw = await fleetApi.executeCommand({
@@ -276,10 +282,11 @@ export const defaultRegistry = [
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     async run({ fleetApi, args }) {
+      const topic = shellEscape(args.topic);
       const script = path.join(toolsDir, 'wikipedia-summary', 'wikipedia_summary.py');
       const raw = await fleetApi.executeCommand({
         member_name: 'doer',
-        command: `python3 "${script}" "${args.topic}"`,
+        command: `python3 "${script}" "${topic}"`,
       });
       return parseToolOutput(raw);
     },
@@ -295,11 +302,12 @@ export const defaultRegistry = [
     }),
     annotations: { readOnlyHint: true, idempotentHint: true },
     async run({ fleetApi, args }) {
+      const country = shellEscape(args.country);
       const yr = args.year ?? new Date().getFullYear();
       const script = path.join(toolsDir, 'public-holidays', 'public_holidays.py');
       const raw = await fleetApi.executeCommand({
         member_name: 'doer',
-        command: `python3 "${script}" "${args.country}" ${yr}`,
+        command: `python3 "${script}" "${country}" ${yr}`,
       });
       return parseToolOutput(raw);
     },

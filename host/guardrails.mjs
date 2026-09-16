@@ -1,3 +1,6 @@
+import path from 'node:path';
+import os from 'node:os';
+
 function resolvePolicy(tool, config) {
   if (config.policies?.[tool.name]) {
     return config.policies[tool.name];
@@ -6,6 +9,56 @@ function resolvePolicy(tool, config) {
     return 'approve';
   }
   return config.defaultPolicy ?? 'allow';
+}
+
+function looksLikePath(value) {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  if (value.startsWith('/') || value.startsWith('~/')) return true;
+  if (value.includes('..')) return true;
+  return path.isAbsolute(value);
+}
+
+function resolveSandboxPath(value) {
+  if (value.startsWith('~/')) {
+    const home = os.homedir();
+    return path.resolve(home, value.slice(2));
+  }
+  if (path.isAbsolute(value)) {
+    return path.resolve(value);
+  }
+  return path.resolve(process.cwd(), value);
+}
+
+function isWithinWorkdir(resolvedPath, workdir) {
+  const relative = path.relative(workdir, resolvedPath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function collectPathStrings(value, paths = []) {
+  if (typeof value === 'string') {
+    if (looksLikePath(value)) paths.push(value);
+    return paths;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectPathStrings(item, paths);
+    return paths;
+  }
+  if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) collectPathStrings(item, paths);
+  }
+  return paths;
+}
+
+function checkSandbox(args, config) {
+  if (!config.sandboxFs) return null;
+  const workdir = path.resolve(config.workdir ?? 'workdir');
+  for (const candidate of collectPathStrings(args)) {
+    const resolved = resolveSandboxPath(candidate);
+    if (!isWithinWorkdir(resolved, workdir)) {
+      return { allowed: false, reason: 'sandbox_violation' };
+    }
+  }
+  return null;
 }
 
 export function createGuardrails(config = {}, tools = [], executor) {
@@ -26,6 +79,9 @@ export function createGuardrails(config = {}, tools = [], executor) {
     if (policy === 'approve') {
       return { allowed: false, reason: 'approval_denied', policy, needsCallback: true };
     }
+
+    const sandboxDenied = checkSandbox(args, config);
+    if (sandboxDenied) return sandboxDenied;
 
     return { allowed: true };
   }
@@ -52,6 +108,11 @@ export function createGuardrails(config = {}, tools = [], executor) {
       if (decision !== 'approve') {
         return { ok: false, error: 'guardrail_denied', reason: 'approval_denied' };
       }
+    }
+
+    const sandboxDenied = checkSandbox(executorArgs.args, config);
+    if (sandboxDenied) {
+      return { ok: false, error: 'guardrail_denied', reason: 'sandbox_violation' };
     }
 
     if (config.dryRunMode) {

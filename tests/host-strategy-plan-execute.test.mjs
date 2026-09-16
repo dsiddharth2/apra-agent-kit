@@ -320,6 +320,80 @@ test('step review exhausted: replan is reviewed and new plan executed', async ()
   assert.equal(textstatsObs.args.text, 'hello');
 });
 
+test('retryable tool: fails once then succeeds without replan', async () => {
+  const callCount = { flaky: 0 };
+  const tools = [
+    { name: 'flaky', description: 'Flaky tool', reversible: true, retryable: true, timeout: 5000,
+      run: async () => {
+        callCount.flaky++;
+        if (callCount.flaky === 1) throw new Error('transient');
+        return { temp_c: '15' };
+      },
+    },
+  ];
+  const api = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: [
+      '```plan\n{"steps": [{"type": "tool", "tool": "flaky", "args": {}, "reason": "data", "review": false}]}\n```',
+      '```review\n{"approved": true}\n```',
+      '```done\n{"result": "ok", "summary": "done"}\n```',
+    ],
+  });
+  const strategy = createPlanExecuteStrategy({
+    task: { id: 't-1', goal: 'Retry test' },
+    tools,
+    fleetApi: api,
+    maxReplanAttempts: 3,
+    maxReviewAttempts: 2,
+    maxStepReviewAttempts: 2,
+    maxNoActionTurns: 3,
+  });
+  const events = [];
+  for await (const event of strategy.iterate()) {
+    events.push(event);
+  }
+  assert.equal(callCount.flaky, 2);
+  assert.equal(events.filter(e => e.type === 'plan').length, 1);
+  assert.ok(events.some(e => e.type === 'done'));
+});
+
+test('non-retryable tool failure triggers replan', async () => {
+  const tools = [
+    { name: 'broken', description: 'Broken tool', reversible: true, retryable: false, timeout: 5000,
+      run: async () => { throw new Error('permanent'); },
+    },
+    { name: 'weather', description: 'Get weather', reversible: true, timeout: 5000,
+      run: async ({ args }) => ({ temp_c: '15', city: args.city ?? 'London' }),
+    },
+  ];
+  const api = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: [
+      '```plan\n{"steps": [{"type": "tool", "tool": "broken", "args": {"mode": "test"}, "reason": "fail", "review": false}]}\n```',
+      '```review\n{"approved": true}\n```',
+      '```plan\n{"steps": [{"type": "tool", "tool": "weather", "args": {"city": "London"}, "reason": "fallback", "review": false}]}\n```',
+      '```review\n{"approved": true}\n```',
+      '```done\n{"result": "ok", "summary": "done"}\n```',
+    ],
+  });
+  const strategy = createPlanExecuteStrategy({
+    task: { id: 't-1', goal: 'Replan on failure' },
+    tools,
+    fleetApi: api,
+    maxReplanAttempts: 3,
+    maxReviewAttempts: 2,
+    maxStepReviewAttempts: 2,
+    maxNoActionTurns: 3,
+  });
+  const events = [];
+  for await (const event of strategy.iterate()) {
+    events.push(event);
+  }
+  const plans = events.filter(e => e.type === 'plan');
+  assert.equal(plans.length, 2);
+  assert.ok(events.some(e => e.type === 'observation' && e.tool === 'weather'));
+});
+
 test('history returns all observations', async () => {
   const api = createMockFleetApi({
     members: rosterNames(1),

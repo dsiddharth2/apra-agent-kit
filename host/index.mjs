@@ -41,7 +41,34 @@ function createPhase2Modules(toolRegistry, { runLoopConfig, budgetsConfig, guard
     ? createGuardrails(guardrailsConfig, toolRegistry, executeTool)
     : null;
   const budgetsMod = budgetsEnabled ? createBudgets(budgetsConfig) : null;
-  return { runLoopEnabled, runLoopConfig, budgetsMod, guardrailsMod };
+  return { runLoopEnabled, runLoopConfig, budgetsConfig: budgetsEnabled ? budgetsConfig : null, budgetsMod, guardrailsMod };
+}
+
+function mergeBudgetConfig(baseConfig, task) {
+  const merged = { ...baseConfig };
+  const constraints = task.constraints ?? {};
+  const budgetOverride = task.budget ?? {};
+
+  const pickStricter = (configKey, ...sources) => {
+    const values = sources
+      .map(src => src[configKey])
+      .filter(v => typeof v === 'number');
+    if (typeof merged[configKey] === 'number') values.push(merged[configKey]);
+    if (values.length === 0) return;
+    merged[configKey] = Math.min(...values);
+  };
+
+  pickStricter('maxIterations', constraints);
+  pickStricter('timeoutMs', constraints);
+  pickStricter('maxCostUsd', budgetOverride);
+  pickStricter('maxTokens', budgetOverride);
+
+  return merged;
+}
+
+function createRequestBudgets(budgetsConfig, task) {
+  if (!budgetsConfig) return null;
+  return createBudgets(mergeBudgetConfig(budgetsConfig, task));
 }
 
 async function executeHostedTask(task, {
@@ -49,23 +76,25 @@ async function executeHostedTask(task, {
   activeDispatcher,
   toolRegistry,
   runLoopConfig,
-  budgetsMod,
+  budgetsConfig,
   guardrailsMod,
   signal,
 }) {
   const fullTask = { id: task.id ?? `t-${Date.now().toString(36)}`, ...task };
+  const budgetsMod = createRequestBudgets(budgetsConfig, fullTask);
   let lease;
   try {
     lease = await activeDispatcher.dispatch({ signal });
   } catch (err) {
     return {
+      taskId: fullTask.id,
       status: 'failed',
       result: { error: 'dispatch_failed', message: String(err?.message ?? err) },
     };
   }
   try {
     const pooledApi = createPooledFleetApi(api, lease);
-    return await runTask(fullTask, {
+    const result = await runTask(fullTask, {
       strategy: runLoopConfig.strategy ?? 'open-ended',
       tools: toolRegistry,
       fleetApi: pooledApi,
@@ -74,6 +103,7 @@ async function executeHostedTask(task, {
       ...runLoopConfig,
       signal,
     });
+    return { taskId: fullTask.id, ...result };
   } finally {
     await lease.release();
   }
@@ -130,13 +160,18 @@ export async function startHost({
       guardrails: guardrailsOption,
     }),
   );
-  const { runLoopEnabled, runLoopConfig, budgetsMod, guardrailsMod } = phase2;
+  const { runLoopEnabled, runLoopConfig, budgetsConfig, guardrailsMod } = phase2;
+
+  const mcpExecute = guardrailsMod
+    ? (tool, executorArgs) => guardrailsMod.execute(tool, executorArgs)
+    : (tool, executorArgs) => executeTool(tool, executorArgs);
 
   const mcpHandler = async (req, res) => {
     const server = buildMcpServer({
       fleetApi: api,
       dispatcher: activeDispatcher,
       registry: toolRegistry,
+      execute: mcpExecute,
     });
     const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     try {
@@ -159,35 +194,23 @@ export async function startHost({
         mcp: mcpHandler,
         task: runLoopEnabled
           ? async (req, res) => {
-              const task = {
-                id: `t-${Date.now().toString(36)}`,
-                ...req.body,
-              };
-              let lease;
-              try {
-                lease = await activeDispatcher.dispatch({});
-              } catch (err) {
+              const result = await executeHostedTask(req.body, {
+                api,
+                activeDispatcher,
+                toolRegistry,
+                runLoopConfig,
+                budgetsConfig,
+                guardrailsMod,
+              });
+              if (result.status === 'failed' && result.result?.error === 'dispatch_failed') {
                 res.status(503).json({
                   ok: false,
                   error: 'dispatch_failed',
-                  message: String(err?.message ?? err),
+                  message: result.result.message,
                 });
                 return;
               }
-              try {
-                const pooledApi = createPooledFleetApi(api, lease);
-                const result = await runTask(task, {
-                  strategy: runLoopConfig.strategy ?? 'open-ended',
-                  tools: toolRegistry,
-                  fleetApi: pooledApi,
-                  budgets: budgetsMod,
-                  guardrails: guardrailsMod,
-                  ...runLoopConfig,
-                });
-                res.json({ taskId: task.id, ...result });
-              } finally {
-                await lease.release();
-              }
+              res.json(result);
             }
           : null,
         jobs: null,
@@ -287,7 +310,7 @@ export function createHost(options = {}) {
             hostOptions.env ?? process.env,
           );
           const toolRegistry = hostOptions.registry ?? extendRegistry();
-          const { runLoopEnabled, runLoopConfig, budgetsMod, guardrailsMod } = createPhase2Modules(
+          const { runLoopEnabled, runLoopConfig, budgetsConfig, guardrailsMod } = createPhase2Modules(
             toolRegistry,
             resolvePhase2Modules(config, hostOptions),
           );
@@ -304,7 +327,7 @@ export function createHost(options = {}) {
             activeDispatcher,
             toolRegistry,
             runLoopConfig,
-            budgetsMod,
+            budgetsConfig,
             guardrailsMod,
             signal: runOpts.signal,
           });

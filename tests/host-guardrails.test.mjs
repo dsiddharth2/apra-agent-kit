@@ -150,3 +150,53 @@ test('gate returns allowed/denied without executing', async () => {
   assert.equal(denied.allowed, false);
   assert.equal(denied.reason, 'policy_denied');
 });
+
+test('sandboxFs denies paths outside workdir via execute', async () => {
+  const g = createGuardrails(
+    { defaultPolicy: 'allow', sandboxFs: true, workdir: '/safe/workdir' },
+    [],
+    mockExecutor,
+  );
+  const tool = makeTool();
+  const result = await g.execute(tool, { fleetApi: {}, args: { path: '/etc/passwd' } });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'guardrail_denied');
+  assert.equal(result.reason, 'sandbox_violation');
+});
+
+test('sandboxFs denies paths with .. via gate', async () => {
+  const g = createGuardrails(
+    { defaultPolicy: 'allow', sandboxFs: true, workdir: '/safe/workdir' },
+    [],
+    mockExecutor,
+  );
+  const denied = g.gate(makeTool(), { file: '../outside/secret.txt' });
+  assert.equal(denied.allowed, false);
+  assert.equal(denied.reason, 'sandbox_violation');
+});
+
+test('sandboxFs allows paths inside workdir', async () => {
+  const g = createGuardrails(
+    { defaultPolicy: 'allow', sandboxFs: true, workdir: '/safe/workdir' },
+    [],
+    mockExecutor,
+  );
+  const tool = makeTool();
+  const result = await g.execute(tool, { fleetApi: {}, args: { file: '/safe/workdir/data.txt' } });
+  assert.equal(result.ok, true);
+});
+
+test('sandboxFs scans nested objects and arrays', async () => {
+  const g = createGuardrails(
+    { defaultPolicy: 'allow', sandboxFs: true, workdir: '/safe/workdir' },
+    [],
+    mockExecutor,
+  );
+  const tool = makeTool();
+  const result = await g.execute(tool, {
+    fleetApi: {},
+    args: { nested: [{ path: '~/outside' }, { ok: 'relative/inside' }] },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'sandbox_violation');
+});
