@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ensureApralabs } from '../workflows/demo/ensure-apralabs.mjs';
 import { createWorkerDispatcher } from '../pool/index.mjs';
 import { buildMcpServer } from '../mcp/server.mjs';
 import { authenticate as defaultAuthenticate } from '../mcp/auth.mjs';
@@ -38,13 +37,13 @@ export async function startHost({
   configDir,
   authenticate = defaultAuthenticate,
 } = {}) {
-  ensureApralabs();
-
   const config = await loadConfig(configDir ?? defaultConfigDir(), env);
 
   let api = fleetApi;
   let stopFleet = null;
   if (!api) {
+    const { ensureApralabs } = await import('../workflows/demo/ensure-apralabs.mjs');
+    ensureApralabs();
     const { spawnFleet } = await import('../transport/stdio-fleet.mjs');
     const fleet = await spawnFleet({ env });
     api = fleet.fleetApi;

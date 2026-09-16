@@ -1,5 +1,4 @@
 // tests/host-index.test.mjs
-import './setup-fleet-modules.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -67,7 +66,7 @@ test('startHost boots and serves tools via MCP', async () => {
     assert.ok(tools.some(t => t.name === 'weather'));
     assert.ok(tools.some(t => t.name === 'city-briefing'));
 
-    const result = await client.callTool({ name: 'inspect-members', arguments: {} });
+    const result = await client.callTool({ name: 'weather', arguments: { city: 'London' } });
     assert.equal(result.isError, undefined, `tool call failed: ${result.content?.[0]?.text}`);
   } finally {
     try { await client.close(); } finally { await close(); }
@@ -104,7 +103,7 @@ test('callTool returns result through executor path', async () => {
   const { callTool, close } = await startHost({ fleetApi, dispatcher, port: 0 });
 
   try {
-    const out = await callTool('inspect-members', {});
+    const out = await callTool('weather', { city: 'London' });
     assert.equal(out.ok, true);
     assert.ok(out.result);
   } finally {
