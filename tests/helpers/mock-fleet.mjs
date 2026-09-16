@@ -7,6 +7,7 @@ export function createMockFleetApi({
   tools = ['remove_member', 'provision_llm_auth'],
   registerFails = [],
   commandPayload = 'hello-from-python',
+  promptResponses,          // NEW: string[] | (options) => string
 } = {}) {
   const present = new Set(members);
   const registerCalls = [];
@@ -47,9 +48,16 @@ export function createMockFleetApi({
     },
     async executePrompt(options) {
       promptCalls.push(options);
+      let text = 'pong';
+      if (typeof promptResponses === 'function') {
+        text = promptResponses(options);
+      } else if (Array.isArray(promptResponses) && promptResponses.length > 0) {
+        const idx = Math.min(promptCalls.length - 1, promptResponses.length - 1);
+        text = promptResponses[idx];
+      }
       return {
-        content: [{ type: 'text', text: 'pong' }],
-        structuredContent: { response: 'pong' },
+        content: [{ type: 'text', text }],
+        structuredContent: { response: text },
       };
     },
   };
