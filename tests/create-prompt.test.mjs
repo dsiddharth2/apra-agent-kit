@@ -1,7 +1,7 @@
 // tests/create-prompt.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatPrompt, confirm, installPromptTitle } from '../create/prompt.mjs';
+import { formatPrompt, confirm, installPromptTitle, installPromptWhy } from '../create/prompt.mjs';
 
 const FLEET_PROMPT = {
   title: 'apra-fleet is not installed.',
@@ -18,6 +18,8 @@ function recorder() {
   return { lines, write: (text) => lines.push(text) };
 }
 
+const interactive = { isTTY: true };
+
 test('the prompt states the reason before the question', () => {
   const output = formatPrompt(FLEET_PROMPT);
   assert.ok(
@@ -30,13 +32,13 @@ test('the prompt states the reason before the question', () => {
 
 test('confirm returns true on empty input when the default is yes', async () => {
   const out = recorder();
-  const answer = await confirm(FLEET_PROMPT, { ask: async () => '', write: out.write });
+  const answer = await confirm(FLEET_PROMPT, { ...interactive, ask: async () => '', write: out.write });
   assert.equal(answer, true);
 });
 
 test('confirm accepts n, N, and no', async () => {
   for (const reply of ['n', 'N', 'no', 'NO']) {
-    const answer = await confirm(FLEET_PROMPT, { ask: async () => reply, write: () => {} });
+    const answer = await confirm(FLEET_PROMPT, { ...interactive, ask: async () => reply, write: () => {} });
     assert.equal(answer, false, `${reply} should decline`);
   }
 });
@@ -45,7 +47,7 @@ test('confirm accepts y, Y, and yes', async () => {
   for (const reply of ['y', 'Y', 'yes', 'YES']) {
     const answer = await confirm(
       { ...FLEET_PROMPT, defaultAnswer: false },
-      { ask: async () => reply, write: () => {} },
+      { ...interactive, ask: async () => reply, write: () => {} },
     );
     assert.equal(answer, true, `${reply} should accept`);
   }
@@ -64,7 +66,7 @@ test('--yes skips the question but still prints the explanation', async () => {
 });
 
 test('an unrecognised reply falls back to the default rather than looping', async () => {
-  const answer = await confirm(FLEET_PROMPT, { ask: async () => 'maybe', write: () => {} });
+  const answer = await confirm(FLEET_PROMPT, { ...interactive, ask: async () => 'maybe', write: () => {} });
   assert.equal(answer, true);
 });
 
@@ -73,4 +75,41 @@ test('installPromptTitle names only what is missing', () => {
   assert.equal(installPromptTitle(['apra-fleet']), 'apra-fleet is not installed.');
   assert.match(installPromptTitle(['apra-fleet', 'claude']), /apra-fleet/);
   assert.match(installPromptTitle(['apra-fleet', 'claude']), /claude/);
+});
+
+test('confirm declines on non-TTY without asking', async () => {
+  const out = recorder();
+  const answer = await confirm(FLEET_PROMPT, {
+    isTTY: false,
+    ask: async () => {
+      throw new Error('must not ask');
+    },
+    write: out.write,
+  });
+  assert.equal(answer, false);
+  assert.match(out.lines.join('\n'), /Fleet is the runtime/, 'the reason is still shown');
+});
+
+test('installPromptWhy states claude consequences without mentioning Fleet', () => {
+  const why = installPromptWhy(['claude']);
+  assert.match(why, /live agent\(\) calls fail/i);
+  assert.match(why, /mock tests still pass/i);
+  assert.match(why, /outside this project/i);
+  assert.doesNotMatch(why, /Fleet/i);
+  assert.doesNotMatch(why, /@apralabs/i);
+});
+
+test('installPromptWhy states fleet consequences without mentioning claude', () => {
+  const why = installPromptWhy(['apra-fleet']);
+  assert.match(why, /workflows cannot spawn Fleet/i);
+  assert.match(why, /outside this project/i);
+  assert.doesNotMatch(why, /claude/i);
+  assert.doesNotMatch(why, /mock tests/i);
+});
+
+test('installPromptWhy mentions both when both are missing', () => {
+  const why = installPromptWhy(['apra-fleet', 'claude']);
+  assert.match(why, /workflows cannot spawn Fleet/i);
+  assert.match(why, /mock tests still pass/i);
+  assert.match(why, /outside this project/i);
 });
