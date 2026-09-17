@@ -26,7 +26,14 @@ const SUPPORTED_ADAPTERS = {
 async function resolveAdapter(name) {
   const factory = SUPPORTED_ADAPTERS[name];
   if (!factory) throw new Error(`unsupported comm adapter: "${name}"`);
-  return factory();
+  try {
+    return await factory();
+  } catch (err) {
+    if (err?.code === 'ERR_MODULE_NOT_FOUND') {
+      throw new Error(`comm adapter "${name}" is not available in this build`);
+    }
+    throw err;
+  }
 }
 
 function defaultConfigDir() {
@@ -91,6 +98,12 @@ export async function startHost({
 } = {}) {
   const config = await loadConfig(configDir ?? defaultConfigDir(), env);
 
+  if (typeof authenticate === 'function' && authenticate.length >= 3) {
+    throw new Error(
+      'startHost({ authenticate }) expects authenticateRequest(request) => user | null, not Express middleware (req, res, next)',
+    );
+  }
+
   let api = fleetApi;
   let stopFleet = null;
   if (!api) {
@@ -140,18 +153,25 @@ export async function startHost({
 
   let notifier = null;
   if (dispatchEnabled) {
-    // Notifier and jobs reference each other: SSE reads from jobs, jobs publish to notifier.
-    const late = { jobs: null };
-    notifier = createNotifier(notifyConfig, {
-      jobs: { get: (id) => late.jobs.get(id), events: (id, o) => late.jobs.events(id, o), subscribe: (id, fn) => late.jobs.subscribe(id, fn) },
-    });
-    jobs = await createJobsBackend(dispatchConfig, {
-      runJob, notifier, capacity: activeDispatcher.capacity,
-      allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient,
-    });
-    late.jobs = jobs;
-    await jobs.start();
-    toolRegistry.push(...withJobTools([], jobs));
+    try {
+      // Notifier and jobs reference each other: SSE reads from jobs, jobs publish to notifier.
+      const late = { jobs: null };
+      notifier = createNotifier(notifyConfig, {
+        jobs: { get: (id) => late.jobs.get(id), events: (id, o) => late.jobs.events(id, o), subscribe: (id, fn) => late.jobs.subscribe(id, fn) },
+      });
+      jobs = await createJobsBackend(dispatchConfig, {
+        runJob, notifier, capacity: activeDispatcher.capacity,
+        allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient,
+      });
+      late.jobs = jobs;
+      await jobs.start();
+      toolRegistry.push(...withJobTools([], jobs));
+    } catch (err) {
+      try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve original error */ }
+      try { await ownDispatcher?.close(); } catch { /* preserve original error */ }
+      try { await stopFleet?.(); } catch { /* preserve original error */ }
+      throw err;
+    }
   }
 
   const mcpExecute = guardrailsMod
@@ -173,14 +193,15 @@ export async function startHost({
 
   const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled });
 
-  const adapter = createAdapter ? createAdapter() : await resolveAdapter(adapterName ?? config.comm.adapter);
+  let adapter;
   const listenPort = port ?? config.comm.port;
   const bindHost = bindHostOption ?? config.comm.host;
 
   try {
+    adapter = createAdapter ? createAdapter() : await resolveAdapter(adapterName ?? config.comm.adapter);
     await adapter.start({ routes, port: listenPort, host: bindHost, authenticate, mcpServerFactory });
   } catch (err) {
-    try { await adapter.stop(); } catch { /* preserve */ }
+    try { await adapter?.stop(); } catch { /* preserve */ }
     try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve */ }
     try { await ownDispatcher?.close(); } catch { /* preserve */ }
     try { await stopFleet?.(); } catch { /* preserve */ }

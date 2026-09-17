@@ -1,9 +1,30 @@
 import http from 'node:http';
 import { buildRequest, matchRoute, runHandler, writeNodeResponse, requestSignal } from './router.mjs';
 
+const MAX_JSON_BODY_BYTES = 100 * 1024;
+
+function payloadTooLarge() {
+  const err = new Error('payload too large');
+  err.status = 413;
+  return err;
+}
+
 async function readJsonBody(req) {
+  const declared = Number(req.headers['content-length']);
+  if (Number.isFinite(declared) && declared > MAX_JSON_BODY_BYTES) {
+    req.resume();
+    throw payloadTooLarge();
+  }
   const chunks = [];
-  for await (const c of req) chunks.push(c);
+  let n = 0;
+  for await (const c of req) {
+    n += Buffer.byteLength(c);
+    if (n > MAX_JSON_BODY_BYTES) {
+      req.resume();
+      throw payloadTooLarge();
+    }
+    chunks.push(c);
+  }
   if (chunks.length === 0) return null;
   const text = Buffer.concat(chunks).toString('utf8');
   if (!text.trim()) return null;
@@ -35,8 +56,13 @@ export function createRawHttpAdapter() {
           request.params = params;
           await writeNodeResponse(res, await runHandler(route, request, authenticate));
         } catch (err) {
-          if (!res.headersSent) await writeNodeResponse(res, { status: 500, body: { ok: false, error: 'internal_error', message: String(err?.message ?? err) } });
-          else res.end();
+          if (!res.headersSent) {
+            const status = err?.status === 413 ? 413 : 500;
+            const body = status === 413
+              ? { ok: false, error: 'payload_too_large' }
+              : { ok: false, error: 'internal_error', message: String(err?.message ?? err) };
+            await writeNodeResponse(res, { status, body });
+          } else res.end();
         }
       });
       await new Promise((resolve, reject) => {

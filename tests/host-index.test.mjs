@@ -231,6 +231,79 @@ test('callTool maps dispatch failures to error-as-value', async () => {
   }
 });
 
+test('startHost stops the dispatcher if jobs.start fails', async () => {
+  const fleetApi = makeMockFleetApi();
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'host-jobs-fail-'));
+  const dbPath = path.join(root, 'jobs.db');
+  await fs.mkdir(dbPath);
+  let closed = 0;
+  const origClose = WorkerDispatcher.prototype.close;
+  WorkerDispatcher.prototype.close = async function (...args) {
+    closed += 1;
+    return origClose.apply(this, args);
+  };
+  try {
+    await assert.rejects(
+      () => startHost({
+        fleetApi,
+        port: 0,
+        env: {
+          ...process.env,
+          WORKER_POOL_SIZE: '1',
+          WORKER_EPHEMERAL_MAX: '0',
+          WORKER_POOL_ROOT: root,
+          NODE_ENV: 'test',
+        },
+        runLoop: { enabled: true, strategy: 'open-ended' },
+        dispatch: { enabled: true, store: { kind: 'sqlite', dbPath } },
+      }),
+      /unable to open|SQLITE|not a database/i,
+    );
+    assert.equal(closed, 1, 'owned dispatcher must be closed when jobs fail to start');
+  } finally {
+    WorkerDispatcher.prototype.close = origClose;
+  }
+});
+
+test('startHost rejects Express-style authenticate middleware', async () => {
+  const fleetApi = makeMockFleetApi();
+  const dispatcher = await makeDispatcher();
+  let started;
+  try {
+    started = await startHost({
+      fleetApi, dispatcher, port: 0,
+      authenticate(req, res, next) { next(); },
+    });
+  } catch (err) {
+    assert.match(String(err?.message ?? err), /authenticateRequest/);
+    return;
+  }
+  await started.close();
+  assert.fail('expected startHost to reject a 3-arg authenticate function');
+});
+
+test('startHost names missing azure-functions adapter in this build', async () => {
+  const fleetApi = makeMockFleetApi();
+  const dispatcher = await makeDispatcher();
+  await assert.rejects(
+    () => startHost({ fleetApi, dispatcher, port: 0, adapter: 'azure-functions' }),
+    /comm adapter "azure-functions" is not available in this build/,
+  );
+});
+
+test('startHost names missing durable jobs backend in this build', async () => {
+  const fleetApi = makeMockFleetApi();
+  const dispatcher = await makeDispatcher();
+  await assert.rejects(
+    () => startHost({
+      fleetApi, dispatcher, port: 0,
+      runLoop: { enabled: true, strategy: 'open-ended' },
+      dispatch: { enabled: true, backend: 'durable', store: { kind: 'memory' } },
+    }),
+    /jobs backend "durable" is not available in this build/,
+  );
+});
+
 test('listen failure stops the adapter', async () => {
   let stopped = false;
   const fakeAdapter = {

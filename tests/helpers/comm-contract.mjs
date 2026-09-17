@@ -108,6 +108,20 @@ export function runCommContract(name, createAdapter) {
     });
   });
 
+  test(`${name}: oversized JSON body is 413`, async () => {
+    await withAdapter({
+      task: { method: 'POST', path: '/task', handler: async () => ({ status: 200, body: { ok: true } }) },
+    }, async (base) => {
+      const body = JSON.stringify({ pad: 'x'.repeat(200 * 1024) });
+      const res = await fetch(`${base}/task`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      });
+      assert.equal(res.status, 413);
+    });
+  });
+
   test(`${name}: stop() closes the listener`, async () => {
     const adapter = createAdapter();
     await adapter.start({ routes: { health: { method: 'GET', path: '/health', auth: false, handler: async () => ({ status: 200, body: {} }) } }, port: 0, host: '127.0.0.1', authenticate });

@@ -37,22 +37,29 @@ export function createSqliteStore({ dbPath }) {
       if (db) return;
       fs.mkdirSync(path.dirname(dbPath), { recursive: true });
       db = new DatabaseSync(dbPath);
-      db.exec('PRAGMA journal_mode = WAL');
-      db.exec('PRAGMA busy_timeout = 5000');
-      db.exec(SCHEMA);
-      stmts = {
-        insert: db.prepare('INSERT INTO jobs (id, status, submitted_at, started_at, finished_at, record) VALUES (?, ?, ?, ?, ?, ?)'),
-        get: db.prepare('SELECT record FROM jobs WHERE id = ?'),
-        update: db.prepare('UPDATE jobs SET status = ?, started_at = ?, finished_at = ?, record = ? WHERE id = ?'),
-        claim: db.prepare("UPDATE jobs SET status = 'processing', started_at = ?, record = json_set(record, '$.status', 'processing', '$.startedAt', ?) WHERE id = ? AND status = 'queued'"),
-        byStatus: db.prepare('SELECT record FROM jobs WHERE status = ? ORDER BY submitted_at ASC, id ASC'),
-        count: db.prepare('SELECT status, COUNT(*) AS n FROM jobs GROUP BY status'),
-        nextSeq: db.prepare('SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM events WHERE job_id = ?'),
-        appendEvent: db.prepare('INSERT INTO events (job_id, seq, at, event) VALUES (?, ?, ?, ?)'),
-        events: db.prepare('SELECT seq, event FROM events WHERE job_id = ? AND seq > ? ORDER BY seq ASC'),
-        purgeEvents: db.prepare(`DELETE FROM events WHERE job_id IN (SELECT id FROM jobs WHERE status IN (${terminalList}) AND finished_at IS NOT NULL AND finished_at < ?)`),
-        purgeJobs: db.prepare(`DELETE FROM jobs WHERE status IN (${terminalList}) AND finished_at IS NOT NULL AND finished_at < ?`),
-      };
+      try {
+        db.exec('PRAGMA journal_mode = WAL');
+        db.exec('PRAGMA busy_timeout = 5000');
+        db.exec(SCHEMA);
+        stmts = {
+          insert: db.prepare('INSERT INTO jobs (id, status, submitted_at, started_at, finished_at, record) VALUES (?, ?, ?, ?, ?, ?)'),
+          get: db.prepare('SELECT record FROM jobs WHERE id = ?'),
+          update: db.prepare('UPDATE jobs SET status = ?, started_at = ?, finished_at = ?, record = ? WHERE id = ?'),
+          claim: db.prepare("UPDATE jobs SET status = 'processing', started_at = ?, record = json_set(record, '$.status', 'processing', '$.startedAt', ?) WHERE id = ? AND status = 'queued'"),
+          byStatus: db.prepare('SELECT record FROM jobs WHERE status = ? ORDER BY submitted_at ASC, id ASC'),
+          count: db.prepare('SELECT status, COUNT(*) AS n FROM jobs GROUP BY status'),
+          nextSeq: db.prepare('SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM events WHERE job_id = ?'),
+          appendEvent: db.prepare('INSERT INTO events (job_id, seq, at, event) VALUES (?, ?, ?, ?)'),
+          events: db.prepare('SELECT seq, event FROM events WHERE job_id = ? AND seq > ? ORDER BY seq ASC'),
+          purgeEvents: db.prepare(`DELETE FROM events WHERE job_id IN (SELECT id FROM jobs WHERE status IN (${terminalList}) AND finished_at IS NOT NULL AND finished_at < ?)`),
+          purgeJobs: db.prepare(`DELETE FROM jobs WHERE status IN (${terminalList}) AND finished_at IS NOT NULL AND finished_at < ?`),
+        };
+      } catch (err) {
+        try { db.close(); } catch { /* preserve original error */ }
+        db = null;
+        stmts = null;
+        throw err;
+      }
     },
 
     async close() {
