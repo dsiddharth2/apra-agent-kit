@@ -20,10 +20,14 @@ async function generated(name = 'my-agent') {
 test('a generated project passes its own test suite', async () => {
   const dir = await generated();
 
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+
   const output = execFileSync('npm', ['test'], {
     cwd: dir,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    env,
   });
 
   assert.match(output, /pass 3/, `generated suite did not pass:\n${output}`);

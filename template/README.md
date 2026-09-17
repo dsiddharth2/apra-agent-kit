@@ -50,3 +50,7 @@ export CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
 ```
 
 `npm test` does not need one. `npm run hello` does.
+
+`docker compose` forwards `CLAUDE_CODE_OAUTH_TOKEN` into the container. Live
+`agent()` calls inside Compose depend on that env; the kit's host-session
+wrapper is not copied into a generated project.

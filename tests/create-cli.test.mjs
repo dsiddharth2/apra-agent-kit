@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { generate, parseCliArgs } from '../bin/create.mjs';
 
@@ -147,6 +148,45 @@ test('--no-install runs no npm and no git', async () => {
   assert.ok(!fs.existsSync(path.join(dir, '.git')), 'git init must not run under --no-install');
   assert.ok(!fs.existsSync(path.join(dir, 'node_modules')), 'npm install must not run');
   assert.ok(Array.isArray(result.checks), 'checks are still reported');
+});
+
+test('an unknown option prints a readable message and help, then exits 1', () => {
+  const result = spawnSync(process.execPath, [path.join(packageRoot, 'bin/create.mjs'), '--bogus'], {
+    encoding: 'utf8',
+    cwd: packageRoot,
+  });
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.equal(result.status, 1);
+  assert.match(output, /Unknown option '--bogus'/);
+  assert.match(output, /--no-install/);
+  assert.ok(!/^\s+at /m.test(output), `must not dump a stack:\n${output}`);
+});
+
+test('no directory argument and closed stdin errors clearly instead of hanging', () => {
+  const result = spawnSync(process.execPath, [path.join(packageRoot, 'bin/create.mjs')], {
+    encoding: 'utf8',
+    cwd: packageRoot,
+    input: '',
+    timeout: 5000,
+  });
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.equal(result.status, 1);
+  assert.match(output, /directory name is required/i);
+  assert.ok(!output.includes('unsettled top-level await'), output);
+  assert.ok(!/not empty/i.test(output), 'must not fall through to generating into cwd');
+});
+
+test('an empty name after the prompt errors instead of resolving to cwd', () => {
+  const result = spawnSync(process.execPath, [path.join(packageRoot, 'bin/create.mjs')], {
+    encoding: 'utf8',
+    cwd: packageRoot,
+    input: '   \n',
+    timeout: 5000,
+  });
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.equal(result.status, 1);
+  assert.match(output, /directory name is required/i);
+  assert.ok(!/not empty/i.test(output), 'empty input must not resolve to the current directory');
 });
 
 test('a failed copy leaves no partial directory behind', async () => {

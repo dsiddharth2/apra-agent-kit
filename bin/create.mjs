@@ -15,7 +15,7 @@ import readline from 'node:readline/promises';
 import { copyTree, PUBLISHED_DIRS, RENAME_ON_WRITE } from '../create/copy.mjs';
 import { validateProjectName, substitute } from '../create/substitute.mjs';
 import { createProbes, runChecks, formatChecks } from '../create/doctor.mjs';
-import { confirm } from '../create/prompt.mjs';
+import { confirm, installPromptTitle } from '../create/prompt.mjs';
 
 const thisPackageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -122,7 +122,7 @@ export async function generate(options, io = { write: console.log }) {
     if (missing.includes('apra-fleet') || missing.includes('claude')) {
       const accepted = await confirm(
         {
-          title: 'apra-fleet is not installed.',
+          title: installPromptTitle(missing),
           why:
             'Fleet is the runtime your workflows execute on. Without it, workflows ' +
             'cannot resolve @apralabs/apra-fleet-workflow and will fail on first run. ' +
@@ -182,28 +182,42 @@ const HELP = `
 `;
 
 async function cli() {
-  const args = parseCliArgs(process.argv.slice(2));
-  if (args.help) {
-    console.log(HELP);
-    return 0;
-  }
-
-  let target = args.target;
-  if (!target) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    try {
-      target = (await rl.question('  Project name: ')).trim();
-    } finally {
-      rl.close();
-    }
-  }
-
-  const name = path.basename(path.resolve(target));
   try {
+    const args = parseCliArgs(process.argv.slice(2));
+    if (args.help) {
+      console.log(HELP);
+      return 0;
+    }
+
+    let target = args.target;
+    if (!target) {
+      if (!process.stdin.isTTY) {
+        throw new Error('a directory name is required');
+      }
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        target = (await rl.question('  Project name: ')).trim();
+      } finally {
+        rl.close();
+      }
+    }
+
+    if (!String(target ?? '').trim()) {
+      throw new Error('a directory name is required');
+    }
+    target = String(target).trim();
+
+    const name = path.basename(path.resolve(target));
     await generate({ ...args, target: path.resolve(target), name });
     return 0;
   } catch (err) {
     console.error(`\n  ${err?.message ?? err}\n`);
+    if (
+      err?.code === 'ERR_PARSE_ARGS_UNKNOWN_OPTION' ||
+      err?.code === 'ERR_PARSE_ARGS_INVALID_OPTION_VALUE'
+    ) {
+      console.error(HELP);
+    }
     return 1;
   }
 }
