@@ -1,5 +1,5 @@
 {
-  "name": "workflow-kit",
+  "name": "apra-agent-kit",
   "private": true,
   "type": "module",
   "engines": {

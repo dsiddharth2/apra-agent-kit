@@ -22,7 +22,7 @@ export function ephemeralConfig(env = process.env) {
     maxConcurrent: intAtLeast(0, env.WORKER_EPHEMERAL_MAX, 'WORKER_EPHEMERAL_MAX', DEFAULT_EPHEMERAL_MAX),
     workRoot: env.WORKER_EPHEMERAL_ROOT
       ? path.resolve(env.WORKER_EPHEMERAL_ROOT)
-      : path.join(os.tmpdir(), 'workflow-kit'),
+      : path.join(os.tmpdir(), 'apra-agent-kit'),
     ttlMs: intAtLeast(1, env.WORKER_EPHEMERAL_TTL_MS, 'WORKER_EPHEMERAL_TTL_MS', DEFAULT_EPHEMERAL_TTL_MS),
   };
 }

@@ -2682,7 +2682,7 @@ except ImportError:
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "workflow-kit/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "apra-agent-kit/1.0"})
     with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
         return json.loads(resp.read().decode())
 
@@ -2737,7 +2737,7 @@ except ImportError:
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "workflow-kit/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "apra-agent-kit/1.0"})
     with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
         return json.loads(resp.read().decode())
 
@@ -2793,7 +2793,7 @@ except ImportError:
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "workflow-kit/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "apra-agent-kit/1.0"})
     with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
         return json.loads(resp.read().decode())
 
@@ -2847,7 +2847,7 @@ except ImportError:
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "workflow-kit/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "apra-agent-kit/1.0"})
     with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
         return json.loads(resp.read().decode())
 
@@ -2924,7 +2924,7 @@ except ImportError:
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "workflow-kit/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "apra-agent-kit/1.0"})
     with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
         return json.loads(resp.read().decode())
 
@@ -2999,7 +2999,7 @@ except ImportError:
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "workflow-kit/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "apra-agent-kit/1.0"})
     with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
         return json.loads(resp.read().decode())
 
@@ -3047,7 +3047,7 @@ except ImportError:
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "workflow-kit/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "apra-agent-kit/1.0"})
     with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
         return json.loads(resp.read().decode())
 
@@ -3274,7 +3274,7 @@ Add these to the `"scripts"` block in `package.json`:
 ```js
 // host.config.mjs
 export default {
-  name: 'workflow-kit',
+  name: 'apra-agent-kit',
   description: 'Fleet Agent Kit — travel research agent',
 
   fleet: {},

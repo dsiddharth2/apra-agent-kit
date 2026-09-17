@@ -1028,7 +1028,7 @@ export async function startHost({
     config = await loadConfig(configDir ?? path.dirname(pathToFileURL(import.meta.url).pathname + '/..'));
   } catch {
     config = {
-      name: 'workflow-kit',
+      name: 'apra-agent-kit',
       description: '',
       fleet: {},
       comm: { adapter: 'express', port: port ?? Number(env.PORT ?? 3000), host: env.MCP_BIND_HOST ?? '127.0.0.1' },
@@ -1204,7 +1204,7 @@ git commit -m "feat: add host entry point with builder API and callTool"
 ```js
 // host.config.mjs
 export default {
-  name: 'workflow-kit',
+  name: 'apra-agent-kit',
   description: 'Fleet Agent Kit — tool server',
 
   fleet: {},
@@ -1357,11 +1357,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t workflow-kit-ci .
+        run: docker build -t apra-agent-kit-ci .
 
       - name: Run host unit tests in Docker
         run: |
-          docker run --rm workflow-kit-ci \
+          docker run --rm apra-agent-kit-ci \
             node --test \
               tests/host-config.test.mjs \
               tests/host-registry.test.mjs \
@@ -1371,7 +1371,7 @@ jobs:
 
       - name: Run host live integration test
         run: |
-          docker run --rm workflow-kit-ci \
+          docker run --rm apra-agent-kit-ci \
             node --test tests/host.live.test.mjs
 ```
 

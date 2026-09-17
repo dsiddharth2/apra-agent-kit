@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { createPooledFleetApi } from '../pool/pooled-fleet-api.mjs';
 import { defaultRegistry } from './registry.mjs';
 
-const SERVER_INFO = { name: 'workflow-kit', version: '1.0.0' };
+const SERVER_INFO = { name: 'apra-agent-kit', version: '1.0.0' };
 
 function toToolResult(value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);

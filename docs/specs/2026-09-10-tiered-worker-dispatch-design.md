@@ -4,7 +4,7 @@ Status: proposed
 
 ## Problem
 
-The workflow-kit's MCP server shares one `fleetApi` and two hardcoded members
+The apra-agent-kit's MCP server shares one `fleetApi` and two hardcoded members
 (`DEMO-DOER` / `DEMO-REVIEWER`) across all requests. Two parallel tool calls
 collide because Fleet enforces one in-flight prompt per member, and both callers
 target the same member through the same work folder.

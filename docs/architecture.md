@@ -6,12 +6,13 @@ a workflow or a test, continue to the [development guide](development.md).
 
 ## What this repo is
 
-A starter for driving [Apra Fleet](https://github.com/Apra-Labs/apra-fleet) **from your
-own Node process**. You clone it, keep the shape, and replace the dummy body with real
-work.
+A toolkit for driving [Apra Fleet](https://github.com/Apra-Labs/apra-fleet) **from your
+own Node process**. You clone it, keep the shape, and replace the demo workflows with real
+work. It can serve as a passive MCP tool server (external AI picks the tools) or as an
+autonomous agent (the kit's own LLM plans and executes).
 
 It is deliberately **not** a Fleet CLI workflow. Nothing here is meant to be registered
-with `apra-fleet workflow …`. The entry point is an ordinary exported async function:
+with `apra-fleet workflow ...`. The entry point is an ordinary exported async function:
 
 ```js
 import { runDemo } from './workflows/demo/main.mjs';
@@ -74,7 +75,7 @@ the Claude process is spawned by Fleet, not by your Node process. Nearly every
 │     │                                                            │
 │     ├─ run-loop       runTask() — drives a strategy to completion│
 │     │   ├─ strategies/  open-ended (ReAct) or plan-execute       │
-│     │   ├─ prompts/     10 prompt templates for LLM interaction  │
+│     │   ├─ prompts/     prompt templates for LLM interaction     │
 │     │   └─ response-parser  fenced JSON block extraction         │
 │     │                                                            │
 │     ├─ budgets        iteration / token / cost / time caps       │
@@ -130,35 +131,21 @@ required Fleet tools, and maps `executeCommand` / `executePrompt` / `listMembers
 server never see the transport. `spawnFleet()` is skipped entirely when a `fleetApi` is
 injected (tests).
 
-### `workflows/demo/`
+### `pool/`
 
 | File | Responsibility |
 |---|---|
-| `main.mjs` | The launcher. Spawns Fleet when no `fleetApi` is injected, runs the engine, calls `stop()` in `finally`. Exports `runDemo()`; self-executes when run directly. |
-| `demo.js` | The workflow body. Receives an engine `context` and does the actual work. Contains no connection or registration logic. |
-| `dummy.py` | Stand-in for real Python work. Prints `hello-from-python`. |
-| `ensure-apralabs.mjs` | Symlinks `node_modules/@apralabs` to the Fleet install so the packages resolve. |
-| `workflow.json` | Metadata only. Not consumed by anything in this repo. |
-
-The **launcher / body split** is the most important convention here. `main.mjs` owns
-everything environmental — `spawnFleet()`, cleanup in a `finally` — while `demo.js` only
-knows how to do the work, given a context. Keep that separation when you add workflows:
-it is what makes the body testable and the launcher reusable.
-
-`demo.js` runs four phases, each demonstrating a primitive you would reuse:
-
-1. **status** — `fleetStatus()`, logging whatever the spawned Fleet reports.
-2. **command** — `python3 dummy.py` on `'doer'`. Costs no LLM tokens.
-3. **transform** — a pure local JS step, no Fleet involvement at all.
-4. **agent** — `Reply with exactly: pong` on the doer. This is the step that spends
-   tokens and needs `CLAUDE_CODE_OAUTH_TOKEN` to reach the child.
-
-Member registration is owned by `MemberManager` at dispatcher startup, not by the
-workflow body. The leased pair's names are resolved from `'doer'` / `'reviewer'`
-by `createPooledFleetApi`. When a token is present, OAuth is attached per member.
-
-`command()` passes `failSoft: true`, so a machine without `python3` still completes the
-run. A throwing `transform()` or `agent()` does fail the run, and the process exits 1.
+| `index.mjs` | Barrel export and `createWorkerDispatcher()` — the startup lifecycle that builds a `MemberManager`, provisions the roster, and wires pool + ephemeral + dispatcher. |
+| `config.mjs` | Reads `WORKER_*` env vars, returns typed config objects for pool, ephemeral, and dispatch tiers. |
+| `roster.mjs` | Builds the pool roster: `WORKER-{i}-DOER` / `-REVIEWER` names, folders, and lock targets. |
+| `member-manager.mjs` | The single owner of member lifecycle. Registers members, provisions OAuth via `provision_llm_auth`, tears down pairs. Nothing else in the kit may call `registerMember` or `removeMember`. |
+| `worker-pool.mjs` | Pre-provisioned roster of N pairs. Lease-based acquisition with `proper-lockfile`, FIFO queueing, heartbeats. |
+| `ephemeral-factory.mjs` | On-demand doer/reviewer pairs for overflow. Each pair has a unique UUID, lives under `os.tmpdir()`, and self-destructs on release. TTL safety net prevents leaks. |
+| `worker-dispatcher.mjs` | Tiered dispatch: pool → ephemeral → queue → reject. Owns the shared FIFO wait queue. |
+| `pooled-fleet-api.mjs` | Proxy that remaps `'doer'`/`'reviewer'` keywords to the lease's actual member names. |
+| `worker-lock.mjs` | `proper-lockfile` wrapper with stale detection and heartbeat updates. |
+| `cleanup.mjs` | Wipes a worker folder's contents on acquire and release, preserving `.claude/`. |
+| `fleet-text.mjs` | Text extraction from Fleet MCP envelopes, member presence check, and failure detection. |
 
 ### `mcp/`
 
@@ -166,54 +153,20 @@ run. A throwing `transform()` or `agent()` does fail the run, and the process ex
 |---|---|
 | `main.mjs` | Server launcher. Spawns Fleet when no `fleetApi` is injected, listens on loopback, and wires SIGINT/SIGTERM shutdown. |
 | `server.mjs` | Builds the MCP server and registers one tool for each registry entry. Converts returned values to tool results and emits progress when requested. |
-| `http.mjs` | Creates the Express app. Provides `GET /health` and a stateless `POST /mcp` with a fresh MCP server and transport per request. |
-| `registry.mjs` | The tool catalog: demo, inspect-members, city-briefing, weather, timezone, textstats. Each entry has `{ name, description, inputSchema?, annotations?, run }`. |
+| `http.mjs` | Creates the Express app. Provides `GET /health` and a stateless `POST /mcp`. |
+| `registry.mjs` | The tool catalog: demo, inspect-members, city-briefing, weather, timezone, textstats, currency, country-info, forecast, geocode, wikipedia-summary, public-holidays. Each entry has `{ name, description, inputSchema?, annotations?, run }`. |
 | `auth.mjs` | Pass-through auth stub. Replace by injection, not by editing. |
 | `fleet-text.mjs` | Pulls plain text out of Fleet MCP tool results. |
 
-### `workflows/city-briefing/`
+### `workflows/`
 
 | File | Responsibility |
 |---|---|
-| `main.mjs` | Launcher. Spawns Fleet when no `fleetApi` is injected, runs the engine, calls `stop()` in `finally`. Exports `runCityBriefing()`; self-executes when run directly. Accepts an optional `city` argument. |
-| `city-briefing.js` | Workflow body. Fetches weather and timezone via Python tool scripts, composes a briefing with an `agent()` call, then analyzes the briefing text with textstats. Four phases: weather, timezone, compose briefing, text stats. |
-| `workflow.json` | Metadata only. Not consumed by anything in this repo. |
-
-### `workflows/standalone.mjs`
-
-Shared helper for CLI runs. `withStandaloneLease(run)` spawns Fleet over stdio, builds a
-dispatcher, takes one lease, calls `run` with a `PooledFleetApi` and workspace, releases,
-tears everything down. Every workflow launcher delegates to this when no `fleetApi` is
-injected.
-
-### `tools/`
-
-| File | Responsibility |
-|---|---|
-| `weather/weather.py` | Fetches current weather from Open-Meteo (geocoding + forecast) for a city. Returns JSON with temperature, humidity, wind, UV index. Uses `certifi` when available for SSL. |
-| `timezone/timezone.py` | Fetches local time from timeapi.io (via Open-Meteo geocoding) for a city. Returns JSON with datetime, UTC offset, abbreviation. Uses `certifi` and `zoneinfo` for proper offsets. |
-| `textstats/textstats.py` | Analyzes a text string. Returns JSON with character count, word count, sentence count, unique words, average word length. Pure stdlib. |
-
-These scripts are called by workflows via `command()` on a Fleet member and are also
-exposed directly as MCP tools in `mcp/registry.mjs`.
-
-### `pool/`
-
-| File | Responsibility |
-|---|---|
-| `index.mjs` | Barrel export and `createWorkerDispatcher()` — the startup lifecycle that builds a `MemberManager`, provisions the roster, and wires pool + ephemeral + dispatcher. |
-| `config.mjs` | Reads `WORKER_*` env vars, returns typed config objects for pool, ephemeral, and dispatch tiers. |
-| `roster.mjs` | Builds the pool roster: `WORKER-{i}-DOER` / `-REVIEWER` names, folders, and lock targets. Exports `poolConfig()`, `buildRoster()`, `workerDescriptor()`. |
-| `member-manager.mjs` | The single owner of member lifecycle. Registers members, provisions OAuth via `provision_llm_auth`, tears down pairs. Nothing else in the kit may call `registerMember` or `removeMember`. |
-| `worker-pool.mjs` | Pre-provisioned roster of N pairs. Lease-based acquisition with `proper-lockfile`, FIFO queueing, heartbeats, cleanup on acquire/release. |
-| `ephemeral-factory.mjs` | On-demand doer/reviewer pairs for overflow. Each pair has a unique UUID, lives under `os.tmpdir()`, and self-destructs on release. TTL safety net prevents leaks. |
-| `worker-dispatcher.mjs` | Tiered dispatch: pool → ephemeral → queue → reject. Owns the shared FIFO wait queue. Heartbeats keep MCP connections alive while queued. |
-| `pooled-fleet-api.mjs` | Proxy that remaps `'doer'`/`'reviewer'` keywords to the lease's actual member names for `executeCommand` and `executePrompt`. |
-| `worker-lock.mjs` | `proper-lockfile` wrapper with stale detection (15s) and heartbeat updates (5s). Writes holder metadata for diagnostics. |
-| `cleanup.mjs` | Wipes a worker folder's contents on acquire and release, preserving `.claude/` (Fleet's permission state). |
-| `fleet-text.mjs` | Text extraction from Fleet MCP envelopes, token-exact member presence check, and failure detection. |
-
-Full MCP interface reference lives in [mcp-interface.md](mcp-interface.md).
+| `standalone.mjs` | Shared helper for CLI runs. `withStandaloneLease(run)` spawns Fleet, builds a dispatcher, takes one lease, runs, releases, tears down. |
+| `demo/main.mjs` | Demo launcher. Spawns Fleet when no `fleetApi` is injected, runs status → command → transform → agent. |
+| `demo/demo.js` | Demo body. Receives engine context and exercises Fleet primitives. |
+| `inspect-members/main.mjs` | Reports on the worker pair: registration, work folders. |
+| `city-briefing/main.mjs` | Fetches weather + timezone, composes a briefing with an agent, analyzes with textstats. |
 
 ### `host/`
 
@@ -222,28 +175,28 @@ a single HTTP server that serves both `/mcp` and `/task`.
 
 | File | Responsibility |
 |---|---|
-| `index.mjs` | `startHost()` and `createHost()` builder. Boots Fleet, dispatcher, loads config, mounts `/mcp`, `/task`, `/health` routes. |
-| `config.mjs` | Loads `host.config.mjs`, validates Phase 2 module sections (`runLoop`, `budgets`, `guardrails`). |
+| `index.mjs` | `startHost()` and `createHost()` builder. Boots Fleet, dispatcher, loads config, mounts routes. |
+| `config.mjs` | Loads `host.config.mjs`, validates module sections (`runLoop`, `budgets`, `guardrails`). |
 | `run-loop.mjs` | `runTask()` — selects strategy, iterates events, checks budgets on each LLM call, returns `{ status, result, history, budget }`. |
-| `budgets.mjs` | `createBudgets()` — tracks iterations, tokens, cost, elapsed time. `check()` returns which cap was hit with `limit` and `actual` values. |
-| `guardrails.mjs` | `createGuardrails()` — per-tool policy gate (`allow`/`deny`/`approve`), input validation against Zod schemas, filesystem sandbox, dry-run mode. Two entry points: `gate()` (check only) and `execute()` (check + run). |
-| `response-parser.mjs` | Extracts the first fenced JSON block (`` ```tool_call ``, `` ```plan ``, `` ```done ``, `` ```review ``, `` ```step_review ``) from an LLM response. Returns a typed object or `thinking`/`error`. |
-| `tools/registry.mjs` | `extendRegistry()` — wraps the MCP registry with Phase 2 metadata: `reversible`, `timeout`, `retryable`, `tags`. |
-| `tools/executor.mjs` | `executeTool()` — runs a tool's `run()` with timeout, signal, input validation, and error-as-value handling. |
+| `budgets.mjs` | `createBudgets()` — tracks iterations, tokens, cost, elapsed time. `check()` returns which cap was hit. |
+| `guardrails.mjs` | `createGuardrails()` — per-tool policy gate (`allow`/`deny`/`approve`), input validation, filesystem sandbox, dry-run mode. |
+| `response-parser.mjs` | Extracts fenced JSON blocks from LLM responses. |
+| `tools/registry.mjs` | Extends the MCP registry with reversibility, timeout, and retry metadata. |
+| `tools/executor.mjs` | Runs a tool with validation, timeout, and error handling. |
 
 #### `host/strategies/`
 
 | File | Responsibility |
 |---|---|
-| `open-ended.mjs` | ReAct loop: the doer LLM sees the task + tools + observation history, picks a tool or finishes. `maxNoActionTurns` stops thinking-only loops. |
-| `plan-execute.mjs` | Multi-phase: doer plans → reviewer approves/rejects → steps execute one at a time → step-level review for irreversible tools → replan on failure. Supports dynamic arg resolution and reason steps. |
+| `open-ended.mjs` | ReAct loop: the doer LLM sees the task + tools + observation history, picks a tool or finishes. |
+| `plan-execute.mjs` | Multi-phase: doer plans → reviewer approves/rejects → steps execute one at a time → step-level review for irreversible tools → replan on failure. |
 
 Both strategies are async generators that yield events (`prompt_usage`, `observation`,
 `done`, `error`). The run loop consumes them uniformly.
 
 #### `host/prompts/`
 
-Ten prompt builders. Each returns a string sent to the doer or reviewer via
+Prompt builders. Each returns a string sent to the doer or reviewer via
 `fleetApi.executePrompt()`.
 
 | File | Used by | Purpose |
@@ -259,10 +212,6 @@ Ten prompt builders. Each returns a string sent to the doer or reviewer via
 | `replan.mjs` | Plan-execute | Failed plan + feedback → revised plan |
 | `format-tools.mjs` | Both | Tool registry → text catalog with names, params, reversibility |
 
-The LLM communicates decisions through fenced JSON blocks: `` ```tool_call ``,
-`` ```plan ``, `` ```done ``, `` ```review ``, `` ```step_review ``. The response parser
-extracts the first block; text before it is captured as reasoning.
-
 ### `tools/`
 
 Python scripts called via `fleetApi.executeCommand()` on the doer member. All use only
@@ -270,20 +219,20 @@ stdlib (`urllib.request`, `json`, `sys`) plus optional `certifi` for SSL.
 
 | File | Responsibility |
 |---|---|
-| `weather/weather.py` | Current weather from wttr.in. Returns temperature, humidity, wind, UV index. |
-| `forecast/forecast.py` | Multi-day forecast from Open-Meteo (1–16 days). Returns daily highs/lows, precipitation, weather codes. |
-| `timezone/timezone.py` | Local time from timeapi.io. Returns datetime, UTC offset, abbreviation. |
-| `textstats/textstats.py` | Text analysis: character, word, sentence counts, unique words, average word length. |
-| `currency/currency.py` | Live exchange rates from the European Central Bank via frankfurter.app. |
-| `country-info/country_info.py` | Country info from Wikipedia + Nominatim. Accepts ISO codes (IN, JP) or full names. |
-| `travel-advisory/travel_advisory.py` | Travel safety advisories by country code. SSL fallback for Docker environments. |
-| `geocode/geocode.py` | City → lat/lon or reverse, via OpenStreetMap Nominatim. |
+| `weather/weather.py` | Current weather from wttr.in. |
+| `forecast/forecast.py` | Multi-day forecast from Open-Meteo (1-16 days). |
+| `timezone/timezone.py` | Local time from timeapi.io. |
+| `textstats/textstats.py` | Text analysis: character, word, sentence counts. |
+| `currency/currency.py` | Live exchange rates from the ECB via frankfurter.app. |
+| `country-info/country_info.py` | Country info from Wikipedia + Nominatim. |
+| `travel-advisory/travel_advisory.py` | Travel safety advisories by country code. |
+| `geocode/geocode.py` | City → lat/lon or reverse, via Nominatim. |
 | `wikipedia-summary/wikipedia_summary.py` | Wikipedia summary extract for any topic. |
-| `public-holidays/public_holidays.py` | Public holidays by country/year from Nager.Date (~100 countries). |
+| `public-holidays/public_holidays.py` | Public holidays by country/year from Nager.Date. |
 
 ## Data flow
 
-### A workflow run
+### A workflow run (CLI)
 
 ```text
 runDemo()
@@ -298,167 +247,101 @@ runDemo()
   └─ finally: release lease / close dispatcher / stop Fleet
 ```
 
-The `finally` matters. Without stopping the transport the child process keeps the event
-loop alive and the process prints its result but never returns to the shell.
-
-### An MCP tool call
+### An MCP tool call (POST /mcp)
 
 ```text
 Claude Code chooses a tool from tools/list
   └─ POST /mcp tools/call
        ├─ authenticate
        ├─ create a fresh MCP server + HTTP transport
-       ├─ validate args with the entry's inputSchema, when present
-       ├─ guardrails.execute() if guardrails are enabled
+       ├─ guardrails.execute() if enabled
+       ├─ dispatcher.dispatch() → acquire lease
        ├─ entry.run({ fleetApi, args, signal, reportPhase })
-       │    ├─ phase()/log() output             → server terminal
-       │    └─ reportPhase(), if progressToken  → heartbeat to Claude
-       ├─ return one final MCP tool result      → Claude
-       └─ close the per-request MCP server
+       ├─ return one final MCP tool result → Claude
+       └─ lease.release()
 ```
-
-Each tool call has one request and one final response. Progress notifications are
-heartbeats only: workflow terminal output is not streamed into the model's context.
-The MCP layer keeps no session state between calls. The downstream Fleet child is
-spawned once when the MCP server starts, and killed when the MCP server closes.
 
 ### An autonomous task (POST /task)
 
 ```text
 POST /task { goal: "Plan a trip to Jaipur", constraints: { timeoutMs: 300000 } }
   ├─ mergeBudgetConfig()              server defaults ∩ request (stricter wins)
-  ├─ dispatcher.dispatch()            acquire lease → WORKER-1-DOER + REVIEWER
+  ├─ dispatcher.dispatch()            acquire lease → doer + reviewer pair
   └─ runTask(task, { strategy, tools, budgets, guardrails })
        │
-       │  ┌─ PLAN ─────────────────────────────────────────────┐
-       │  │ Doer LLM: "Here is my plan: 9 tool steps + 1      │
-       │  │            reason step"                             │
-       │  │ → parseResponse() extracts ```plan block            │
-       │  └────────────────────────────────────────────────────┘
-       │           │ yield prompt_usage → budgets.check()
-       │           ▼
-       │  ┌─ REVIEW ───────────────────────────────────────────┐
-       │  │ Reviewer LLM: "Approved" or "Rejected: add X"     │
-       │  │ If rejected → Doer replans (up to maxReplanAttempts)│
-       │  └────────────────────────────────────────────────────┘
-       │           │ yield prompt_usage → budgets.check()
-       │           ▼
-       │  ┌─ EXECUTE ──────────────────────────────────────────┐
-       │  │ For each step in the approved plan:                │
-       │  │                                                    │
-       │  │ tool step:                                         │
-       │  │   ├─ resolve args if empty (Doer LLM fills them)  │
-       │  │   ├─ guardrails.execute(tool, args)                │
-       │  │   ├─ tool.run() via executeCommand on doer member  │
-       │  │   ├─ retry if tool is retryable, else replan       │
-       │  │   └─ step review if irreversible (Reviewer LLM)    │
-       │  │                                                    │
-       │  │ reason step:                                       │
-       │  │   └─ Doer LLM analyzes/synthesizes from history    │
-       │  └────────────────────────────────────────────────────┘
-       │           │ observations accumulate
-       │           ▼
-       │  ┌─ DONE ─────────────────────────────────────────────┐
-       │  │ Doer LLM: ```done { result, summary }              │
-       │  └────────────────────────────────────────────────────┘
+       │  strategy.iterate() yields events:
+       │    prompt_usage → budgets.check()
+       │    observation  → accumulate history
+       │    done         → return result
+       │    error        → return failure
        │
        └─ return { status, result, history, budget }
             └─ lease.release()
 ```
 
-The code is pure orchestration — it structures LLM conversations and routes responses
-into actions. The doer proposes and executes; the reviewer challenges. Both are
-`executePrompt` calls with different prompt framing. The code never decides *what* to
-do — it decides *when to ask whom* and *what to do with the answer*.
-
-Budget checks happen after every LLM call (`prompt_usage` event), not after tool calls.
-A task with 4 LLM calls and 9 tool calls counts as 4 iterations. When a budget is
-exceeded, the response includes `budgetReason`, `limit`, and `actual` for diagnostics.
-
-## Design decisions worth knowing
+## Design decisions
 
 **Downstream Fleet is stdio, not HTTP.** Launchers call `spawnFleet()` from
-`transport/stdio-fleet.mjs`. `APRA_FLEET_TRANSPORT` is not used. The wrapper discovers
-Fleet's tool names via `listTools()` at connect time and maps camelCase `fleetApi`
-methods onto those names. A missing required tool fails at spawn, not on first call.
-`executeCommand` / `executePrompt` strip `timeoutMs`, `signal`, and `failSoft` from the
-tool payload and pass them as MCP client options. The client timeout defaults to 15
-minutes (same as `@apralabs/apra-fleet-client`), not the SDK's 60s.
+`transport/stdio-fleet.mjs`. The wrapper discovers Fleet's tool names via `listTools()`
+at connect time and maps camelCase `fleetApi` methods onto those names. A missing required
+tool fails at spawn, not on first call. `executeCommand` / `executePrompt` strip
+`timeoutMs`, `signal`, and `failSoft` from the tool payload and pass them as MCP client
+options. The client timeout defaults to 15 minutes, not the SDK's 60s.
 
 **Registration happens in Node at dispatcher startup.** A freshly spawned Fleet process
 starts empty. `createWorkerDispatcher()` uses `MemberManager` to register the pool
-roster (and ephemeral pairs later). `spawnFleet()` does not register DEMO members.
-`demo.js` does not call `registerMember`. Injected test clients therefore do not
-need a `registerMember` method.
+roster (and ephemeral pairs later). Injected test clients do not need a `registerMember`
+method.
 
 **OAuth is inherited, then attached.** The child environment copies the parent and sets
-`CLAUDE_CODE_OAUTH_TOKEN` when a token is available (`oauthToken` argument or the parent
-env). After registration, `MemberManager` calls `provision_llm_auth` for each member.
-A missing token does not block spawn; `agent()` will fail later if Fleet has nothing to
-authenticate with. `provision_llm_auth` failures are warnings, not hard errors.
+`CLAUDE_CODE_OAUTH_TOKEN` when a token is available. After registration, `MemberManager`
+calls `provision_llm_auth` for each member. A missing token does not block spawn;
+`agent()` will fail later if Fleet has nothing to authenticate with.
 
 **`@apralabs` packages resolve through a symlink.** The root `package.json` deliberately
 does not depend on any `@apralabs/*` package; Fleet is a machine install, not a project
 dependency. `ensureApralabs()` links `node_modules/@apralabs` to whichever location
-actually contains the packages: first `~/.apra-fleet/node_modules/@apralabs`, then the
-npm global prefix (where `npm install -g @apralabs/apra-fleet` lands). It verifies the
-link target with `realpathSync` and relinks when stale, which is what fixes the
-`Cannot find package 'undici'` symptom. It uses `'junction'` so Windows does not require
-admin rights; POSIX ignores the argument.
+actually contains the packages. It uses `'junction'` so Windows does not require admin
+rights.
 
 **`fleetApi` is injected, never imported.** Both launchers accept a client and only
 spawn when one isn't supplied. This is what makes the mock tests possible — they run
 with no Fleet binary, no members, and no token.
 
 **There is no internal router for MCP.** The model connected over MCP already sees the
-tool names, descriptions, and schemas and decides which one to call. Adding another LLM
-classification call inside this process would duplicate that routing, add latency, and
-spend tokens unnecessarily. Tool descriptions are therefore part of the interface.
+tool names, descriptions, and schemas and decides which one to call. Tool descriptions
+are part of the interface.
 
 **`/mcp` and `/task` are separate interfaces, not nested.** Exposing the run loop as an
-MCP tool would create agent-inside-agent: an external LLM calling a tool that runs
-another LLM loop. That means double token spend, the outer agent losing visibility, and
-two brains fighting over strategy. `/mcp` is for external agents that bring their own
-brain; `/task` is for callers that want this server's brain. Keep them separate.
+MCP tool would create agent-inside-agent: double token spend, lost visibility, and two
+brains fighting over strategy. `/mcp` is for external agents that bring their own brain;
+`/task` is for callers that want this server's brain.
 
-**Strategy selection is static.** The run loop does not inspect the task and decide
-between open-ended and plan-execute. The strategy is set in `host.config.mjs` and
-every task uses it. Dynamic selection would require a classifier prompt (more tokens,
-more latency) for marginal benefit — the deployer knows their workload.
+**Strategy selection is static.** Set in `host.config.mjs`, every task uses it. Dynamic
+selection would require a classifier prompt for marginal benefit.
 
 **Guardrails are checked on both paths.** MCP tool calls and run-loop tool calls both
-go through `guardrails.execute()`. The guardrails module is created once at startup
-and passed to both the MCP handler and the strategy.
+go through `guardrails.execute()`.
 
-**Budgets are per-request, not per-server.** Each `/task` request creates a fresh
-`createBudgets()` instance, merging server defaults with request overrides. The merge
-picks the stricter value (`Math.min`), so a request can only tighten, never loosen.
+**Budgets are per-request, not per-server.** Each `/task` request creates a fresh budget
+instance, merging server defaults with request overrides. The merge picks the stricter
+value.
 
 **Iteration count tracks LLM calls, not tool calls.** Only `prompt_usage` events
-(from `executePrompt`) increment the iteration counter. Tool executions
-(`executeCommand`) are not counted. A plan-execute run with 9 tools and 4 LLM calls
-counts as 4 iterations. This prevents the iteration cap from penalizing tool-heavy
-but LLM-light plans.
+increment the counter. A run with 9 tools and 4 LLM calls counts as 4 iterations.
 
-**Slow workflows use heartbeat plus client configuration.** The SDK does not implement
-MCP Tasks, so long-running calls remain one request/response. When the client supplies a
-progress token, phase reports provide a heartbeat; a sufficiently large `timeout` in
-the client's `.mcp.json` is the reliable control for slow calls.
+**Auth is replaced by injection.** `createMcpHttpApp({ authenticate })` takes middleware.
+Routes depend only on `req.user`, so real auth drops in without editing `auth.mjs`.
 
-**Auth is replaced by injection.** `createMcpHttpApp({ authenticate })` takes
-middleware. Routes depend only on `req.user`, so real auth drops in without editing
-`auth.mjs`.
-
-**Teardown is idempotent `stop()`.** `stop()` closes the MCP client, then the stdio
-transport. It is safe to call twice. Unexpected child exit rejects the in-flight
-`callTool`; the process is not restarted.
+**Teardown is idempotent `stop()`.** Safe to call twice. Unexpected child exit rejects
+the in-flight `callTool`; the process is not restarted.
 
 ## Where state lives
 
 | State | Location | Lifetime |
 |---|---|---|
-| Member registry | Fleet data dir (`~/.apra-fleet/data` by default) | Shared across stdio children on the same machine; a new child sees members already registered there. |
-| OAuth tokens | Fleet credential store, per member | Until the token expires. Also passed into the child via `CLAUDE_CODE_OAUTH_TOKEN`. |
+| Member registry | Fleet data dir (`~/.apra-fleet/data`) | Shared across stdio children on the same machine. |
+| OAuth tokens | Fleet credential store, per member | Until the token expires. |
 | Member scratch space | pool root / ephemeral tmpdir | On disk; `.claude/` inside is gitignored local state. |
 
 The MCP layer holds no state: every HTTP request gets a fresh MCP server and transport.
@@ -470,27 +353,24 @@ The downstream Fleet child lives for the MCP server process, not per HTTP reques
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` | (none) | OAuth token passed into spawned Fleet processes and used by `provision_llm_auth`. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | (none) | OAuth token passed into spawned Fleet processes. |
 | `WORKER_POOL_SIZE` | `4` | Pre-registered doer/reviewer pairs. |
 | `WORKER_EPHEMERAL_MAX` | `10` | Extra pairs created under `os.tmpdir()` when the pool is busy. |
 | `WORKER_DISPATCH_QUEUE_SIZE` | `20` | Calls waiting when both tiers are busy. |
 | `WORKER_POOL_ROOT` | `./workdir` | Base folder for pool worker dirs and locks. |
 | `WORKER_POOL_ACQUIRE_TIMEOUT_MS` | `300000` | Timeout for pool-internal `acquire()`. |
-| `WORKER_EPHEMERAL_ROOT` | `os.tmpdir()/workflow-kit` | Base folder for ephemeral worker dirs. |
+| `WORKER_EPHEMERAL_ROOT` | `os.tmpdir()/apra-agent-kit` | Base folder for ephemeral worker dirs. |
 | `WORKER_EPHEMERAL_TTL_MS` | `600000` | Force-teardown safety net for ephemeral workers. |
 | `WORKER_DISPATCH_QUEUE_TIMEOUT_MS` | `300000` | Timeout for queued dispatch waiters. |
 | `APRA_FLEET_BIN` | `apra-fleet` on PATH | Path to the Fleet binary when it is not on PATH. |
-| `PORT` | `3000` | MCP server listen port. |
-| `MCP_BIND_HOST` | `127.0.0.1` | MCP server bind address. Compose sets `0.0.0.0`. |
+| `PORT` | `3000` | Server listen port. |
+| `MCP_BIND_HOST` | `127.0.0.1` | Server bind address. Compose sets `0.0.0.0`. |
 
 ### Host config (`host.config.mjs`)
 
-The host is configured by `host.config.mjs` at the project root. Phase 2 modules
-are declared under `modules`:
-
 ```js
 export default {
-  name: 'workflow-kit',
+  name: 'apra-agent-kit',
   fleet: {},
   comm: { adapter: 'express' },
   modules: {
@@ -508,12 +388,12 @@ export default {
       maxIterations: 25,
       maxCostUsd: 5.00,
       maxTokens: 500_000,
-      timeoutMs: 600_000,            // 10 minutes
+      timeoutMs: 600_000,
     },
     guardrails: {
       enabled: true,
       defaultPolicy: 'allow',
-      policies: {},                  // per-tool overrides: { 'tool-name': 'deny' }
+      policies: {},
       validateInputs: true,
       sandboxFs: false,
       dryRunMode: false,
@@ -522,8 +402,8 @@ export default {
 };
 ```
 
-When `runLoop` is enabled, the host mounts `POST /task`. When disabled, `/task` returns
-404 and only `/mcp` + `/health` are served.
+When `runLoop` is enabled, the host mounts `POST /task`. When disabled, only `/mcp` +
+`/health` are served.
 
 ## Extension points
 
@@ -531,22 +411,17 @@ When `runLoop` is enabled, the host mounts `POST /task`. When disabled, `/task` 
 |---|---|
 | Real Python work | Replace `dummy.py`, keep the `command()` call |
 | Real LLM work | Change the `agent()` prompt, keep `member_name` |
-| A second agent | Address `'reviewer'` on the leased pair; the dispatcher already registered both members |
-| Your own pool size | Set `WORKER_POOL_SIZE` / `WORKER_EPHEMERAL_MAX`; Node registers names from `pool/roster.mjs` |
+| A second agent | Address `'reviewer'` on the leased pair |
+| Your own pool size | Set `WORKER_POOL_SIZE` / `WORKER_EPHEMERAL_MAX` |
 | A new MCP tool | Append its entry to `mcp/registry.mjs` — no server or HTTP changes |
-| A new Python tool | Add a script to `tools/`, expose it in `mcp/registry.mjs` with a `run` that calls `fleetApi.executeCommand()` |
+| A new Python tool | Add a script to `tools/`, expose it in `mcp/registry.mjs` |
 | Real authentication | Pass middleware to `createMcpHttpApp({ authenticate })` |
 | Switch agent strategy | Set `modules.runLoop.strategy` in `host.config.mjs` |
-| Limit token spend per request | Set `modules.budgets.maxCostUsd` or pass `budget.maxCostUsd` in the `/task` request |
+| Limit token spend | Set `modules.budgets.maxCostUsd` or pass `budget.maxCostUsd` in `/task` |
 | Block a tool | Add `'tool-name': 'deny'` to `modules.guardrails.policies` |
-| Require approval for a tool | Add `'tool-name': 'approve'` and provide an `approvalCallback` |
-| Test without spending tokens | Set `modules.guardrails.dryRunMode: true` — all tools are blocked |
-| Build the host programmatically | Use `createHost().runLoop().budget().guardrails().build()` |
-
-Two things to avoid: do not pass OAuth tokens into `agent()` payloads (they belong in
-Fleet's credential store / the child env), and do not clone `apra-fleet` into this repo
-— the symlink resolution exists precisely so you don't have to.
+| Require approval | Add `'tool-name': 'approve'` and provide an `approvalCallback` |
+| Dry-run mode | Set `modules.guardrails.dryRunMode: true` — all tools are blocked |
+| Build programmatically | Use `createHost().runLoop().budget().guardrails().build()` |
 
 The stdio design is specified in [specs/stdio-transport-spec.md](specs/stdio-transport-spec.md).
-The run loop, strategies, budgets, guardrails, and the `/task` API are detailed in
-[phase2-run-loop.md](phase2-run-loop.md).
+The run loop, strategies, budgets, and guardrails are detailed in [run-loop.md](run-loop.md).

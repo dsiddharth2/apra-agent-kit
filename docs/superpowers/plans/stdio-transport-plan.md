@@ -283,7 +283,7 @@ export async function spawnFleet({
     stderr: 'inherit',
   });
 
-  const client = new Client({ name: 'workflow-kit', version: '1.0.0' });
+  const client = new Client({ name: 'apra-agent-kit', version: '1.0.0' });
 
   let connected = false;
   try {

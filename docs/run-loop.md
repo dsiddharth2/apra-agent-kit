@@ -1,6 +1,6 @@
-# Phase 2: Autonomous Run Loop
+# Autonomous Run Loop
 
-The run loop turns workflow-kit from a tool server into an autonomous agent. Instead of
+The run loop turns apra-agent-kit from a tool server into an autonomous agent. Instead of
 an external LLM choosing tools one at a time through MCP, the host accepts a task goal
 and drives tool selection, execution, and review internally.
 
@@ -62,23 +62,23 @@ Safety valves:
 A structured multi-phase loop with a doer and a reviewer.
 
 ```text
-Phase 1: PLAN
-  Doer creates an ordered plan (tool steps + reason steps)
-    ↓
-Phase 2: REVIEW
-  Reviewer approves or rejects with feedback
-  If rejected → Doer replans (up to maxReplanAttempts)
-    ↓
-Phase 3: EXECUTE
-  Steps run one at a time:
-    tool step  → execute tool, record observation
-    reason step → Doer analyzes/synthesizes, record observation
-  Per-step review for irreversible tools or flagged steps
-  Dynamic arg resolution for steps depending on prior results
-  Tool failure → retry if retryable, otherwise replan
-    ↓
-Phase 4: DONE
-  Doer produces final result
+1. PLAN
+   Doer creates an ordered plan (tool steps + reason steps)
+     ↓
+2. REVIEW
+   Reviewer approves or rejects with feedback
+   If rejected → Doer replans (up to maxReplanAttempts)
+     ↓
+3. EXECUTE
+   Steps run one at a time:
+     tool step  → execute tool, record observation
+     reason step → Doer analyzes/synthesizes, record observation
+   Per-step review for irreversible tools or flagged steps
+   Dynamic arg resolution for steps depending on prior results
+   Tool failure → retry if retryable, otherwise replan
+     ↓
+4. DONE
+   Doer produces final result
 ```
 
 Good for: multi-step tasks, tasks with irreversible actions, tasks needing review.
@@ -156,8 +156,7 @@ Possible `budgetReason` values: `max_iterations`, `max_tokens`, `max_cost`, `tim
 ### Iteration counting
 
 Only LLM calls (`executePrompt`) increment the iteration counter. Tool calls
-(`executeCommand`) do not. A plan-execute run with 9 tools and 4 LLM calls
-(plan + review + reason + done) counts as 4 iterations.
+(`executeCommand`) do not. A run with 9 tools and 4 LLM calls counts as 4 iterations.
 
 ## Guardrails
 
@@ -207,7 +206,7 @@ modules: {
 
 ## Prompt Templates
 
-Ten structured prompt builders in `host/prompts/`:
+Structured prompt builders in `host/prompts/`:
 
 | Template | Used by | Purpose |
 |---|---|---|
@@ -236,23 +235,22 @@ The response parser (`host/response-parser.mjs`) extracts the first fenced block
 parses the JSON, and returns a typed object. Malformed JSON returns an error type.
 Text before the block is captured as reasoning.
 
-## Travel Research Tools
+## Tools
 
-Seven tools added as both MCP tools and run-loop-accessible tools:
+Python scripts in `tools/`, callable both as MCP tools and from the run loop:
 
 | Tool | API | Notes |
 |---|---|---|
 | `weather` | wttr.in | Current conditions for a city |
 | `forecast` | Open-Meteo | Multi-day forecast (1-16 days) |
 | `currency` | ECB via frankfurter.app | Live exchange rates |
-| `country-info` | Wikipedia + Nominatim | Accepts ISO codes (IN, JP) or full names |
-| `travel-advisory` | travel-advisory.info | Safety scores (currently down — 404) |
+| `country-info` | Wikipedia + Nominatim | Accepts ISO codes or full names |
+| `travel-advisory` | travel-advisory.info | Safety scores by country |
 | `geocode` | Nominatim | City → lat/lon or reverse |
 | `wikipedia-summary` | Wikipedia REST API | Summary extract for any topic |
-| `public-holidays` | Nager.Date | Public holidays by country/year (~100 countries) |
+| `public-holidays` | Nager.Date | Public holidays by country/year |
 
-All tools are Python scripts in `tools/`, called via `fleetApi.executeCommand()` on
-the doer member. All are read-only and spend no LLM tokens.
+All are read-only and spend no LLM tokens.
 
 ## Host Configuration
 
@@ -260,7 +258,7 @@ the doer member. All are read-only and spend no LLM tokens.
 
 ```js
 export default {
-  name: 'workflow-kit',
+  name: 'apra-agent-kit',
   fleet: {},
   comm: { adapter: 'express' },
   modules: {
@@ -303,8 +301,8 @@ const host = createHost({ fleetApi, dispatcher })
   .guardrails({ defaultPolicy: 'allow', validateInputs: true })
   .build();
 
-await host.start();            // starts HTTP server with /mcp and /task
-const result = await host.run(task);  // run a task programmatically
+await host.start();
+const result = await host.run(task);
 ```
 
 ## `/task` API
@@ -330,8 +328,8 @@ Content-Type: application/json
 }
 ```
 
-Only `goal` is required. `id` auto-generates if omitted. `constraints` and `budget`
-tighten the server defaults — the stricter value wins.
+Only `goal` is required. `constraints` and `budget` tighten the server defaults —
+the stricter value wins.
 
 ### Response
 
@@ -341,7 +339,7 @@ tighten the server defaults — the stricter value wins.
   "status": "completed",
   "result": "The final output from the agent",
   "history": [
-    { "type": "observation", "stepType": "tool", "tool": "weather", "args": {...}, "result": {...} },
+    { "type": "observation", "stepType": "tool", "tool": "weather", "args": {}, "result": {} },
     { "type": "observation", "stepType": "reason", "text": "Analysis..." }
   ],
   "budget": {
@@ -359,14 +357,8 @@ Status values: `completed`, `failed`, `cancelled`, `budget_exceeded`.
 
 ### Timing guidance
 
-The plan-execute strategy with ~9 tools typically needs 90-120 seconds:
-- Plan prompt: ~20s
-- Review prompt: ~30s
-- Tool execution: ~10s
-- Reason/summary prompt: ~28s
-- Done prompt: ~15s
-
-Set `timeoutMs` to at least 300000 (5 minutes) for plan-execute tasks.
+The plan-execute strategy with ~9 tools typically needs 90-120 seconds. Set `timeoutMs`
+to at least 300000 (5 minutes) for plan-execute tasks.
 
 ## Docker
 
@@ -402,23 +394,23 @@ curl -X POST http://localhost:3000/task \
 
 ## Tests
 
-| Script | Tests | What it covers |
-|---|---|---|
-| `npm run test:phase2` | 79 | All Phase 2 modules in isolation |
-| `npm run test:host` | 52 | Host config, registry, executor, express, index |
-| `npm run test:phase2:live` | — | End-to-end with real Fleet + LLM (spends tokens) |
+| Script | What it covers |
+|---|---|
+| `npm run test:host` | Host config, registry, executor, express, index |
+| `npm run test:phase2` | Run loop, strategies, budgets, guardrails, response parser, prompts |
+| `npm run test:phase2:live` | End-to-end with real Fleet + LLM (spends tokens) |
 
-Phase 2 tests use a mock Fleet with scripted `promptResponses` — deterministic
-multi-turn agent loops without hitting a real LLM.
+Tests use a mock Fleet with scripted `promptResponses` — deterministic multi-turn agent
+loops without hitting a real LLM.
 
 ## Module map
 
 | File | Responsibility |
 |---|---|
-| `host/run-loop.mjs` | Top-level `runTask()` — selects strategy, wires budgets/guardrails, iterates events |
+| `host/run-loop.mjs` | `runTask()` — selects strategy, wires budgets/guardrails, iterates events |
 | `host/strategies/open-ended.mjs` | ReAct loop: act → observe → repeat |
 | `host/strategies/plan-execute.mjs` | Plan → review → execute → step-review → replan → done |
-| `host/budgets.mjs` | `createBudgets()` — iteration/token/cost/time caps with `check()` and `record()` |
+| `host/budgets.mjs` | `createBudgets()` — iteration/token/cost/time caps |
 | `host/guardrails.mjs` | `createGuardrails()` — policy gate, sandbox, validation, dry-run |
 | `host/response-parser.mjs` | Extracts fenced JSON blocks from LLM responses |
 | `host/prompts/*.mjs` | Prompt builders for each LLM interaction |
