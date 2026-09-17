@@ -11,7 +11,7 @@ fi
 
 # Symlink @apralabs packages so workflows can resolve them.
 echo "[entrypoint] linking @apralabs packages..."
-node -e "import('./workflows/demo/ensure-apralabs.mjs').then(m => m.ensureApralabs())" 2>/dev/null || true
+node -e "import('./transport/ensure-apralabs.mjs').then(m => m.ensureApralabs())" 2>/dev/null || true
 
 # Fleet skips provisionLlmAuth for local members — it assumes the host's
 # login session is available. In Docker there is no host session, so we wrap

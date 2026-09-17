@@ -1,19 +1,23 @@
 # workflow-kit
 
-A workflow kit from [Apra Fleet](https://github.com/Apra-Labs/apra-fleet). Clone it, write your workflows and tools, `docker compose up`. Everything else — Fleet install, member registration, dependency installation, MCP server — is handled for you. Workflows spawn Fleet over stdio; you do not need `apra-fleet start`.
+A workflow kit from [Apra Fleet](https://github.com/Apra-Labs/apra-fleet). Scaffold a project, write your workflows and tools, then `docker compose up` — Fleet install, member registration, dependency installation, and the MCP server are handled for you. Workflows spawn Fleet over stdio; you do not need `apra-fleet start`.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/dsiddharth2/workflow-kit.git
-cd workflow-kit
+npm create @dsiddharth2/fleet-agent my-agent
+cd my-agent
 ```
 
-Set the OAuth token and start the container in the background:
+The command copies the kit, writes a starter workflow, and offers to install
+Fleet and the Claude CLI. It explains each step before it asks.
+
+Then set the token and start the server:
 
 **Bash / macOS / Linux:**
 ```bash
-CLAUDE_CODE_OAUTH_TOKEN="your-token" docker compose up -d
+export CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
+docker compose up -d
 ```
 
 **PowerShell (Windows):**
@@ -22,13 +26,22 @@ $env:CLAUDE_CODE_OAUTH_TOKEN = "your-token"
 docker compose up -d
 ```
 
-That's it. The MCP server is now listening on `http://localhost:3000/mcp`. Register it with Claude Code:
+The MCP server listens on `http://localhost:3000/mcp`. Register it with Claude Code:
 
 ```bash
 claude mcp add --transport http fleet http://127.0.0.1:3000/mcp
 ```
 
-Claude can now call your workflows as MCP tools.
+Run `npm run doctor` in your project at any time to see what is missing.
+
+### Working on the kit itself
+
+Clone this repository instead:
+
+```bash
+git clone https://github.com/dsiddharth2/workflow-kit.git
+cd workflow-kit && npm install
+```
 
 ---
 
@@ -90,7 +103,7 @@ The launcher owns spawn and cleanup. Copy the pattern from `workflows/demo/main.
 ```js
 // workflows/my-workflow/main.mjs
 import { withStandaloneLease } from '../standalone.mjs';
-import { ensureApralabs } from '../demo/ensure-apralabs.mjs';
+import { ensureApralabs } from '../../transport/ensure-apralabs.mjs';
 
 export async function runMyWorkflow({ fleetApi, workspace, signal, reportPhase } = {}) {
   ensureApralabs();
@@ -315,7 +328,6 @@ workflows/
     main.mjs            # launcher: spawnFleet, execute, stop()
     demo.js             # body: status, command, transform, agent
     dummy.py            # stand-in for real Python work
-    ensure-apralabs.mjs # symlinks @apralabs packages from Fleet install
   inspect-members/      # read-only member inspection workflow
     main.mjs, inspect-members.js, inspect.py
   city-briefing/        # multi-tool workflow: weather + timezone + agent briefing
@@ -326,6 +338,7 @@ tools/
   textstats/textstats.py # character, word, sentence counts
 transport/
   stdio-fleet.mjs       # spawn apra-fleet over stdio, wrap as fleetApi
+  ensure-apralabs.mjs   # symlinks @apralabs packages from Fleet install
 mcp/
   main.mjs              # MCP server launcher, configurable bind address
   server.mjs            # one MCP tool per registry entry
