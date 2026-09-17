@@ -1,6 +1,6 @@
 # workflow-kit
 
-A workflow kit from [Apra Fleet](https://github.com/Apra-Labs/apra-fleet). Clone it, write your workflows and tools, `docker compose up`. Everything else — Fleet install, member registration, dependency installation, MCP server — is handled for you. Workflows spawn Fleet over stdio; you do not need `apra-fleet start`.
+A workflow kit from [Apra Fleet](https://github.com/Apra-Labs/apra-fleet). Scaffold a project, write your workflows and tools, then `docker compose up` — Fleet install, member registration, dependency installation, and the MCP server are handled for you. Workflows spawn Fleet over stdio; you do not need `apra-fleet start`.
 
 ## Quick start
 
