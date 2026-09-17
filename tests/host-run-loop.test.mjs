@@ -116,3 +116,39 @@ test('guardrails are passed to strategy', async () => {
   const denied = result.history.find(o => o.error === 'guardrail_denied');
   assert.ok(denied);
 });
+
+test('onIteration fires once per progress-worthy event with a message', async () => {
+  const fleetApi = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: [
+      '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
+      '```done\n{"result": "ok", "summary": "s"}\n```',
+    ],
+  });
+  const tools = [{
+    name: 'inspect-members', description: 'x', reversible: true, timeout: 5000, retryable: false, tags: [],
+    run: async () => ({ ok: true }),
+  }];
+  const seen = [];
+  const out = await runTask({ id: 't', goal: 'g' }, {
+    strategy: 'open-ended', tools, fleetApi,
+    onIteration: async (p) => { seen.push(p); },
+  });
+  assert.equal(out.status, 'completed');
+  // open-ended yields action then observation for one tool call
+  assert.deepEqual(seen.map(s => s.iteration), [1, 2]);
+  assert.match(seen[0].message, /calling inspect-members/);
+  assert.match(seen[1].message, /observed inspect-members/);
+});
+
+test('onIteration errors do not break the run', async () => {
+  const fleetApi = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: ['```done\n{"result": "ok", "summary": "s"}\n```'],
+  });
+  const out = await runTask({ id: 't', goal: 'g' }, {
+    strategy: 'open-ended', tools: [], fleetApi,
+    onIteration: async () => { throw new Error('boom'); },
+  });
+  assert.equal(out.status, 'completed');
+});

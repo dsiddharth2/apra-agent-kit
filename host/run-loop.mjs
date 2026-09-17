@@ -1,6 +1,7 @@
 // host/run-loop.mjs
 import { createOpenEndedStrategy } from './strategies/open-ended.mjs';
 import { createPlanExecuteStrategy } from './strategies/plan-execute.mjs';
+import { describeEvent, PROGRESS_TYPES } from './tasks.mjs';
 
 export async function runTask(task, {
   strategy = 'open-ended',
@@ -16,6 +17,7 @@ export async function runTask(task, {
   minReviewPolicy = 'irreversible',
   agentName,
   agentDescription,
+  onIteration,
 } = {}) {
   const strategyOpts = {
     task, tools, fleetApi, guardrails,
@@ -29,12 +31,18 @@ export async function runTask(task, {
 
   let result = null;
   let status = 'failed';
+  let iteration = 0;
 
   try {
     for await (const event of strat.iterate()) {
       if (signal?.aborted) {
         status = 'cancelled';
         break;
+      }
+
+      if (onIteration && PROGRESS_TYPES.has(event.type)) {
+        iteration += 1;
+        try { await onIteration({ iteration, message: describeEvent(event) }); } catch { /* progress is best-effort */ }
       }
 
       if (event.type === 'prompt_usage' && budgets) {
