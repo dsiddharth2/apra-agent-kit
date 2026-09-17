@@ -1,19 +1,6 @@
-# apra-agent-kit
-
-A modular toolkit for building agents on [Apra Fleet](https://github.com/Apra-Labs/apra-fleet).
-Enable the modules you need, write your tools and workflows, ship an agent.
-
-**Minimal** — tool server. An external caller (Claude Code, another agent, a UI) does the
-reasoning and calls tools directly via MCP.
-
-**Full agent** — all modules enabled. The agent receives a task, plans, executes, observes,
-replans, and returns a result autonomously.
-
-**Custom** — any combination. Tools + guardrails but no planner, tools + budgets but no
-memory, etc.
-
-One container runs one agent. Scaling is horizontal: more containers, each with its own
-agent.
+<p align="center">
+  <img src="docs/apra-agent-kit-banner.png" alt="apra-agent-kit" />
+</p>
 
 ## Quick start
 
