@@ -167,7 +167,7 @@ function must accept `{ fleetApi, workspace }` so it stays testable. Address
 
 ```js
 import { withStandaloneLease } from '../standalone.mjs';
-import { ensureApralabs } from '../demo/ensure-apralabs.mjs';
+import { ensureApralabs } from '../../transport/ensure-apralabs.mjs';
 
 export async function runMyWorkflow({ fleetApi, workspace, signal, reportPhase } = {}) {
   ensureApralabs();

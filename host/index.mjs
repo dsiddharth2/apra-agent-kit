@@ -83,7 +83,7 @@ export async function startHost({
     console.warn(`[host] using scripted fleet from ${env.FLEET_MOCK_SCRIPT} — no LLM calls will be made`);
   }
   if (!api) {
-    const { ensureApralabs } = await import('../workflows/demo/ensure-apralabs.mjs');
+    const { ensureApralabs } = await import('../transport/ensure-apralabs.mjs');
     ensureApralabs();
     const { spawnFleet } = await import('../transport/stdio-fleet.mjs');
     const fleet = await spawnFleet({ env });
