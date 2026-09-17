@@ -8,17 +8,8 @@ export function createExpressAdapter() {
     async start({ routes, port, host, authenticate }) {
       const app = createMcpExpressApp();
 
-      for (const [name, route] of Object.entries(routes)) {
+      for (const route of Object.values(routes)) {
         if (!route) continue;
-        // Transitional: Phase 2 passed bare Express handlers keyed by name. Keep
-        // them working until Task 9 switches host/index.mjs to RouteDefs.
-        if (typeof route === 'function') {
-          const legacy = { health: ['get', '/health', false], mcp: ['post', '/mcp', true], task: ['post', '/task', true], jobs: ['get', '/jobs/:id', true] }[name];
-          if (!legacy) continue;
-          const [m, p, needsAuth] = legacy;
-          if (needsAuth) app[m](p, (req, res, next) => { req.user = { id: 'anonymous' }; next(); }, route); else app[m](p, route);
-          continue;
-        }
         const method = route.method.toLowerCase();
         if (route.raw) {
           app[method](route.path, async (req, res) => {

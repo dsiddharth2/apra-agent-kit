@@ -178,7 +178,12 @@ export function createInProcessJobs({
       clearInterval(sweepTimer); clearInterval(purgeTimer);
       const inflight = [...running.values()].map(e => e.promise).filter(Boolean);
       if (inflight.length) {
-        await Promise.race([Promise.allSettled(inflight), new Promise(r => setTimeout(r, drain))]);
+        let drainTimer;
+        await Promise.race([
+          Promise.allSettled(inflight),
+          new Promise(r => { drainTimer = setTimeout(r, drain); }),
+        ]);
+        clearTimeout(drainTimer);
         for (const entry of running.values()) entry.controller.abort('shutdown');
         await Promise.allSettled([...running.values()].map(e => e.promise));
       }
