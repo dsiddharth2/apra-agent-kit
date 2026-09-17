@@ -27,6 +27,7 @@ export function createInProcessJobs({
   const running = new Map();           // jobId → { controller, startedAt, promise }
   const subscribers = new Map();       // jobId → Set<fn>
   const callbackUrls = new Map();      // jobId → callbackUrl (for notifier ctx)
+  let submitting = 0;                  // slots reserved in submit() before queue.push
   let closed = false;
   let started = false;
   let sweepTimer = null;
@@ -54,60 +55,83 @@ export function createInProcessJobs({
     if (TERMINAL_STATUSES.has(status)) subscribers.delete(jobId);
   }
 
-  async function runOne(jobId) {
-    const startedAt = iso();
-    const claimed = await store.claim(jobId, startedAt);
-    if (!claimed) return;                                   // cancelled meanwhile or claimed elsewhere
-    const record = await store.get(jobId);
-    const controller = new AbortController();
-    const entry = { controller, startedAt, promise: null };
-    running.set(jobId, entry);
-    await publish(jobId, startedEvent(jobId, now()));
+  function settlementFromAbort(reason) {
+    if (reason === 'lease_expired') {
+      return { status: 'failed', result: null, error: { code: 'lease_expired', message: `exceeded leaseTimeoutMs ${leaseTimeoutMs}` }, history: [], budget: null };
+    }
+    if (reason === 'shutdown') {
+      return { status: 'failed', result: null, error: { code: 'interrupted', message: 'host shut down while processing' }, history: [], budget: null };
+    }
+    if (reason === 'cancelled') {
+      return { status: 'cancelled', result: null, error: null, history: [], budget: null };
+    }
+    return null;
+  }
 
-    const onProgress = async ({ iteration, message }) => {
-      if (controller.signal.aborted) return;
-      await store.update(jobId, { progress: { iteration, message, at: iso() } });
-      await publish(jobId, progressEvent(jobId, iteration, message, now()));
-    };
+  async function runOne(jobId, entry) {
+    try {
+      const claimed = await store.claim(jobId, entry.startedAt);
+      if (!claimed) return;                                   // cancelled meanwhile or claimed elsewhere
 
-    const task = { id: jobId, ...record.task };
-    const run = Promise.resolve()
-      .then(() => runJob(task, { signal: controller.signal, onProgress }))
-      .catch(err => ({ status: 'failed', result: { error: 'run_failed', message: String(err?.message ?? err) }, history: [], budget: null }));
+      const abortBeforeStart = settlementFromAbort(entry.controller.signal.aborted ? entry.controller.signal.reason : null);
+      if (abortBeforeStart) {
+        await settle(jobId, abortBeforeStart);
+        return;
+      }
 
-    // If aborted and the run loop does not return within the grace period, settle anyway.
-    let forceTimer = null;
-    const forced = new Promise((resolve) => {
-      controller.signal.addEventListener('abort', () => {
-        forceTimer = setTimeout(() => resolve({ status: 'cancelled', result: null, history: [], budget: null }), FORCE_SETTLE_AFTER_ABORT_MS);
-        forceTimer.unref?.();
-      }, { once: true });
-    });
+      const record = await store.get(jobId);
+      if (!record) return;
+      await publish(jobId, startedEvent(jobId, now()));
 
-    entry.promise = (async () => {
+      const abortAfterStarted = settlementFromAbort(entry.controller.signal.aborted ? entry.controller.signal.reason : null);
+      if (abortAfterStarted) {
+        await settle(jobId, abortAfterStarted);
+        return;
+      }
+
+      const onProgress = async ({ iteration, message }) => {
+        if (entry.controller.signal.aborted) return;
+        await store.update(jobId, { progress: { iteration, message, at: iso() } });
+        await publish(jobId, progressEvent(jobId, iteration, message, now()));
+      };
+
+      const task = { id: jobId, ...record.task };
+      const run = Promise.resolve()
+        .then(() => runJob(task, { signal: entry.controller.signal, onProgress }))
+        .catch(err => ({ status: 'failed', result: { error: 'run_failed', message: String(err?.message ?? err) }, history: [], budget: null }));
+
+      // If aborted and the run loop does not return within the grace period, settle anyway.
+      let forceTimer = null;
+      const forced = new Promise((resolve) => {
+        const arm = () => {
+          forceTimer = setTimeout(() => resolve({ status: 'cancelled', result: null, history: [], budget: null }), FORCE_SETTLE_AFTER_ABORT_MS);
+          forceTimer.unref?.();
+        };
+        if (entry.controller.signal.aborted) arm();
+        else entry.controller.signal.addEventListener('abort', arm, { once: true });
+      });
+
       const outcome = await Promise.race([run, forced]);
       clearTimeout(forceTimer);
-      running.delete(jobId);
-      const reason = controller.signal.aborted ? controller.signal.reason : null;
+      const reason = entry.controller.signal.aborted ? entry.controller.signal.reason : null;
       let settled = settleFromRunResult(outcome);
-      if (reason === 'lease_expired') {
-        settled = { ...settled, status: 'failed', result: null, error: { code: 'lease_expired', message: `exceeded leaseTimeoutMs ${leaseTimeoutMs}` } };
-      } else if (reason === 'shutdown') {
-        settled = { ...settled, status: 'failed', result: null, error: { code: 'interrupted', message: 'host shut down while processing' } };
-      } else if (reason === 'cancelled') {
-        settled = { ...settled, status: 'cancelled', error: null };
-      }
+      const fromAbort = settlementFromAbort(reason);
+      if (fromAbort) settled = { ...settled, status: fromAbort.status, result: fromAbort.result, error: fromAbort.error };
       await settle(jobId, settled);
+    } finally {
+      running.delete(jobId);
       pump();
-    })();
-    return entry.promise;
+    }
   }
 
   function pump() {
     if (closed) return;
     while (running.size < concurrency && queue.length > 0) {
       const jobId = queue.shift();
-      void runOne(jobId).catch(err => logger.warn(`[jobs] runOne failed: ${err?.message ?? err}`));
+      const controller = new AbortController();
+      const entry = { controller, startedAt: iso(), promise: null };
+      running.set(jobId, entry);
+      entry.promise = runOne(jobId, entry).catch(err => logger.warn(`[jobs] runOne failed: ${err?.message ?? err}`));
     }
   }
 
@@ -152,7 +176,7 @@ export function createInProcessJobs({
     async stop({ drainMs: drain = drainMs } = {}) {
       closed = true;
       clearInterval(sweepTimer); clearInterval(purgeTimer);
-      const inflight = [...running.values()].map(e => e.promise);
+      const inflight = [...running.values()].map(e => e.promise).filter(Boolean);
       if (inflight.length) {
         await Promise.race([Promise.allSettled(inflight), new Promise(r => setTimeout(r, drain))]);
         for (const entry of running.values()) entry.controller.abort('shutdown');
@@ -165,11 +189,17 @@ export function createInProcessJobs({
       if (closed) throw new JobsClosedError();
       if (!task || typeof task.goal !== 'string' || !task.goal.trim()) throw new TypeError('task.goal is required');
       const url = validateCallbackUrl(callbackUrl, { allowHttp: allowHttpCallbacks });
-      if (queue.length >= maxQueueSize) throw new JobQueueFullError();
-      const record = createRecord(task, { callbackUrl: url, metadata, now: now() });
-      await store.insert(record);
-      if (url) callbackUrls.set(record.id, url);
-      queue.push(record.id);
+      if (queue.length + submitting >= maxQueueSize) throw new JobQueueFullError();
+      submitting += 1;
+      let record;
+      try {
+        record = createRecord(task, { callbackUrl: url, metadata, now: now() });
+        await store.insert(record);
+        if (url) callbackUrls.set(record.id, url);
+        queue.push(record.id);
+      } finally {
+        submitting -= 1;
+      }
       // Position is FIFO rank among unfinished jobs. pump() may already have
       // shifted an earlier id off `queue`, so queue.length alone is too small.
       const counts = await store.countByStatus();
@@ -185,14 +215,17 @@ export function createInProcessJobs({
       const record = await store.get(jobId);
       if (!record) return { ok: false, status: null };
       if (TERMINAL_STATUSES.has(record.status)) return { ok: false, status: record.status };
+      const entry = running.get(jobId);
+      if (entry) {
+        if (!entry.controller.signal.aborted) entry.controller.abort('cancelled');
+        return { ok: true, status: 'cancelling' };
+      }
       if (record.status === 'queued') {
         const idx = queue.indexOf(jobId);
         if (idx >= 0) queue.splice(idx, 1);
         await settle(jobId, { status: 'cancelled', result: null, error: null });
         return { ok: true, status: 'cancelled' };
       }
-      const entry = running.get(jobId);
-      if (entry && !entry.controller.signal.aborted) entry.controller.abort('cancelled');
       return { ok: true, status: 'cancelling' };
     },
 

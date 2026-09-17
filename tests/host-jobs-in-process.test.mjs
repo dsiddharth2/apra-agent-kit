@@ -43,6 +43,44 @@ async function setup(overrides = {}, runner = makeRunner()) {
   return { jobs, store, runner, published };
 }
 
+/** Hold store.claim() until release() so tests can act in the claim window. */
+function gateClaim(store) {
+  const orig = store.claim.bind(store);
+  let release;
+  const held = new Promise((r) => { release = r; });
+  let startedResolve;
+  const started = new Promise((r) => { startedResolve = r; });
+  let claimInFlight = false;
+  store.claim = async (id, startedAt) => {
+    claimInFlight = true;
+    startedResolve();
+    try {
+      await held;
+      return orig(id, startedAt);
+    } finally {
+      claimInFlight = false;
+    }
+  };
+  return { started, release: () => release(), isClaimInFlight: () => claimInFlight };
+}
+
+async function waitUntil(fn, { timeoutMs = 200, intervalMs = 2 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await fn()) return;
+    await sleep(intervalMs);
+  }
+  throw new Error('waitUntil timed out');
+}
+
+async function finishPending(runner) {
+  for (const [id, p] of [...runner.pending]) {
+    runner.pending.delete(id);
+    p.resolve({ status: 'completed', result: 'ok', history: [], budget: null });
+  }
+  await sleep(10);
+}
+
 test('submit returns queued job with position and processes FIFO', async () => {
   const { jobs, runner } = await setup();
   try {
@@ -226,4 +264,179 @@ test('stop drains then aborts; queued jobs stay queued; submit after stop reject
   assert.equal((await store.get(a.jobId)).error.code, 'interrupted');
   assert.equal((await store.get(b.jobId)).status, 'queued');
   await assert.rejects(() => jobs.submit({ goal: 'c' }), JobsClosedError);
+});
+
+test('concurrency:1 processes N prequeued jobs one at a time and only one waiter after the head finishes', async () => {
+  const store = createMemoryStore();
+  await store.open();
+  await store.insert(createRecord({ goal: 'a' }, { id: 'job-a' }));
+  await store.insert(createRecord({ goal: 'b' }, { id: 'job-b' }));
+  await store.insert(createRecord({ goal: 'c' }, { id: 'job-c' }));
+  const runner = makeRunner();
+  const jobs = createInProcessJobs({
+    store, runJob: runner.runJob, notifier: null,
+    config: { ...BASE, concurrency: 1, capacity: 1, drainMs: 50 },
+    logger: { warn() {}, info() {} },
+  });
+  await jobs.start();
+  try {
+    await runner.waitFor('job-a');
+    await sleep(15);
+    assert.equal(jobs.stats().processing, 1);
+    assert.equal(runner.pending.size, 1);
+    assert.equal((await jobs.get('job-b')).status, 'queued');
+    assert.equal((await jobs.get('job-c')).status, 'queued');
+
+    await runner.finish('job-a');
+    await runner.waitFor('job-b');
+    await sleep(15);
+    assert.equal(jobs.stats().processing, 1);
+    assert.equal(runner.pending.size, 1);
+    assert.equal((await jobs.get('job-c')).status, 'queued');
+
+    await runner.finish('job-b');
+    await runner.waitFor('job-c');
+    await runner.finish('job-c');
+  } finally {
+    await finishPending(runner);
+    await jobs.stop();
+  }
+});
+
+test('concurrency:1 never lets processing exceed 1 under Promise.all submits', async () => {
+  const runner = makeRunner();
+  let live = 0;
+  let peak = 0;
+  const runJob = (task, opts) => {
+    live += 1;
+    peak = Math.max(peak, live);
+    return runner.runJob(task, opts).finally(() => { live -= 1; });
+  };
+  const store = createMemoryStore();
+  const jobs = createInProcessJobs({
+    store, runJob, notifier: null,
+    config: { ...BASE, concurrency: 1, capacity: 1, maxQueueSize: 10, drainMs: 50 },
+    logger: { warn() {}, info() {} },
+  });
+  await jobs.start();
+  const samples = [];
+  const poll = setInterval(() => samples.push(jobs.stats().processing), 1);
+  try {
+    const submitted = await Promise.all([
+      jobs.submit({ goal: 'a' }),
+      jobs.submit({ goal: 'b' }),
+      jobs.submit({ goal: 'c' }),
+    ]);
+    await runner.waitFor(submitted[0].jobId);
+    await sleep(20);
+    samples.push(jobs.stats().processing);
+    assert.ok(samples.every((n) => n <= 1), `processing exceeded 1: ${samples.join(',')}`);
+    assert.ok(peak <= 1, `runJob overlap peak ${peak}`);
+    assert.equal(jobs.stats().processing, 1);
+    assert.equal(runner.pending.size, 1);
+
+    await runner.finish(submitted[0].jobId);
+    await runner.waitFor(submitted[1].jobId);
+    await sleep(15);
+    assert.equal(jobs.stats().processing, 1);
+    assert.equal(runner.pending.size, 1);
+    assert.equal((await jobs.get(submitted[2].jobId)).status, 'queued');
+
+    await runner.finish(submitted[1].jobId);
+    await runner.waitFor(submitted[2].jobId);
+    await runner.finish(submitted[2].jobId);
+  } finally {
+    clearInterval(poll);
+    await finishPending(runner);
+    await jobs.stop();
+  }
+});
+
+test('Promise.all submits at maxQueueSize:1 reject extras with JobQueueFullError', async () => {
+  const { jobs, runner } = await setup({ maxQueueSize: 1, concurrency: 1, capacity: 1, drainMs: 50 });
+  try {
+    const results = await Promise.allSettled([
+      jobs.submit({ goal: 'a' }),
+      jobs.submit({ goal: 'b' }),
+      jobs.submit({ goal: 'c' }),
+    ]);
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    assert.equal(fulfilled.length, 1);
+    assert.equal(rejected.length, 2);
+    for (const r of rejected) assert.ok(r.reason instanceof JobQueueFullError);
+    await runner.waitFor(fulfilled[0].value.jobId);
+    assert.ok(jobs.stats().queued <= 1);
+    assert.equal(jobs.stats().processing, 1);
+    await runner.finish(fulfilled[0].value.jobId);
+  } finally {
+    await finishPending(runner);
+    await jobs.stop();
+  }
+});
+
+test('cancel during claim window aborts the reserved processing job', async () => {
+  const store = createMemoryStore();
+  const gate = gateClaim(store);
+  const runner = makeRunner();
+  const jobs = createInProcessJobs({
+    store, runJob: runner.runJob, notifier: null,
+    config: { ...BASE, concurrency: 1, capacity: 1, drainMs: 50 },
+    logger: { warn() {}, info() {} },
+  });
+  await jobs.start();
+  try {
+    const { jobId } = await jobs.submit({ goal: 'a' });
+    await gate.started;
+    assert.equal(jobs.stats().processing, 1);
+    const c = await jobs.cancel(jobId);
+    assert.equal(c.ok, true);
+    assert.equal(c.status, 'cancelling');
+    gate.release();
+    await waitUntil(async () => (await jobs.get(jobId)).status === 'cancelled');
+    assert.equal((await jobs.get(jobId)).status, 'cancelled');
+    assert.equal(runner.pending.size, 0);
+  } finally {
+    gate.release();
+    await finishPending(runner);
+    await jobs.stop();
+  }
+});
+
+test('stop during claim window aborts reserved jobs and does not close the store under in-flight runOne', async () => {
+  const store = createMemoryStore();
+  const gate = gateClaim(store);
+  const origClose = store.close.bind(store);
+  let closedWhileClaiming = false;
+  store.close = async () => {
+    if (gate.isClaimInFlight()) closedWhileClaiming = true;
+    return origClose();
+  };
+  const runner = makeRunner();
+  const jobs = createInProcessJobs({
+    store, runJob: runner.runJob, notifier: null,
+    config: { ...BASE, concurrency: 1, capacity: 1, drainMs: 20 },
+    logger: { warn() {}, info() {} },
+  });
+  await jobs.start();
+  try {
+    const { jobId } = await jobs.submit({ goal: 'a' });
+    await gate.started;
+    const stopP = jobs.stop({ drainMs: 20 });
+    await sleep(30);
+    gate.release();
+    await stopP;
+    await waitUntil(async () => {
+      const rec = await store.get(jobId);
+      return rec.status === 'failed' || rec.status === 'cancelled';
+    });
+    const r = await store.get(jobId);
+    assert.equal(closedWhileClaiming, false);
+    assert.equal(r.status, 'failed');
+    assert.equal(r.error.code, 'interrupted');
+    assert.equal(runner.pending.size, 0);
+  } finally {
+    gate.release();
+    await finishPending(runner);
+  }
 });
