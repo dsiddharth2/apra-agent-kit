@@ -223,3 +223,67 @@ test('budgets without runLoop logs dependency warning', async () => {
     console.warn = origWarn;
   }
 });
+
+function captureWarnings(fn) {
+  const seen = [];
+  const orig = console.warn;
+  console.warn = (m) => seen.push(String(m));
+  return fn().finally(() => { console.warn = orig; }).then(r => ({ result: r, warnings: seen }));
+}
+
+test('accepts raw-http and azure-functions adapters', async () => {
+  for (const adapter of ['raw-http', 'azure-functions']) {
+    const dir = await tmpDir();
+    await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: '${adapter}' } };`);
+    assert.equal((await loadConfig(dir)).comm.adapter, adapter);
+  }
+});
+
+test('dispatch without runLoop is an error', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' },
+    modules: { dispatch: { enabled: true } } };`);
+  await assert.rejects(() => loadConfig(dir), /dispatch.*runLoop/);
+});
+
+test('durable backend requires the azure-functions adapter', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' },
+    modules: { runLoop: { enabled: true }, dispatch: { enabled: true, backend: 'durable' } } };`);
+  await assert.rejects(() => loadConfig(dir), /durable.*azure-functions/);
+});
+
+test('azure-functions with in-process backend warns; budgets timeout above maxActivityMs warns; allowHttp warns', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'azure-functions' },
+    modules: {
+      runLoop: { enabled: true },
+      budgets: { enabled: true, timeoutMs: 7200000 },
+      dispatch: { enabled: true, backend: 'in-process', durable: { maxActivityMs: 3600000 } },
+      notify: { webhook: { allowHttp: true } },
+    } };`);
+  const { result, warnings } = await captureWarnings(() => loadConfig(dir));
+  assert.equal(result.modules.dispatch.backend, 'in-process');
+  assert.ok(warnings.some(w => /in-process.*azure-functions|lost when the instance recycles/i.test(w)));
+  assert.ok(warnings.some(w => /timeoutMs.*maxActivityMs/i.test(w)));
+  assert.ok(warnings.some(w => /allowHttp/i.test(w)));
+});
+
+test('memory store kind warns outside tests', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' },
+    modules: { runLoop: { enabled: true }, dispatch: { enabled: true, store: { kind: 'memory' } } } };`);
+  const { warnings } = await captureWarnings(() => loadConfig(dir, { NODE_ENV: 'production' }));
+  assert.ok(warnings.some(w => /memory.*lost on restart/i.test(w)));
+});
+
+test('resolved dispatch and notify configs are exposed on the frozen config', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' },
+    modules: { runLoop: { enabled: true }, dispatch: { enabled: true, maxQueueSize: 3 }, notify: { sse: { heartbeatMs: 5 } } } };`);
+  const config = await loadConfig(dir, { JOBS_CONCURRENCY: '1' });
+  assert.equal(config.modules.dispatch.maxQueueSize, 3);
+  assert.equal(config.modules.dispatch.store.kind, 'sqlite');
+  assert.equal(config.modules.notify.sse.heartbeatMs, 5);
+  assert.equal(config.modules.notify.webhook.enabled, true);
+});
