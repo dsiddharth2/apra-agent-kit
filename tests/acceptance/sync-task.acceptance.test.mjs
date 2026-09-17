@@ -1,10 +1,10 @@
-// tests/host-phase2.live.test.mjs
-import './setup-fleet-modules.mjs';
+// tests/acceptance/sync-task.acceptance.test.mjs
+import '../setup-fleet-modules.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { request as httpRequest } from 'node:http';
 
-const { startHost } = await import('../host/index.mjs');
+const { startHost } = await import('../../host/index.mjs');
 
 function httpPost(port, path, body) {
   const payload = JSON.stringify(body);
@@ -32,7 +32,7 @@ test('POST /task executes a simple open-ended weather task', { timeout: 300000 }
   });
 
   try {
-    const res = await httpPost(host.port(), '/task', {
+    const res = await httpPost(host.port(), '/task?wait=true', {
       goal: 'What is the current weather in London?',
     });
     assert.equal(res.status, 200);
@@ -54,7 +54,7 @@ test('POST /task executes a plan-execute task with review', { timeout: 300000 },
   });
 
   try {
-    const res = await httpPost(host.port(), '/task', {
+    const res = await httpPost(host.port(), '/task?wait=true', {
       goal: 'What time is it in New York and what is the weather?',
     });
     assert.equal(res.status, 200);
