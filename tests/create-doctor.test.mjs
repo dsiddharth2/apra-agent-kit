@@ -1,7 +1,14 @@
 // tests/create-doctor.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NODE_MIN, runChecks, formatChecks } from '../create/doctor.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { NODE_MIN, runChecks, formatChecks, main } from '../create/doctor.mjs';
+
+const doctorFile = fileURLToPath(new URL('../create/doctor.mjs', import.meta.url));
 
 // A probe set where everything passes. Each test degrades one thing.
 function healthyProbes(overrides = {}) {
@@ -121,4 +128,35 @@ test('importing the doctor prints nothing — the run guard is entry-point only'
     console.log = realLog;
   }
   assert.deepEqual(logged, [], 'importing the module must not run the checks');
+});
+
+test('main prints checks and returns 0 or 1', async () => {
+  const lines = [];
+  const realLog = console.log;
+  console.log = (line) => lines.push(String(line));
+  try {
+    const code = await main(healthyProbes());
+    assert.equal(code, 0);
+  } finally {
+    console.log = realLog;
+  }
+  const output = lines.join('\n');
+  assert.match(output, /node\s+✓/);
+  assert.match(output, /All checks passed/);
+});
+
+test('invoking the doctor through a symlink still runs the checks', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'create-doctor-link-'));
+  const link = path.join(dir, 'doctor.mjs');
+  fs.symlinkSync(doctorFile, link);
+
+  const result = spawnSync(process.execPath, [link], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.ok(result.status === 0 || result.status === 1, `exit was ${result.status}`);
+  assert.match(output, /node\s+[✓✗]/, `symlink invocation was a silent skip:\n${output}`);
+  assert.ok(output.trim().length > 0, 'must print checks, not no-op');
 });

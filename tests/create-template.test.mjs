@@ -83,6 +83,8 @@ test('the template package.json carries the name placeholder and the four script
   for (const script of ['test', 'doctor', 'hello', 'mcp']) {
     assert.ok(pkg.scripts[script], `missing script: ${script}`);
   }
+  assert.equal(pkg.scripts.test, 'node --test tests/*.test.mjs');
+  assert.ok(!pkg.scripts.test.includes('env -u'), 'do not leak the kit NODE_TEST_CONTEXT workaround');
   assert.ok(!pkg.private, 'a user project should not be marked private by default');
 });
 

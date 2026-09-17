@@ -28,7 +28,9 @@ jobs:
             tests/create-prompt.test.mjs \
             tests/create-template.test.mjs \
             tests/create-cli.test.mjs \
-            tests/create-packaging.test.mjs
+            tests/create-packaging.test.mjs \
+            tests/ensure-apralabs-location.test.mjs \
+            tests/mcp-registry-helpers.test.mjs
       - name: Generate a project and run its suite
         run: node --test tests/create-e2e.test.mjs
 

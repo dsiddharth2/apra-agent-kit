@@ -22,6 +22,13 @@ function wrap(text, width = 66, indent = '    ') {
   return lines.join('\n');
 }
 
+export function installPromptTitle(missing) {
+  const names = ['apra-fleet', 'claude'].filter((id) => missing.includes(id));
+  if (names.length === 0) return '';
+  if (names.length === 1) return `${names[0]} is not installed.`;
+  return `${names.join(' and ')} are not installed.`;
+}
+
 export function formatPrompt({ title, why, question, defaultAnswer = true }) {
   const suffix = defaultAnswer ? '(Y/n)' : '(y/N)';
   return [`  ${title}`, wrap(why), `  ${question} ${suffix}`].join('\n');

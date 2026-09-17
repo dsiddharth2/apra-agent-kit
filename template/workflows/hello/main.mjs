@@ -1,8 +1,9 @@
 // The launcher owns spawning Fleet, leasing a worker pair, and cleanup. The
 // body in hello.js owns the work. That split is what keeps the body testable
 // with no binary and no token.
+import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { withStandaloneLease } from '../standalone.mjs';
 import { ensureApralabs } from '../../transport/ensure-apralabs.mjs';
 
@@ -26,9 +27,13 @@ export async function runHello({ fleetApi, workspace, signal, reportPhase, name 
 }
 
 function isMainModule() {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  return pathToFileURL(path.resolve(entry)).href === import.meta.url;
+  const invoked = process.argv[1];
+  if (!invoked) return false;
+  try {
+    return fs.realpathSync(invoked) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return path.resolve(invoked) === fileURLToPath(import.meta.url);
+  }
 }
 
 if (isMainModule()) {

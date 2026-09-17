@@ -175,9 +175,19 @@ export async function main(probes = createProbes()) {
   return 0;
 }
 
+function isMainModule() {
+  const invoked = process.argv[1];
+  if (!invoked) return false;
+  try {
+    return fs.realpathSync(invoked) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return path.resolve(invoked) === fileURLToPath(import.meta.url);
+  }
+}
+
 // This file is also copied into generated projects as scripts/doctor.mjs and
 // run directly by `npm run doctor`, so it must execute when it is the entry
 // point — and stay silent when the generator imports it.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule()) {
   process.exit(await main());
 }

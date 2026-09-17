@@ -1,7 +1,7 @@
 // tests/create-prompt.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatPrompt, confirm } from '../create/prompt.mjs';
+import { formatPrompt, confirm, installPromptTitle } from '../create/prompt.mjs';
 
 const FLEET_PROMPT = {
   title: 'apra-fleet is not installed.',
@@ -66,4 +66,11 @@ test('--yes skips the question but still prints the explanation', async () => {
 test('an unrecognised reply falls back to the default rather than looping', async () => {
   const answer = await confirm(FLEET_PROMPT, { ask: async () => 'maybe', write: () => {} });
   assert.equal(answer, true);
+});
+
+test('installPromptTitle names only what is missing', () => {
+  assert.equal(installPromptTitle(['claude']), 'claude is not installed.');
+  assert.equal(installPromptTitle(['apra-fleet']), 'apra-fleet is not installed.');
+  assert.match(installPromptTitle(['apra-fleet', 'claude']), /apra-fleet/);
+  assert.match(installPromptTitle(['apra-fleet', 'claude']), /claude/);
 });
