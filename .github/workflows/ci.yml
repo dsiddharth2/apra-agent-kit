@@ -11,6 +11,27 @@ permissions:
   pull-requests: write
 
 jobs:
+  create-command:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Generator unit tests
+        run: |
+          node --test \
+            tests/create-doctor.test.mjs \
+            tests/create-copy.test.mjs \
+            tests/create-substitute.test.mjs \
+            tests/create-prompt.test.mjs \
+            tests/create-template.test.mjs \
+            tests/create-cli.test.mjs \
+            tests/create-packaging.test.mjs
+      - name: Generate a project and run its suite
+        run: node --test tests/create-e2e.test.mjs
+
   # Fast job — no Fleet, no Docker. Runs pool/dispatcher/config unit tests.
   unit-tests:
     runs-on: ubuntu-latest
