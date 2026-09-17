@@ -7,7 +7,7 @@ const SUPPORTED_ADAPTERS = new Set(['express']);
 const KNOWN_MODULES = new Set([
   'runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch',
 ]);
-const IMPLEMENTED_MODULES = new Set([]); // Phase 1: none
+const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails']);
 
 export async function loadConfig(configDir, env = process.env) {
   const raw = await resolveConfig(configDir);
@@ -67,6 +67,12 @@ function validate(raw, env) {
           `[host/config] ${key} enabled but not implemented in this version — ignored`,
         );
       }
+    }
+
+    if (raw.modules?.budgets?.enabled && !raw.modules?.runLoop?.enabled) {
+      console.warn(
+        '[host/config] budgets enabled but runLoop disabled — budget enforcement will not run; disable budgets or enable runLoop',
+      );
     }
   }
 

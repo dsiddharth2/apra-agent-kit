@@ -37,9 +37,16 @@ on PATH.
 | `demo` | None | Runs the complete demo: fleet status, dummy python command, transform, and agent smoke test. Spends LLM tokens. Not read-only. |
 | `inspect-members` | `roles`, `includeFiles` | Reports on the worker pair the call is running on. Read-only, no LLM tokens. |
 | `city-briefing` | `city` | Fetches live weather and local time, composes a short city briefing using an agent, and analyzes the briefing text. Spends LLM tokens. |
-| `weather` | `city` | Fetches current weather for a city from Open-Meteo. Returns temperature, humidity, wind, UV index. Read-only, no LLM tokens. |
+| `weather` | `city` | Fetches current weather for a city from wttr.in. Returns temperature, humidity, wind, UV index. Read-only, no LLM tokens. |
 | `timezone` | `city` | Fetches current local time and timezone for a city via timeapi.io. Returns datetime, UTC offset, abbreviation. Read-only, no LLM tokens. |
 | `textstats` | `text` | Analyzes a text string: character count, word count, sentence count, unique words, average word length. Read-only, no LLM tokens. |
+| `currency` | `from`, `to`, `amount` | Converts between currencies using ECB rates via frankfurter.app. Defaults: USD → EUR, amount 1. Read-only, no LLM tokens. |
+| `country-info` | `country` | Fetches country information from Wikipedia + Nominatim. Accepts ISO codes (IN, JP) or full names (India, Japan). Read-only, no LLM tokens. |
+| `travel-advisory` | `country` | Fetches travel safety advisory by ISO alpha-2 code. Returns safety score and message. Read-only, no LLM tokens. |
+| `geocode` | `city`, `lat`, `lon` | Geocodes a city to lat/lon, or reverse-geocodes coordinates. Uses Nominatim. Rate limited to 1 req/sec. Read-only, no LLM tokens. |
+| `forecast` | `city`, `days` | Fetches multi-day weather forecast from Open-Meteo (1–16 days). Returns daily highs/lows, precipitation, weather codes. Read-only, no LLM tokens. |
+| `wikipedia-summary` | `topic` | Fetches a Wikipedia summary for any topic. Returns title, extract, description, thumbnail URL. Read-only, no LLM tokens. |
+| `public-holidays` | `country`, `year` | Fetches public holidays from Nager.Date by ISO alpha-2 code (~100 countries). Returns holiday names, dates, types. Read-only, no LLM tokens. |
 
 `inspect-members` accepts:
 

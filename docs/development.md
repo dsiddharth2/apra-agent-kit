@@ -70,9 +70,18 @@ If `apra-fleet` is not on PATH, set `APRA_FLEET_BIN` to the binary.
 | `python3 workflows/inspect-members/inspect.py --root <work-folder>` | no | no |
 | `node workflows/city-briefing/main.mjs [city]` | yes | yes |
 | `node tests/load-test.mjs --tool <name> --concurrency <n>` | no | no |
+| `npm run test:phase2` | no | no |
+| `npm run test:phase2:live` | yes | yes |
+| `node host/index.mjs` | yes | yes |
 | `python3 tools/weather/weather.py [city]` | no | no |
 | `python3 tools/timezone/timezone.py [city]` | no | no |
 | `python3 tools/textstats/textstats.py "text"` | no | no |
+| `python3 tools/currency/currency.py [from] [to] [amount]` | no | no |
+| `python3 tools/country-info/country_info.py [country]` | no | no |
+| `python3 tools/forecast/forecast.py [city] [days]` | no | no |
+| `python3 tools/geocode/geocode.py [city]` | no | no |
+| `python3 tools/wikipedia-summary/wikipedia_summary.py [topic]` | no | no |
+| `python3 tools/public-holidays/public_holidays.py [country] [year]` | no | no |
 
 A successful live workflow run prints `agent result: pong` and **returns to the shell**
 with exit 0. If it prints `pong` and hangs, the transport was not stopped — check the
@@ -88,6 +97,32 @@ claude mcp add --transport http fleet http://127.0.0.1:3000/mcp
 
 See [mcp-interface.md](mcp-interface.md) for timeout, hosting, and authentication
 configuration.
+
+### Host with autonomous run loop
+
+The host serves both `/mcp` and `/task`. Start it instead of the MCP-only server
+when you want autonomous agent execution:
+
+```bash
+node host/index.mjs
+```
+
+Then POST a task:
+
+```bash
+curl -X POST http://localhost:3000/task \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"Plan a trip to Tokyo","constraints":{"timeoutMs":300000}}'
+```
+
+The host reads `host.config.mjs` for strategy, budget, and guardrail settings.
+See [phase2-run-loop.md](phase2-run-loop.md) for the full `/task` API reference.
+
+In Docker:
+
+```bash
+docker compose run --rm -p 3000:3000 fleet node host/index.mjs
+```
 
 ## Testing
 

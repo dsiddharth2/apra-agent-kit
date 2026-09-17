@@ -1,7 +1,7 @@
 // host.config.mjs
 export default {
   name: 'workflow-kit',
-  description: 'Fleet Agent Kit — tool server',
+  description: 'Fleet Agent Kit — travel research agent',
 
   fleet: {},
 
@@ -9,5 +9,28 @@ export default {
     adapter: 'express',
   },
 
-  modules: {},
+  modules: {
+    runLoop: {
+      enabled: true,
+      strategy: 'plan-execute',
+      maxReplanAttempts: 3,
+      maxReviewAttempts: 2,
+      maxStepReviewAttempts: 2,
+      minReviewPolicy: 'irreversible',
+      maxNoActionTurns: 3,
+    },
+    budgets: {
+      enabled: true,
+      maxIterations: 25,
+      maxCostUsd: 5.00,
+      maxTokens: 500_000,
+      timeoutMs: 600_000,
+    },
+    guardrails: {
+      enabled: true,
+      defaultPolicy: 'allow',
+      validateInputs: true,
+      dryRunMode: false,
+    },
+  },
 };

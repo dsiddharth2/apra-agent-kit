@@ -51,6 +51,23 @@ async function makeDispatcher() {
   });
 }
 
+function httpPost(port, path, body) {
+  const payload = JSON.stringify(body);
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({
+      hostname: '127.0.0.1', port, path, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 test('startHost boots and serves tools via MCP', async () => {
   const fleetApi = makeMockFleetApi();
   const dispatcher = await makeDispatcher();
@@ -230,4 +247,139 @@ test('listen failure stops the adapter', async () => {
     /listen failed/,
   );
   assert.equal(stopped, true);
+});
+
+test('POST /task executes a task through the run loop', async () => {
+  const fleetApi = createMockFleetApi({
+    members: rosterNames(2),
+    promptResponses: [
+      '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
+      '```done\n{"result": "inspected", "summary": "ok"}\n```',
+    ],
+  });
+  const dispatcher = await makeDispatcher();
+  const { host, close } = await startHost({
+    fleetApi, dispatcher, port: 0,
+    runLoop: { enabled: true, strategy: 'open-ended' },
+  });
+
+  try {
+    const res = await httpPost(host.port(), '/task', { goal: 'Inspect members' });
+    assert.equal(res.status, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.status, 'completed');
+    assert.ok(body.result);
+  } finally {
+    await close();
+  }
+});
+
+test('POST /task returns 404 when run loop is disabled', async () => {
+  const fleetApi = createMockFleetApi({ members: rosterNames(2) });
+  const dispatcher = await makeDispatcher();
+  const { host, close } = await startHost({
+    fleetApi, dispatcher, port: 0,
+    runLoop: { enabled: false },
+  });
+
+  try {
+    const res = await httpPost(host.port(), '/task', { goal: 'test' });
+    assert.notEqual(res.status, 200);
+  } finally {
+    await close();
+  }
+});
+
+test('MCP callTool is denied when guardrails policy denies weather', async () => {
+  const fleetApi = makeMockFleetApi();
+  const dispatcher = await makeDispatcher();
+  const { host, close } = await startHost({
+    fleetApi,
+    dispatcher,
+    port: 0,
+    guardrails: { enabled: true, defaultPolicy: 'deny', policies: { weather: 'deny' } },
+  });
+
+  const url = new URL(`http://127.0.0.1:${host.port()}/mcp`);
+  const client = new Client({ name: 'test-client', version: '1.0.0' });
+  try {
+    await client.connect(new StreamableHTTPClientTransport(url));
+    const result = await client.callTool({ name: 'weather', arguments: { city: 'London' } });
+    const text = result.content?.map(p => p.text ?? '').join('\n') ?? '';
+    assert.ok(result.isError === true || text.includes('guardrail_denied'));
+  } finally {
+    try { await client.close(); } finally { await close(); }
+  }
+});
+
+test('POST /task merges caller constraints and returns budget_exceeded', async () => {
+  const fleetApi = createMockFleetApi({
+    members: rosterNames(2),
+    promptResponses: [
+      '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
+      '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
+      '```done\n{"result": "done", "summary": "ok"}\n```',
+    ],
+  });
+  const dispatcher = await makeDispatcher();
+  const { host, close } = await startHost({
+    fleetApi,
+    dispatcher,
+    port: 0,
+    runLoop: { enabled: true, strategy: 'open-ended' },
+    budgets: { enabled: true, maxIterations: 25 },
+  });
+
+  try {
+    const res = await httpPost(host.port(), '/task', {
+      goal: 'Inspect twice',
+      constraints: { maxIterations: 1 },
+    });
+    assert.equal(res.status, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.status, 'budget_exceeded');
+    assert.equal(body.budget.iterations, 1);
+  } finally {
+    await close();
+  }
+});
+
+test('registry tool run() shell-escapes user strings in commands', async () => {
+  const { defaultRegistry } = await import('../mcp/registry.mjs');
+  const countryInfo = defaultRegistry.find(t => t.name === 'country-info');
+  assert.ok(countryInfo);
+
+  const commands = [];
+  const fleetApi = {
+    executeCommand: async ({ command }) => {
+      commands.push(command);
+      return { structuredContent: { stdout: '{"ok":true}' } };
+    },
+  };
+
+  await countryInfo.run({
+    fleetApi,
+    args: { country: 'Japan";\nrm -rf /' },
+  });
+
+  assert.equal(commands.length, 1);
+  assert.match(commands[0], /Japan\\"; rm -rf \//);
+  assert.doesNotMatch(commands[0], /Japan";/);
+});
+
+test('builder .runLoop().budget().guardrails() builds and starts', async () => {
+  const fleetApi = createMockFleetApi({ members: rosterNames(2) });
+  const dispatcher = await makeDispatcher();
+  const agent = createHost({ fleetApi, dispatcher })
+    .runLoop({ strategy: 'open-ended' })
+    .budget({ maxIterations: 10 })
+    .guardrails({ defaultPolicy: 'allow' })
+    .build();
+
+  const { host, close } = await agent.start({ port: 0 });
+  try {
+    assert.ok(host.port() > 0);
+  } finally {
+    await close();
+  }
 });

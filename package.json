@@ -13,7 +13,9 @@
     "mcp": "node mcp/main.mjs",
     "host": "node host/index.mjs",
     "test:host": "node --test tests/host-config.test.mjs tests/host-registry.test.mjs tests/host-executor.test.mjs tests/comm-express.test.mjs tests/host-index.test.mjs",
-    "test:host:live": "node --test tests/host.live.test.mjs"
+    "test:host:live": "node --test tests/host.live.test.mjs",
+    "test:phase2": "node --test tests/host-response-parser.test.mjs tests/host-format-tools.test.mjs tests/host-budgets.test.mjs tests/host-guardrails.test.mjs tests/host-mock-fleet.test.mjs tests/host-prompts.test.mjs tests/host-strategy-open-ended.test.mjs tests/host-strategy-plan-execute.test.mjs tests/host-run-loop.test.mjs",
+    "test:phase2:live": "node --test tests/host-phase2.live.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

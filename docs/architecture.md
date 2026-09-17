@@ -65,33 +65,56 @@ the Claude process is spawned by Fleet, not by your Node process. Nearly every
 ## The layers
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  Your Node process                                          │
-│                                                             │
-│   mcp/             POST /mcp — MCP server front door         │
-│     │              one tool per registry entry               │
-│     │ entry.run({ fleetApi, args, signal, reportPhase })     │
-│     ▼                                                       │
-│   workflows/       runDemo() — spawn + execute               │
-│     │              inspect-members — read-only inspection    │
-│     ▼                                                       │
-│   transport/       spawnFleet() — StdioClientTransport       │
-│                    fleetApi wrapper over tools/call          │
-└─────┼───────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  Your Node process                                               │
+│                                                                  │
+│   host/              POST /task — autonomous agent endpoint       │
+│     │                POST /mcp  — MCP tool server                │
+│     │                GET /health                                 │
+│     │                                                            │
+│     ├─ run-loop       runTask() — drives a strategy to completion│
+│     │   ├─ strategies/  open-ended (ReAct) or plan-execute       │
+│     │   ├─ prompts/     10 prompt templates for LLM interaction  │
+│     │   └─ response-parser  fenced JSON block extraction         │
+│     │                                                            │
+│     ├─ budgets        iteration / token / cost / time caps       │
+│     ├─ guardrails     per-tool policies, sandbox, validation     │
+│     └─ tools/         registry + executor with timeout & retry   │
+│                                                                  │
+│   mcp/             tool catalog — registry entries for both      │
+│     │              /mcp (external LLM picks tools) and           │
+│     │              /task (internal LLM picks tools)              │
+│     ▼                                                            │
+│   workflows/       runDemo(), runInspectMembers(), etc.           │
+│     │                                                            │
+│   tools/           Python scripts — weather, forecast, currency, │
+│     │              country-info, geocode, wikipedia, holidays    │
+│     ▼                                                            │
+│   pool/            worker dispatch: pool → ephemeral → queue     │
+│     │              MemberManager, leases, cleanup                │
+│     ▼                                                            │
+│   transport/       spawnFleet() — StdioClientTransport            │
+│                    fleetApi wrapper over tools/call               │
+└─────┼────────────────────────────────────────────────────────────┘
       │ MCP JSON-RPC over stdin/stdout
       ▼
-┌─────────────────────────────────────────────────────────────┐
-│  apra-fleet child     `run --transport stdio`               │
-│                                                             │
-│   pool WORKER-i + ephemeral EPHEMERAL-id pairs              │
-│   doer + reviewer folders       registered by MemberManager │
-│   Claude Code + OAuth                                       │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  apra-fleet child     `run --transport stdio`                    │
+│                                                                  │
+│   pool WORKER-i + ephemeral EPHEMERAL-id pairs                   │
+│   doer + reviewer folders       registered by MemberManager      │
+│   Claude Code + OAuth                                            │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-The dependency arrow points one way only: `mcp/` imports from `workflows/`, and nothing
-under `workflows/` imports from `mcp/`. The transport module is the downstream Fleet
-client. The workflow layer stands alone; MCP is a stateless front door over it.
+There are two front doors. **`/mcp`** is for external AI agents: they see the tool catalog
+and drive their own logic. **`/task`** is for humans and apps: they send a goal and the
+host's own LLM plans and executes autonomously. Both share the same tool registry, worker
+pool, and guardrails — the difference is who decides what to call.
+
+The dependency arrow points one way only: `host/` imports from `mcp/` (for the registry)
+and `pool/` (for dispatch). `mcp/` imports from `workflows/`. Nothing under `workflows/`
+imports upward. The transport module is the downstream Fleet client.
 
 ## Module map
 
@@ -192,6 +215,72 @@ exposed directly as MCP tools in `mcp/registry.mjs`.
 
 Full MCP interface reference lives in [mcp-interface.md](mcp-interface.md).
 
+### `host/`
+
+The autonomous agent host. Wires the run loop, strategies, budgets, and guardrails into
+a single HTTP server that serves both `/mcp` and `/task`.
+
+| File | Responsibility |
+|---|---|
+| `index.mjs` | `startHost()` and `createHost()` builder. Boots Fleet, dispatcher, loads config, mounts `/mcp`, `/task`, `/health` routes. |
+| `config.mjs` | Loads `host.config.mjs`, validates Phase 2 module sections (`runLoop`, `budgets`, `guardrails`). |
+| `run-loop.mjs` | `runTask()` — selects strategy, iterates events, checks budgets on each LLM call, returns `{ status, result, history, budget }`. |
+| `budgets.mjs` | `createBudgets()` — tracks iterations, tokens, cost, elapsed time. `check()` returns which cap was hit with `limit` and `actual` values. |
+| `guardrails.mjs` | `createGuardrails()` — per-tool policy gate (`allow`/`deny`/`approve`), input validation against Zod schemas, filesystem sandbox, dry-run mode. Two entry points: `gate()` (check only) and `execute()` (check + run). |
+| `response-parser.mjs` | Extracts the first fenced JSON block (`` ```tool_call ``, `` ```plan ``, `` ```done ``, `` ```review ``, `` ```step_review ``) from an LLM response. Returns a typed object or `thinking`/`error`. |
+| `tools/registry.mjs` | `extendRegistry()` — wraps the MCP registry with Phase 2 metadata: `reversible`, `timeout`, `retryable`, `tags`. |
+| `tools/executor.mjs` | `executeTool()` — runs a tool's `run()` with timeout, signal, input validation, and error-as-value handling. |
+
+#### `host/strategies/`
+
+| File | Responsibility |
+|---|---|
+| `open-ended.mjs` | ReAct loop: the doer LLM sees the task + tools + observation history, picks a tool or finishes. `maxNoActionTurns` stops thinking-only loops. |
+| `plan-execute.mjs` | Multi-phase: doer plans → reviewer approves/rejects → steps execute one at a time → step-level review for irreversible tools → replan on failure. Supports dynamic arg resolution and reason steps. |
+
+Both strategies are async generators that yield events (`prompt_usage`, `observation`,
+`done`, `error`). The run loop consumes them uniformly.
+
+#### `host/prompts/`
+
+Ten prompt builders. Each returns a string sent to the doer or reviewer via
+`fleetApi.executePrompt()`.
+
+| File | Used by | Purpose |
+|---|---|---|
+| `system.mjs` | Both | Agent identity, response format rules, fenced-block grammar |
+| `act.mjs` | Open-ended | Task + tools + history → pick a tool or finish |
+| `plan.mjs` | Plan-execute | Task + tools → create an ordered plan |
+| `review.mjs` | Plan-execute | Proposed plan → approve or reject with feedback |
+| `execute.mjs` | Plan-execute | Completed step → continue or finish |
+| `step-review.mjs` | Plan-execute | Step result → approve or reject |
+| `resolve-args.mjs` | Plan-execute | Empty/partial args + history → concrete args |
+| `reason.mjs` | Plan-execute | Reasoning step → analysis text |
+| `replan.mjs` | Plan-execute | Failed plan + feedback → revised plan |
+| `format-tools.mjs` | Both | Tool registry → text catalog with names, params, reversibility |
+
+The LLM communicates decisions through fenced JSON blocks: `` ```tool_call ``,
+`` ```plan ``, `` ```done ``, `` ```review ``, `` ```step_review ``. The response parser
+extracts the first block; text before it is captured as reasoning.
+
+### `tools/`
+
+Python scripts called via `fleetApi.executeCommand()` on the doer member. All use only
+stdlib (`urllib.request`, `json`, `sys`) plus optional `certifi` for SSL.
+
+| File | Responsibility |
+|---|---|
+| `weather/weather.py` | Current weather from wttr.in. Returns temperature, humidity, wind, UV index. |
+| `forecast/forecast.py` | Multi-day forecast from Open-Meteo (1–16 days). Returns daily highs/lows, precipitation, weather codes. |
+| `timezone/timezone.py` | Local time from timeapi.io. Returns datetime, UTC offset, abbreviation. |
+| `textstats/textstats.py` | Text analysis: character, word, sentence counts, unique words, average word length. |
+| `currency/currency.py` | Live exchange rates from the European Central Bank via frankfurter.app. |
+| `country-info/country_info.py` | Country info from Wikipedia + Nominatim. Accepts ISO codes (IN, JP) or full names. |
+| `travel-advisory/travel_advisory.py` | Travel safety advisories by country code. SSL fallback for Docker environments. |
+| `geocode/geocode.py` | City → lat/lon or reverse, via OpenStreetMap Nominatim. |
+| `wikipedia-summary/wikipedia_summary.py` | Wikipedia summary extract for any topic. |
+| `public-holidays/public_holidays.py` | Public holidays by country/year from Nager.Date (~100 countries). |
+
 ## Data flow
 
 ### A workflow run
@@ -220,6 +309,7 @@ Claude Code chooses a tool from tools/list
        ├─ authenticate
        ├─ create a fresh MCP server + HTTP transport
        ├─ validate args with the entry's inputSchema, when present
+       ├─ guardrails.execute() if guardrails are enabled
        ├─ entry.run({ fleetApi, args, signal, reportPhase })
        │    ├─ phase()/log() output             → server terminal
        │    └─ reportPhase(), if progressToken  → heartbeat to Claude
@@ -231,6 +321,59 @@ Each tool call has one request and one final response. Progress notifications ar
 heartbeats only: workflow terminal output is not streamed into the model's context.
 The MCP layer keeps no session state between calls. The downstream Fleet child is
 spawned once when the MCP server starts, and killed when the MCP server closes.
+
+### An autonomous task (POST /task)
+
+```text
+POST /task { goal: "Plan a trip to Jaipur", constraints: { timeoutMs: 300000 } }
+  ├─ mergeBudgetConfig()              server defaults ∩ request (stricter wins)
+  ├─ dispatcher.dispatch()            acquire lease → WORKER-1-DOER + REVIEWER
+  └─ runTask(task, { strategy, tools, budgets, guardrails })
+       │
+       │  ┌─ PLAN ─────────────────────────────────────────────┐
+       │  │ Doer LLM: "Here is my plan: 9 tool steps + 1      │
+       │  │            reason step"                             │
+       │  │ → parseResponse() extracts ```plan block            │
+       │  └────────────────────────────────────────────────────┘
+       │           │ yield prompt_usage → budgets.check()
+       │           ▼
+       │  ┌─ REVIEW ───────────────────────────────────────────┐
+       │  │ Reviewer LLM: "Approved" or "Rejected: add X"     │
+       │  │ If rejected → Doer replans (up to maxReplanAttempts)│
+       │  └────────────────────────────────────────────────────┘
+       │           │ yield prompt_usage → budgets.check()
+       │           ▼
+       │  ┌─ EXECUTE ──────────────────────────────────────────┐
+       │  │ For each step in the approved plan:                │
+       │  │                                                    │
+       │  │ tool step:                                         │
+       │  │   ├─ resolve args if empty (Doer LLM fills them)  │
+       │  │   ├─ guardrails.execute(tool, args)                │
+       │  │   ├─ tool.run() via executeCommand on doer member  │
+       │  │   ├─ retry if tool is retryable, else replan       │
+       │  │   └─ step review if irreversible (Reviewer LLM)    │
+       │  │                                                    │
+       │  │ reason step:                                       │
+       │  │   └─ Doer LLM analyzes/synthesizes from history    │
+       │  └────────────────────────────────────────────────────┘
+       │           │ observations accumulate
+       │           ▼
+       │  ┌─ DONE ─────────────────────────────────────────────┐
+       │  │ Doer LLM: ```done { result, summary }              │
+       │  └────────────────────────────────────────────────────┘
+       │
+       └─ return { status, result, history, budget }
+            └─ lease.release()
+```
+
+The code is pure orchestration — it structures LLM conversations and routes responses
+into actions. The doer proposes and executes; the reviewer challenges. Both are
+`executePrompt` calls with different prompt framing. The code never decides *what* to
+do — it decides *when to ask whom* and *what to do with the answer*.
+
+Budget checks happen after every LLM call (`prompt_usage` event), not after tool calls.
+A task with 4 LLM calls and 9 tool calls counts as 4 iterations. When a budget is
+exceeded, the response includes `budgetReason`, `limit`, and `actual` for diagnostics.
 
 ## Design decisions worth knowing
 
@@ -267,10 +410,35 @@ admin rights; POSIX ignores the argument.
 spawn when one isn't supplied. This is what makes the mock tests possible — they run
 with no Fleet binary, no members, and no token.
 
-**There is no internal router.** The model connected over MCP already sees the tool
-names, descriptions, and schemas and decides which one to call. Adding another LLM
+**There is no internal router for MCP.** The model connected over MCP already sees the
+tool names, descriptions, and schemas and decides which one to call. Adding another LLM
 classification call inside this process would duplicate that routing, add latency, and
 spend tokens unnecessarily. Tool descriptions are therefore part of the interface.
+
+**`/mcp` and `/task` are separate interfaces, not nested.** Exposing the run loop as an
+MCP tool would create agent-inside-agent: an external LLM calling a tool that runs
+another LLM loop. That means double token spend, the outer agent losing visibility, and
+two brains fighting over strategy. `/mcp` is for external agents that bring their own
+brain; `/task` is for callers that want this server's brain. Keep them separate.
+
+**Strategy selection is static.** The run loop does not inspect the task and decide
+between open-ended and plan-execute. The strategy is set in `host.config.mjs` and
+every task uses it. Dynamic selection would require a classifier prompt (more tokens,
+more latency) for marginal benefit — the deployer knows their workload.
+
+**Guardrails are checked on both paths.** MCP tool calls and run-loop tool calls both
+go through `guardrails.execute()`. The guardrails module is created once at startup
+and passed to both the MCP handler and the strategy.
+
+**Budgets are per-request, not per-server.** Each `/task` request creates a fresh
+`createBudgets()` instance, merging server defaults with request overrides. The merge
+picks the stricter value (`Math.min`), so a request can only tighten, never loosen.
+
+**Iteration count tracks LLM calls, not tool calls.** Only `prompt_usage` events
+(from `executePrompt`) increment the iteration counter. Tool executions
+(`executeCommand`) are not counted. A plan-execute run with 9 tools and 4 LLM calls
+counts as 4 iterations. This prevents the iteration cap from penalizing tool-heavy
+but LLM-light plans.
 
 **Slow workflows use heartbeat plus client configuration.** The SDK does not implement
 MCP Tasks, so long-running calls remain one request/response. When the client supplies a
@@ -298,6 +466,8 @@ The downstream Fleet child lives for the MCP server process, not per HTTP reques
 
 ## Configuration
 
+### Environment variables
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `CLAUDE_CODE_OAUTH_TOKEN` | (none) | OAuth token passed into spawned Fleet processes and used by `provision_llm_auth`. |
@@ -313,6 +483,48 @@ The downstream Fleet child lives for the MCP server process, not per HTTP reques
 | `PORT` | `3000` | MCP server listen port. |
 | `MCP_BIND_HOST` | `127.0.0.1` | MCP server bind address. Compose sets `0.0.0.0`. |
 
+### Host config (`host.config.mjs`)
+
+The host is configured by `host.config.mjs` at the project root. Phase 2 modules
+are declared under `modules`:
+
+```js
+export default {
+  name: 'workflow-kit',
+  fleet: {},
+  comm: { adapter: 'express' },
+  modules: {
+    runLoop: {
+      enabled: true,
+      strategy: 'plan-execute',     // or 'open-ended'
+      maxReplanAttempts: 3,
+      maxReviewAttempts: 2,
+      maxStepReviewAttempts: 2,
+      minReviewPolicy: 'irreversible',
+      maxNoActionTurns: 3,
+    },
+    budgets: {
+      enabled: true,
+      maxIterations: 25,
+      maxCostUsd: 5.00,
+      maxTokens: 500_000,
+      timeoutMs: 600_000,            // 10 minutes
+    },
+    guardrails: {
+      enabled: true,
+      defaultPolicy: 'allow',
+      policies: {},                  // per-tool overrides: { 'tool-name': 'deny' }
+      validateInputs: true,
+      sandboxFs: false,
+      dryRunMode: false,
+    },
+  },
+};
+```
+
+When `runLoop` is enabled, the host mounts `POST /task`. When disabled, `/task` returns
+404 and only `/mcp` + `/health` are served.
+
 ## Extension points
 
 | You want to | Do this |
@@ -324,9 +536,17 @@ The downstream Fleet child lives for the MCP server process, not per HTTP reques
 | A new MCP tool | Append its entry to `mcp/registry.mjs` — no server or HTTP changes |
 | A new Python tool | Add a script to `tools/`, expose it in `mcp/registry.mjs` with a `run` that calls `fleetApi.executeCommand()` |
 | Real authentication | Pass middleware to `createMcpHttpApp({ authenticate })` |
+| Switch agent strategy | Set `modules.runLoop.strategy` in `host.config.mjs` |
+| Limit token spend per request | Set `modules.budgets.maxCostUsd` or pass `budget.maxCostUsd` in the `/task` request |
+| Block a tool | Add `'tool-name': 'deny'` to `modules.guardrails.policies` |
+| Require approval for a tool | Add `'tool-name': 'approve'` and provide an `approvalCallback` |
+| Test without spending tokens | Set `modules.guardrails.dryRunMode: true` — all tools are blocked |
+| Build the host programmatically | Use `createHost().runLoop().budget().guardrails().build()` |
 
 Two things to avoid: do not pass OAuth tokens into `agent()` payloads (they belong in
 Fleet's credential store / the child env), and do not clone `apra-fleet` into this repo
 — the symlink resolution exists precisely so you don't have to.
 
 The stdio design is specified in [specs/stdio-transport-spec.md](specs/stdio-transport-spec.md).
+The run loop, strategies, budgets, guardrails, and the `/task` API are detailed in
+[phase2-run-loop.md](phase2-run-loop.md).

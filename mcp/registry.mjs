@@ -10,6 +10,10 @@ const toolsDir = path.resolve(
   '../tools',
 );
 
+function shellEscape(value) {
+  return value.replace(/"/g, '\\"').replace(/\n/g, ' ');
+}
+
 function parseToolOutput(raw) {
   let text;
   if (typeof raw === 'string') {
@@ -158,6 +162,153 @@ export const defaultRegistry = [
       const raw = await fleetApi.executeCommand({
         member_name: 'doer',
         command: `python3 "${script}" "${escaped}"`,
+      });
+      return parseToolOutput(raw);
+    },
+  },
+  {
+    name: 'currency',
+    description:
+      'Converts between currencies using live exchange rates from the European Central Bank. ' +
+      'Returns the rate and converted amount. Read-only, no LLM tokens.',
+    inputSchema: z.object({
+      from: z.string().optional().describe('Source currency code (e.g. USD). Defaults to USD.'),
+      to: z.string().optional().describe('Target currency code (e.g. EUR). Defaults to EUR.'),
+      amount: z.number().optional().describe('Amount to convert. Defaults to 1.'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    async run({ fleetApi, args }) {
+      const from = shellEscape(args.from || 'USD');
+      const to = shellEscape(args.to || 'EUR');
+      const amount = args.amount ?? 1;
+      const script = path.join(toolsDir, 'currency', 'currency.py');
+      const raw = await fleetApi.executeCommand({
+        member_name: 'doer',
+        command: `python3 "${script}" "${from}" "${to}" ${amount}`,
+      });
+      return parseToolOutput(raw);
+    },
+  },
+  {
+    name: 'country-info',
+    description:
+      'Fetches country information from Wikipedia: name, description, and summary extract. ' +
+      'Accepts full country names (e.g. Japan) or ISO alpha-2/3 codes (e.g. JP, IND). ' +
+      'Read-only, no LLM tokens.',
+    inputSchema: z.object({
+      country: z.string().describe('Country name (e.g. Japan, France).'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    async run({ fleetApi, args }) {
+      const country = shellEscape(args.country);
+      const script = path.join(toolsDir, 'country-info', 'country_info.py');
+      const raw = await fleetApi.executeCommand({
+        member_name: 'doer',
+        command: `python3 "${script}" "${country}"`,
+      });
+      return parseToolOutput(raw);
+    },
+  },
+  {
+    name: 'travel-advisory',
+    description:
+      'Fetches travel safety advisories for a country by ISO country code. ' +
+      'Returns a safety score and advisory message. Read-only, no LLM tokens.',
+    inputSchema: z.object({
+      country: z.string().describe('ISO 3166-1 alpha-2 country code (e.g. JP, FR, US).'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    async run({ fleetApi, args }) {
+      const country = shellEscape(args.country);
+      const script = path.join(toolsDir, 'travel-advisory', 'travel_advisory.py');
+      const raw = await fleetApi.executeCommand({
+        member_name: 'doer',
+        command: `python3 "${script}" "${country}"`,
+      });
+      return parseToolOutput(raw);
+    },
+  },
+  {
+    name: 'geocode',
+    description:
+      'Geocodes a city name to lat/lon coordinates, or reverse-geocodes coordinates to a location name. ' +
+      'Uses OpenStreetMap Nominatim. Read-only, no LLM tokens. Rate limited to 1 request per second.',
+    inputSchema: z.object({
+      city: z.string().optional().describe('City name to geocode.'),
+      lat: z.number().optional().describe('Latitude for reverse geocoding.'),
+      lon: z.number().optional().describe('Longitude for reverse geocoding.'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    async run({ fleetApi, args }) {
+      const script = path.join(toolsDir, 'geocode', 'geocode.py');
+      let command;
+      if (typeof args.lat === 'number' && typeof args.lon === 'number') {
+        command = `python3 "${script}" ${args.lat} ${args.lon}`;
+      } else {
+        const city = shellEscape(args.city || 'London');
+        command = `python3 "${script}" "${city}"`;
+      }
+      const raw = await fleetApi.executeCommand({ member_name: 'doer', command });
+      return parseToolOutput(raw);
+    },
+  },
+  {
+    name: 'forecast',
+    description:
+      'Fetches a multi-day weather forecast for a city. Returns daily high/low temperatures, ' +
+      'precipitation, and weather codes. Read-only, no LLM tokens.',
+    inputSchema: z.object({
+      city: z.string().optional().describe('City name. Defaults to London.'),
+      days: z.number().optional().describe('Number of forecast days (1-16). Defaults to 7.'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    async run({ fleetApi, args }) {
+      const city = shellEscape(args.city || 'London');
+      const days = args.days ?? 7;
+      const script = path.join(toolsDir, 'forecast', 'forecast.py');
+      const raw = await fleetApi.executeCommand({
+        member_name: 'doer',
+        command: `python3 "${script}" "${city}" ${days}`,
+      });
+      return parseToolOutput(raw);
+    },
+  },
+  {
+    name: 'wikipedia-summary',
+    description:
+      'Fetches a Wikipedia summary extract for any topic — cities, landmarks, people, concepts. ' +
+      'Returns title, extract text, and description. Read-only, no LLM tokens.',
+    inputSchema: z.object({
+      topic: z.string().describe('The topic to look up (e.g. Tokyo, Eiffel Tower).'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    async run({ fleetApi, args }) {
+      const topic = shellEscape(args.topic);
+      const script = path.join(toolsDir, 'wikipedia-summary', 'wikipedia_summary.py');
+      const raw = await fleetApi.executeCommand({
+        member_name: 'doer',
+        command: `python3 "${script}" "${topic}"`,
+      });
+      return parseToolOutput(raw);
+    },
+  },
+  {
+    name: 'public-holidays',
+    description:
+      'Fetches public holidays for a country and year. Returns holiday names, dates, and types. ' +
+      'Read-only, no LLM tokens.',
+    inputSchema: z.object({
+      country: z.string().describe('ISO 3166-1 alpha-2 country code (e.g. JP, US, GB).'),
+      year: z.number().optional().describe('Year to check. Defaults to current year.'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    async run({ fleetApi, args }) {
+      const country = shellEscape(args.country);
+      const yr = args.year ?? new Date().getFullYear();
+      const script = path.join(toolsDir, 'public-holidays', 'public_holidays.py');
+      const raw = await fleetApi.executeCommand({
+        member_name: 'doer',
+        command: `python3 "${script}" "${country}" ${yr}`,
       });
       return parseToolOutput(raw);
     },

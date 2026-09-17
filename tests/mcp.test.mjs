@@ -215,7 +215,21 @@ test('advertises exactly the registry tools, with schemas and annotations', asyn
     const { tools } = await client.listTools();
     assert.deepEqual(
       tools.map((tool) => tool.name).sort(),
-      ['city-briefing', 'demo', 'inspect-members', 'textstats', 'timezone', 'weather'],
+      [
+        'city-briefing',
+        'country-info',
+        'currency',
+        'demo',
+        'forecast',
+        'geocode',
+        'inspect-members',
+        'public-holidays',
+        'textstats',
+        'timezone',
+        'travel-advisory',
+        'weather',
+        'wikipedia-summary',
+      ],
     );
 
     const inspect = tools.find((tool) => tool.name === 'inspect-members');
