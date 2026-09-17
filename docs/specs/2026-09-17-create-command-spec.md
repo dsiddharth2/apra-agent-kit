@@ -392,13 +392,45 @@ Generator tests need no Fleet binary, no members and no token, consistent with
 the existing suite. The doctor's environment probes are injected so tests never
 depend on what is installed on the machine running them.
 
-## Open questions
+## Verified
 
-1. **Does `npm create` pass flags through cleanly?** `npm create x a --no-install`
-   should forward `--no-install` to the bin, but npm has historically eaten some
-   flags. Verify before relying on `--no-install` in CI; `--` separator may be
-   required and, if so, must be documented.
+### Flag forwarding
 
-2. **Does the generated `Dockerfile` build without a lockfile?** Switching
-   `npm ci` to `npm install` is the stated fix, but the generated image has not
-   been built. Verify before publishing.
+The package is not published, so `npm create @dsiddharth2/fleet-agent` could not
+be exercised end-to-end here. Flag forwarding was verified from the packed
+tarball instead:
+
+```bash
+npm pack
+npm i -g --prefix ~/.local ./dsiddharth2-create-fleet-agent-0.1.0.tgz
+cd /tmp && create-fleet-agent flag-check --no-install --yes
+```
+
+Result: `/tmp/flag-check` was generated with no `node_modules` and no `.git`,
+confirming `--no-install` and `--yes` reach the bin without a `--` separator.
+The same flags work via `node bin/create.mjs <dir> --no-install --yes` from
+the repository root.
+
+A pre-release bug blocked the global bin: comparing `process.argv[1]` to
+`import.meta.url` with `path.resolve` fails when npm links the bin through a
+symlink (the script exited 0 without generating). Fixed in `bin/create.mjs` by
+comparing `fs.realpathSync` of both paths. Re-packed and re-ran the commands
+above; the global bin then behaved correctly.
+
+Once published, if npm consumes flags before the bin sees them, the separator
+form remains the fallback: `npm create @dsiddharth2/fleet-agent my-agent --
+--no-install`.
+
+### Generated Docker image
+
+```bash
+node bin/create.mjs /tmp/docker-check --no-install --yes
+cd /tmp/docker-check && docker build -t fleet-agent-docker-check .
+```
+
+Result: **not verified in this environment** — `docker` is not installed
+(`which docker` prints nothing; `docker build` exits 127 with
+`docker: command not found`). The generated tree and `template/Dockerfile`
+(use `npm install --omit=dev`, not `npm ci`) were produced successfully; the
+image build itself remains unconfirmed here. Re-run the commands above on a
+machine with Docker before publishing.

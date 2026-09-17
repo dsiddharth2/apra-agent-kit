@@ -18,6 +18,45 @@
   <a href="docs/roadmap.md"><strong>Roadmap</strong></a>
 </p>
 
+```bash
+npm create @dsiddharth2/fleet-agent my-agent
+cd my-agent
+```
+
+The command copies the kit, writes a starter workflow, and offers to install
+Fleet and the Claude CLI. It explains each step before it asks.
+
+Then set the token and start the server:
+
+**Bash / macOS / Linux:**
+```bash
+export CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
+docker compose up -d
+```
+
+**PowerShell (Windows):**
+```powershell
+$env:CLAUDE_CODE_OAUTH_TOKEN = "your-token"
+docker compose up -d
+```
+
+The MCP server listens on `http://localhost:3000/mcp`. Register it with Claude Code:
+
+```bash
+claude mcp add --transport http fleet http://127.0.0.1:3000/mcp
+```
+
+Run `npm run doctor` in your project at any time to see what is missing.
+
+### Working on the kit itself
+
+Clone this repository instead:
+
+```bash
+git clone https://github.com/dsiddharth2/workflow-kit.git
+cd workflow-kit && npm install
+```
+
 ---
 
 ## What is the Agent Kit?
