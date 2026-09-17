@@ -2,7 +2,7 @@
   <img src="docs/apra-agent-kit-banner.png" alt="apra-agent-kit" />
 </p>
 
-<h3 align="center">A modular toolkit for building autonomous AI agents on <a href="https://github.com/Apra-Labs/apra-fleet">Apra Fleet</a></h3>
+A workflow kit from [Apra Fleet](https://github.com/Apra-Labs/apra-fleet). Scaffold a project, write your workflows and tools, then `docker compose up` — Fleet install, member registration, dependency installation, and the MCP server are handled for you. Workflows spawn Fleet over stdio; you do not need `apra-fleet start`.
 
 <p align="center">
   <a href="https://github.com/dsiddharth2/apra-agent-kit/actions/workflows/ci.yml"><img src="https://github.com/dsiddharth2/apra-agent-kit/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
