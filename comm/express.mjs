@@ -1,5 +1,5 @@
-// comm/express.mjs
 import { createMcpExpressApp } from '@modelcontextprotocol/express';
+import { buildRequest, runHandler, writeNodeResponse, requestSignal } from './router.mjs';
 
 export function createExpressAdapter() {
   let server = null;
@@ -8,10 +8,36 @@ export function createExpressAdapter() {
     async start({ routes, port, host, authenticate }) {
       const app = createMcpExpressApp();
 
-      if (routes.health) app.get('/health', routes.health);
-      if (routes.mcp)    app.post('/mcp', authenticate, routes.mcp);
-      if (routes.task)   app.post('/task', authenticate, routes.task);
-      if (routes.jobs)   app.get('/jobs/:id', authenticate, routes.jobs);
+      for (const [name, route] of Object.entries(routes)) {
+        if (!route) continue;
+        // Transitional: Phase 2 passed bare Express handlers keyed by name. Keep
+        // them working until Task 9 switches host/index.mjs to RouteDefs.
+        if (typeof route === 'function') {
+          const legacy = { health: ['get', '/health', false], mcp: ['post', '/mcp', true], task: ['post', '/task', true], jobs: ['get', '/jobs/:id', true] }[name];
+          if (!legacy) continue;
+          const [m, p, needsAuth] = legacy;
+          if (needsAuth) app[m](p, (req, res, next) => { req.user = { id: 'anonymous' }; next(); }, route); else app[m](p, route);
+          continue;
+        }
+        const method = route.method.toLowerCase();
+        if (route.raw) {
+          app[method](route.path, async (req, res) => {
+            const request = buildRequest({ method: req.method, url: req.originalUrl, headers: req.headers, body: req.body ?? null, signal: requestSignal(req, res) });
+            const user = route.auth === false ? null : await authenticate(request);
+            if (route.auth !== false && !user) { res.status(401).json({ ok: false, error: 'unauthorized' }); return; }
+            req.user = user;
+            await route.handler(req, res, user);
+          });
+          continue;
+        }
+        app[method](route.path, async (req, res) => {
+          const request = buildRequest({ method: req.method, url: req.originalUrl, headers: req.headers, body: req.body ?? null, signal: requestSignal(req, res) });
+          request.params = { ...req.params };
+          const response = await runHandler(route, request, authenticate);
+          await writeNodeResponse(res, response);
+        });
+      }
+      app.use((req, res) => res.status(404).json({ ok: false, error: 'not_found' }));
 
       server = app.listen(port, host);
       await new Promise((resolve, reject) => {
@@ -21,17 +47,11 @@ export function createExpressAdapter() {
         server.once('error', onError);
       });
     },
-
-    port() {
-      return server?.address()?.port;
-    },
-
-    address() {
-      return server?.address();
-    },
-
+    port() { return server?.address()?.port; },
+    address() { return server?.address(); },
     async stop() {
       if (!server) return;
+      server.closeAllConnections?.();
       await new Promise(resolve => server.close(resolve));
       server = null;
     },
