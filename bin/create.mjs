@@ -15,7 +15,7 @@ import readline from 'node:readline/promises';
 import { copyTree, PUBLISHED_DIRS, RENAME_ON_WRITE } from '../create/copy.mjs';
 import { validateProjectName, substitute } from '../create/substitute.mjs';
 import { createProbes, runChecks, formatChecks } from '../create/doctor.mjs';
-import { confirm, installPromptTitle } from '../create/prompt.mjs';
+import { confirm, installPromptTitle, installPromptWhy } from '../create/prompt.mjs';
 
 const thisPackageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -123,11 +123,7 @@ export async function generate(options, io = { write: console.log }) {
       const accepted = await confirm(
         {
           title: installPromptTitle(missing),
-          why:
-            'Fleet is the runtime your workflows execute on. Without it, workflows ' +
-            'cannot resolve @apralabs/apra-fleet-workflow and will fail on first run. ' +
-            'It installs globally, outside this project, because Fleet is a machine ' +
-            'install, not a dependency.',
+          why: installPromptWhy(missing),
           question: 'Install now?',
           yes,
         },
