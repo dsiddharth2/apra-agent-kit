@@ -1,36 +1,9 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import * as z from 'zod/v4';
+import { toolsDir, shellEscape, parseToolOutput } from './registry-helpers.mjs';
 import { runDemo } from '../workflows/demo/main.mjs';
 import { runInspectMembers } from '../workflows/inspect-members/main.mjs';
 import { runCityBriefing } from '../workflows/city-briefing/main.mjs';
-
-const toolsDir = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../tools',
-);
-
-function shellEscape(value) {
-  return value.replace(/"/g, '\\"').replace(/\n/g, ' ');
-}
-
-function parseToolOutput(raw) {
-  let text;
-  if (typeof raw === 'string') {
-    text = raw;
-  } else if (raw?.structuredContent?.stdout) {
-    text = raw.structuredContent.stdout;
-  } else if (raw?.content?.[0]?.text) {
-    text = raw.content[0].text;
-  } else {
-    text = raw?.output ?? '';
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { ok: false, error: 'failed to parse tool output', raw: text };
-  }
-}
 
 // Routable workflows. To expose a new tool, append an entry here — no changes to
 // server.mjs or http.mjs are needed. `description` is read by the connected
