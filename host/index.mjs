@@ -6,7 +6,7 @@ import { authenticateRequest as defaultAuthenticate } from '../mcp/auth.mjs';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { createPooledFleetApi } from '../pool/pooled-fleet-api.mjs';
 import { loadConfig } from './config.mjs';
-import { extendRegistry } from './tools/registry.mjs';
+import { extendRegistry, withJobTools } from './tools/registry.mjs';
 import { executeTool } from './tools/executor.mjs';
 import { createExpressAdapter } from '../comm/express.mjs';
 import { createRawHttpAdapter } from '../comm/raw-http.mjs';
@@ -113,7 +113,8 @@ export async function startHost({
     }
   }
 
-  const toolRegistry = registry ?? extendRegistry();
+  const baseRegistry = registry ?? extendRegistry();
+  const toolRegistry = [...baseRegistry];   // job tools appended below once jobs exists
   const resolved = resolveModules(config, {
     runLoop: runLoopOption, budgets: budgetsOption, guardrails: guardrailsOption, dispatch: dispatchOption, notify: notifyOption,
   });
@@ -150,6 +151,7 @@ export async function startHost({
     });
     late.jobs = jobs;
     await jobs.start();
+    toolRegistry.push(...withJobTools([], jobs));
   }
 
   const mcpExecute = guardrailsMod

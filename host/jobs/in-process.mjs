@@ -97,6 +97,7 @@ export function createInProcessJobs({
 
       const task = { id: jobId, ...record.task };
       const run = Promise.resolve()
+        .then(() => new Promise((resolve) => setTimeout(resolve, 0)))
         .then(() => runJob(task, { signal: entry.controller.signal, onProgress }))
         .catch(err => ({ status: 'failed', result: { error: 'run_failed', message: String(err?.message ?? err) }, history: [], budget: null }));
 

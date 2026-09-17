@@ -510,3 +510,28 @@ test('raw-http adapter serves the same host', async () => {
   } finally { await close(); }
 });
 
+test('MCP submit-task and job-status work without taking a worker lease', async () => {
+  const dispatcher = await makeDispatcher();
+  let dispatches = 0;
+  const origDispatch = dispatcher.dispatch.bind(dispatcher);
+  dispatcher.dispatch = async (o) => { dispatches += 1; return origDispatch(o); };
+  const { host, close } = await asyncHost({ fleetApi: scripted(), dispatcher });
+  const client = new Client({ name: 't', version: '1.0.0' });
+  try {
+    await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${host.port()}/mcp`)));
+    const { tools } = await client.listTools();
+    assert.ok(tools.some(t => t.name === 'submit-task') && tools.some(t => t.name === 'job-status'));
+    const submitted = await client.callTool({ name: 'submit-task', arguments: { goal: 'Inspect members' } });
+    const { jobId } = JSON.parse(submitted.content[0].text);
+    assert.equal(dispatches, 0, 'submit-task must not take a lease');
+    let record;
+    for (let i = 0; i < 100; i++) {
+      record = JSON.parse((await client.callTool({ name: 'job-status', arguments: { jobId } })).content[0].text);
+      if (record.status === 'completed') break;
+      await sleep(10);
+    }
+    assert.equal(record.status, 'completed');
+    assert.equal(dispatches, 1, 'only the job itself takes a lease');
+  } finally { try { await client.close(); } finally { await close(); } }
+});
+
