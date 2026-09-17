@@ -18,3 +18,4 @@ host.config.local-functions.mjs
 __azurite_db_*
 __blobstorage__/
 logs/
+.token
