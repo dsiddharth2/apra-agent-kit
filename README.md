@@ -5,15 +5,19 @@ A workflow kit from [Apra Fleet](https://github.com/Apra-Labs/apra-fleet). Clone
 ## Quick start
 
 ```bash
-git clone https://github.com/dsiddharth2/workflow-kit.git
-cd workflow-kit
+npm create @dsiddharth2/fleet-agent my-agent
+cd my-agent
 ```
 
-Set the OAuth token and start the container in the background:
+The command copies the kit, writes a starter workflow, and offers to install
+Fleet and the Claude CLI. It explains each step before it asks.
+
+Then set the token and start the server:
 
 **Bash / macOS / Linux:**
 ```bash
-CLAUDE_CODE_OAUTH_TOKEN="your-token" docker compose up -d
+export CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
+docker compose up -d
 ```
 
 **PowerShell (Windows):**
@@ -22,13 +26,22 @@ $env:CLAUDE_CODE_OAUTH_TOKEN = "your-token"
 docker compose up -d
 ```
 
-That's it. The MCP server is now listening on `http://localhost:3000/mcp`. Register it with Claude Code:
+The MCP server listens on `http://localhost:3000/mcp`. Register it with Claude Code:
 
 ```bash
 claude mcp add --transport http fleet http://127.0.0.1:3000/mcp
 ```
 
-Claude can now call your workflows as MCP tools.
+Run `npm run doctor` in your project at any time to see what is missing.
+
+### Working on the kit itself
+
+Clone this repository instead:
+
+```bash
+git clone https://github.com/dsiddharth2/workflow-kit.git
+cd workflow-kit && npm install
+```
 
 ---
 

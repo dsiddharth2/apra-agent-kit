@@ -208,6 +208,16 @@ async function cli() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+function isMainModule() {
+  const invoked = process.argv[1];
+  if (!invoked) return false;
+  try {
+    return fs.realpathSync(invoked) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return path.resolve(invoked) === fileURLToPath(import.meta.url);
+  }
+}
+
+if (isMainModule()) {
   process.exit(await cli());
 }
