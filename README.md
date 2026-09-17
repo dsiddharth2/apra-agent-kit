@@ -90,7 +90,7 @@ The launcher owns spawn and cleanup. Copy the pattern from `workflows/demo/main.
 ```js
 // workflows/my-workflow/main.mjs
 import { withStandaloneLease } from '../standalone.mjs';
-import { ensureApralabs } from '../demo/ensure-apralabs.mjs';
+import { ensureApralabs } from '../../transport/ensure-apralabs.mjs';
 
 export async function runMyWorkflow({ fleetApi, workspace, signal, reportPhase } = {}) {
   ensureApralabs();
@@ -315,7 +315,6 @@ workflows/
     main.mjs            # launcher: spawnFleet, execute, stop()
     demo.js             # body: status, command, transform, agent
     dummy.py            # stand-in for real Python work
-    ensure-apralabs.mjs # symlinks @apralabs packages from Fleet install
   inspect-members/      # read-only member inspection workflow
     main.mjs, inspect-members.js, inspect.py
   city-briefing/        # multi-tool workflow: weather + timezone + agent briefing
@@ -326,6 +325,7 @@ tools/
   textstats/textstats.py # character, word, sentence counts
 transport/
   stdio-fleet.mjs       # spawn apra-fleet over stdio, wrap as fleetApi
+  ensure-apralabs.mjs   # symlinks @apralabs packages from Fleet install
 mcp/
   main.mjs              # MCP server launcher, configurable bind address
   server.mjs            # one MCP tool per registry entry

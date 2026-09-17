@@ -132,7 +132,7 @@ export async function startHost({
   let api = fleetApi;
   let stopFleet = null;
   if (!api) {
-    const { ensureApralabs } = await import('../workflows/demo/ensure-apralabs.mjs');
+    const { ensureApralabs } = await import('../transport/ensure-apralabs.mjs');
     ensureApralabs();
     const { spawnFleet } = await import('../transport/stdio-fleet.mjs');
     const fleet = await spawnFleet({ env });

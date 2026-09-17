@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createWorkerDispatcher } from '../pool/index.mjs';
-import { ensureApralabs } from '../workflows/demo/ensure-apralabs.mjs';
+import { ensureApralabs } from '../transport/ensure-apralabs.mjs';
 import { createMcpHttpApp } from './http.mjs';
 import { buildMcpServer } from './server.mjs';
 

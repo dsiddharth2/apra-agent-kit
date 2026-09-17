@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { withStandaloneLease } from '../standalone.mjs';
-import { ensureApralabs } from './ensure-apralabs.mjs';
+import { ensureApralabs } from '../../transport/ensure-apralabs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const engineScript = path.join(here, 'demo.js');
