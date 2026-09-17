@@ -34,42 +34,19 @@ on PATH.
 
 | Tool | Arguments | Behavior |
 |---|---|---|
-| `demo` | None | Runs the complete demo: fleet status, dummy python command, transform, and agent smoke test. Spends LLM tokens. Not read-only. |
-| `inspect-members` | `roles`, `includeFiles` | Reports on the worker pair the call is running on. Read-only, no LLM tokens. |
-| `city-briefing` | `city` | Fetches live weather and local time, composes a short city briefing using an agent, and analyzes the briefing text. Spends LLM tokens. |
-| `weather` | `city` | Fetches current weather for a city from wttr.in. Returns temperature, humidity, wind, UV index. Read-only, no LLM tokens. |
-| `timezone` | `city` | Fetches current local time and timezone for a city via timeapi.io. Returns datetime, UTC offset, abbreviation. Read-only, no LLM tokens. |
-| `textstats` | `text` | Analyzes a text string: character count, word count, sentence count, unique words, average word length. Read-only, no LLM tokens. |
-| `currency` | `from`, `to`, `amount` | Converts between currencies using ECB rates via frankfurter.app. Defaults: USD → EUR, amount 1. Read-only, no LLM tokens. |
-| `country-info` | `country` | Fetches country information from Wikipedia + Nominatim. Accepts ISO codes (IN, JP) or full names (India, Japan). Read-only, no LLM tokens. |
-| `travel-advisory` | `country` | Fetches travel safety advisory by ISO alpha-2 code. Returns safety score and message. Read-only, no LLM tokens. |
-| `geocode` | `city`, `lat`, `lon` | Geocodes a city to lat/lon, or reverse-geocodes coordinates. Uses Nominatim. Rate limited to 1 req/sec. Read-only, no LLM tokens. |
-| `forecast` | `city`, `days` | Fetches multi-day weather forecast from Open-Meteo (1–16 days). Returns daily highs/lows, precipitation, weather codes. Read-only, no LLM tokens. |
-| `wikipedia-summary` | `topic` | Fetches a Wikipedia summary for any topic. Returns title, extract, description, thumbnail URL. Read-only, no LLM tokens. |
-| `public-holidays` | `country`, `year` | Fetches public holidays from Nager.Date by ISO alpha-2 code (~100 countries). Returns holiday names, dates, types. Read-only, no LLM tokens. |
-
-`inspect-members` accepts:
-
-- `roles`: optional array of `'doer'` and `'reviewer'`. It defaults to both roles
-  on the leased pair this call is running on.
-- `includeFiles`: optional boolean. When true, include a capped top-level directory
-  listing for each member.
-
-`city-briefing` accepts:
-
-- `city`: optional string. City name to brief on. Defaults to `'London'`.
-
-`weather` accepts:
-
-- `city`: optional string. City name to look up. Defaults to `'London'`.
-
-`timezone` accepts:
-
-- `city`: optional string. City name to look up. Defaults to `'London'`.
-
-`textstats` accepts:
-
-- `text`: required string. The text to analyze.
+| `demo` | None | Runs the complete demo: fleet status, python command, transform, agent. Spends LLM tokens. |
+| `inspect-members` | `roles`, `includeFiles` | Reports on the worker pair. Read-only, no LLM tokens. |
+| `city-briefing` | `city` | Fetches weather and local time, composes a briefing with an agent. Spends LLM tokens. |
+| `weather` | `city` | Current weather from wttr.in. Read-only. |
+| `timezone` | `city` | Current local time and timezone via timeapi.io. Read-only. |
+| `textstats` | `text` | Text analysis: character, word, sentence counts. Read-only. |
+| `currency` | `from`, `to`, `amount` | Live exchange rates from the ECB via frankfurter.app. Read-only. |
+| `country-info` | `country` | Country info from Wikipedia + Nominatim. Accepts ISO codes or full names. Read-only. |
+| `travel-advisory` | `country` | Travel safety advisory by ISO alpha-2 code. Read-only. |
+| `geocode` | `city`, `lat`, `lon` | City → lat/lon or reverse, via Nominatim. Read-only. |
+| `forecast` | `city`, `days` | Multi-day forecast from Open-Meteo (1-16 days). Read-only. |
+| `wikipedia-summary` | `topic` | Wikipedia summary extract for any topic. Read-only. |
+| `public-holidays` | `country`, `year` | Public holidays from Nager.Date (~100 countries). Read-only. |
 
 ## Registry contract
 
@@ -98,8 +75,8 @@ model: it uses that text to decide when to choose the tool.
 ## Execution model
 
 A tool call is one request and one final response. Workflow `phase()` and `log()` output
-goes to the MCP server's terminal; Claude sees only heartbeat messages and the final
-tool result. A heartbeat is a progress notification produced by `reportPhase`.
+goes to the server's terminal; Claude sees only heartbeat messages and the final tool
+result. A heartbeat is a progress notification produced by `reportPhase`.
 
 The heartbeat only fires when the client requests progress by sending a progress token.
 It is not a substitute for configuring enough client time for a slow workflow.
@@ -108,9 +85,9 @@ It is not a substitute for configuring enough client time for a slow workflow.
 
 | Timer | Default | Notes |
 |---|---|---|
-| Wall clock per tool call | ~28 hours | `MCP_TOOL_TIMEOUT`, or per-server `timeout` in `.mcp.json`. Progress does not extend it. |
-| First response byte | 60 seconds | HTTP/SSE only. Rises only if `timeout` / `MCP_TOOL_TIMEOUT` is ≥60s. |
-| Idle | 5 minutes | Aborts a call sending neither a response nor progress. `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT`; `0` disables. |
+| Wall clock per tool call | ~28 hours | `MCP_TOOL_TIMEOUT`, or per-server `timeout` in `.mcp.json`. |
+| First response byte | 60 seconds | HTTP/SSE only. |
+| Idle | 5 minutes | Aborts a call sending neither a response nor progress. |
 
 The reliable fix for a slow workflow is `"timeout": 600000` in that server's
 `.mcp.json` entry:
@@ -130,7 +107,7 @@ The reliable fix for a slow workflow is `"timeout": 600000` in that server's
 ### Cancellation
 
 Cancellation is cooperative. Workflows check the supplied `signal` between phases, so
-cancellation stops the next phase rather than interrupting the phase currently running.
+cancellation stops the next phase rather than interrupting the one currently running.
 
 ## Authentication and hosting
 
@@ -138,17 +115,17 @@ The included authentication function is a pass-through development stub. Replace
 injecting middleware through `createMcpHttpApp({ authenticate })`; do not edit the
 workflow or registry to add HTTP authentication.
 
-The provided launcher binds to `127.0.0.1` by default. Set `MCP_BIND_HOST=0.0.0.0` for
-Docker or VM deployments (the docker-compose file does this automatically). A
-network-accessible deployment also needs bearer-token authentication: build the
-middleware with `requireBearerAuth` from `@modelcontextprotocol/express`, inject it as
-`authenticate`, and configure its token verifier. Do not expose the pass-through stub on
-a non-loopback interface.
+The launcher binds to `127.0.0.1` by default. Set `MCP_BIND_HOST=0.0.0.0` for Docker or
+VM deployments (the docker-compose file does this automatically). A network-accessible
+deployment also needs bearer-token authentication: build the middleware with
+`requireBearerAuth` from `@modelcontextprotocol/express`, inject it as `authenticate`,
+and configure its token verifier. Do not expose the pass-through stub on a non-loopback
+interface.
 
 Give the matching token to Claude Code when registering the remote endpoint:
 
 ```bash
-claude mcp add --transport http --header "Authorization: Bearer …" \
+claude mcp add --transport http --header "Authorization: Bearer ..." \
   fleet http://HOST:3000/mcp
 ```
 
@@ -156,15 +133,15 @@ Use TLS and a real secret manager for any network-accessible deployment.
 
 ## Output limits
 
-Claude Code warns when MCP output exceeds 10,000 tokens and truncates it at 25,000
-tokens. `MAX_MCP_OUTPUT_TOKENS` controls the truncation limit. Independently,
-`workflows/inspect-members/inspect.py` caps its directory listing at 50 entries.
+Claude Code warns when MCP output exceeds 10,000 tokens and truncates at 25,000
+tokens. `MAX_MCP_OUTPUT_TOKENS` controls the truncation limit. `inspect-members`
+caps its directory listing at 50 entries independently.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | `apra-fleet` spawn error | Install Fleet or set `APRA_FLEET_BIN`, then restart the MCP server. |
-| `OAuth session expired` | Re-export `CLAUDE_CODE_OAUTH_TOKEN` and restart so Node can re-attach OAuth to the pool. |
-| A tool is not chosen | Improve its `description` in `mcp/registry.mjs` so the model knows when to use it. |
-| A tool call times out | Set `"timeout"` in that server's `.mcp.json` entry; use `600000` for a ten-minute allowance. |
+| `OAuth session expired` | Re-export `CLAUDE_CODE_OAUTH_TOKEN` and restart. |
+| A tool is not chosen | Improve its `description` in `mcp/registry.mjs`. |
+| A tool call times out | Set `"timeout"` in that server's `.mcp.json` entry. |
