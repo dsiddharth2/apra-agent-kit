@@ -10,7 +10,7 @@ block `spawnFleet()`.
 
 ## Problem
 
-The workflow-kit connects to Fleet over MCP/HTTP, which requires a long-running
+The apra-agent-kit connects to Fleet over MCP/HTTP, which requires a long-running
 Fleet server started with `apra-fleet start`. This creates three problems:
 
 1. **Server dependency.** Every caller — the MCP server, a direct CLI run, the
@@ -123,7 +123,7 @@ mapping is maintained in one place inside the wrapper.
 ```
 spawnFleet({ memberName, workFolder, oauthToken }):
   1. spawn('apra-fleet', ['run', '--transport', 'stdio'], { env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: oauthToken } })
-  2. new Client({ name: 'workflow-kit', version: '1.0.0' })
+  2. new Client({ name: 'apra-agent-kit', version: '1.0.0' })
   3. client.connect(new StdioClientTransport({ command: <child> }))
   4. client.callTool('register_member', { friendly_name: memberName, work_folder: workFolder, member_type: 'local' })
   5. attach OAuth token via the appropriate auth tool call

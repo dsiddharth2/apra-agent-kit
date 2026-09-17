@@ -1,12 +1,12 @@
-# workflow-kit
+# apra-agent-kit
 
-A workflow kit from [Apra Fleet](https://github.com/Apra-Labs/apra-fleet). Clone it, write your workflows and tools, `docker compose up`. Everything else — Fleet install, member registration, dependency installation, MCP server — is handled for you. Workflows spawn Fleet over stdio; you do not need `apra-fleet start`.
+An agent kit from [Apra Fleet](https://github.com/Apra-Labs/apra-fleet). Clone it, write your workflows and tools, `docker compose up`. Everything else — Fleet install, member registration, dependency installation, MCP server — is handled for you. Workflows spawn Fleet over stdio; you do not need `apra-fleet start`.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/dsiddharth2/workflow-kit.git
-cd workflow-kit
+git clone https://github.com/dsiddharth2/apra-agent-kit.git
+cd apra-agent-kit
 ```
 
 Set the OAuth token and start the container in the background:
@@ -290,7 +290,7 @@ in Fleet's in-memory credential store.
 | `WORKER_POOL_ROOT` | `./workdir` | Base folder for pool worker dirs and locks |
 | `WORKER_POOL_ACQUIRE_TIMEOUT_MS` | `300000` | Timeout for pool-internal acquire |
 | `WORKER_EPHEMERAL_MAX` | `10` | Extra pairs created under `os.tmpdir()` when the pool is busy |
-| `WORKER_EPHEMERAL_ROOT` | `os.tmpdir()/workflow-kit` | Base folder for ephemeral worker dirs |
+| `WORKER_EPHEMERAL_ROOT` | `os.tmpdir()/apra-agent-kit` | Base folder for ephemeral worker dirs |
 | `WORKER_EPHEMERAL_TTL_MS` | `600000` | Force-teardown safety net for ephemeral workers |
 | `WORKER_DISPATCH_QUEUE_SIZE` | `20` | Calls waiting when both tiers are busy |
 | `WORKER_DISPATCH_QUEUE_TIMEOUT_MS` | `300000` | Timeout for queued dispatch waiters |

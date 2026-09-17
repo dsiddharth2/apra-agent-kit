@@ -74,7 +74,7 @@ Comm adapter (Express / Azure Functions / raw-http)
 ### New files
 
 ```
-workflow-kit/
+apra-agent-kit/
   host.config.mjs                ← host configuration
   host/
     index.mjs                    ← createHost() entry point, lifecycle orchestrator
@@ -506,7 +506,7 @@ Mirrors the structure of `ci.yml`:
 
 **Job 2: `host-integration-tests`**
 - Needs job 1
-- Docker build (`docker build -t workflow-kit-ci .`)
+- Docker build (`docker build -t apra-agent-kit-ci .`)
 - Run `test:host` + `test:host:live` inside Docker container
 - Same Docker image, same Fleet binary as `ci.yml`
 

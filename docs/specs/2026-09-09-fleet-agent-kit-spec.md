@@ -4,7 +4,7 @@ Status: proposed — foundation shipped, phases pending.
 
 ## What is already shipped
 
-The workflow-kit already implements the mandatory foundation that this spec builds on:
+The apra-agent-kit already implements the mandatory foundation that this spec builds on:
 
 ### Transport and MCP
 
@@ -44,7 +44,7 @@ The workflow-kit already implements the mandatory foundation that this spec buil
 
 ## Problem
 
-The workflow-kit runs workflows on Apra Fleet through an MCP server and stdio
+The apra-agent-kit runs workflows on Apra Fleet through an MCP server and stdio
 transport. A developer who wants to build an autonomous agent — one that takes
 a task and gets it over the finish line — must wire up a run loop, memory
 management, budget enforcement, guardrails, and evaluation harness from scratch
@@ -58,7 +58,7 @@ Docker container, or a bare Node process requires forking the codebase.
 
 ## Goal
 
-Evolve the workflow-kit into a **Fleet Agent Kit**: a modular, configurable
+Evolve the apra-agent-kit into a **Fleet Agent Kit**: a modular, configurable
 toolkit for building agents on Apra Fleet. A developer clones the kit, enables
 the modules they need, writes their tools and (optionally) their planning
 strategy, and ships an agent.
@@ -579,7 +579,7 @@ disable budgets or enable runLoop"`.
 ## Directory structure
 
 ```
-workflow-kit/
+apra-agent-kit/
   agent.config.mjs              ← agent configuration (or .json)
   agent/                        ← core agent framework
     index.mjs                   ← createAgent() entry point

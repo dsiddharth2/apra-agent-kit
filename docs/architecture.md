@@ -476,7 +476,7 @@ The downstream Fleet child lives for the MCP server process, not per HTTP reques
 | `WORKER_DISPATCH_QUEUE_SIZE` | `20` | Calls waiting when both tiers are busy. |
 | `WORKER_POOL_ROOT` | `./workdir` | Base folder for pool worker dirs and locks. |
 | `WORKER_POOL_ACQUIRE_TIMEOUT_MS` | `300000` | Timeout for pool-internal `acquire()`. |
-| `WORKER_EPHEMERAL_ROOT` | `os.tmpdir()/workflow-kit` | Base folder for ephemeral worker dirs. |
+| `WORKER_EPHEMERAL_ROOT` | `os.tmpdir()/apra-agent-kit` | Base folder for ephemeral worker dirs. |
 | `WORKER_EPHEMERAL_TTL_MS` | `600000` | Force-teardown safety net for ephemeral workers. |
 | `WORKER_DISPATCH_QUEUE_TIMEOUT_MS` | `300000` | Timeout for queued dispatch waiters. |
 | `APRA_FLEET_BIN` | `apra-fleet` on PATH | Path to the Fleet binary when it is not on PATH. |
@@ -490,7 +490,7 @@ are declared under `modules`:
 
 ```js
 export default {
-  name: 'workflow-kit',
+  name: 'apra-agent-kit',
   fleet: {},
   comm: { adapter: 'express' },
   modules: {

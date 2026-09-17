@@ -8,7 +8,7 @@ import { dispatchConfig, ephemeralConfig, workersConfig } from '../pool/config.m
 test('ephemeralConfig defaults to 10 workers under the OS tmpdir with a 10 minute ttl', () => {
   const config = ephemeralConfig({});
   assert.equal(config.maxConcurrent, 10);
-  assert.equal(config.workRoot, path.join(os.tmpdir(), 'workflow-kit'));
+  assert.equal(config.workRoot, path.join(os.tmpdir(), 'apra-agent-kit'));
   assert.equal(config.ttlMs, 600000);
 });
 

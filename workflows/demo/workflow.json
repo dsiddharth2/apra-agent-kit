@@ -1,5 +1,5 @@
 {
   "name": "demo",
   "entry": "main.mjs",
-  "description": "Demo workflow from Apra Fleet's workflow-kit: connect, register members, command, transform, agent"
+  "description": "Demo workflow from Apra Fleet's apra-agent-kit: connect, register members, command, transform, agent"
 }

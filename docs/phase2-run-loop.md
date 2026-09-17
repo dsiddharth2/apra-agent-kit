@@ -1,6 +1,6 @@
 # Phase 2: Autonomous Run Loop
 
-The run loop turns workflow-kit from a tool server into an autonomous agent. Instead of
+The run loop turns apra-agent-kit from a tool server into an autonomous agent. Instead of
 an external LLM choosing tools one at a time through MCP, the host accepts a task goal
 and drives tool selection, execution, and review internally.
 
@@ -260,7 +260,7 @@ the doer member. All are read-only and spend no LLM tokens.
 
 ```js
 export default {
-  name: 'workflow-kit',
+  name: 'apra-agent-kit',
   fleet: {},
   comm: { adapter: 'express' },
   modules: {

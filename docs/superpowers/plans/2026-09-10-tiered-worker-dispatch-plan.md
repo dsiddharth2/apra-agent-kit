@@ -22,7 +22,7 @@
 - `WorkerPool` never calls `registerMember`, `listMembers`, or any Fleet method. `MemberManager` is the only registration path.
 - All new tests are offline (no Fleet binary, no token) except the one file named `*.live.test.mjs`.
 - Every task ends with `node --test <the task's test files>` green and a commit. Run the full suite (`npm test`) at the end of Tasks 10–13.
-- Windows: `path.join` everywhere; never hardcode `/tmp`. Default ephemeral root is `path.join(os.tmpdir(), 'workflow-kit')`.
+- Windows: `path.join` everywhere; never hardcode `/tmp`. Default ephemeral root is `path.join(os.tmpdir(), 'apra-agent-kit')`.
 - Source of the ported files is the branch `feat/conc-implementation`. Extract with `git show feat/conc-implementation:<path> > <path>`.
 
 ---
@@ -728,7 +728,7 @@ import { dispatchConfig, ephemeralConfig, workersConfig } from '../pool/config.m
 test('ephemeralConfig defaults to 10 workers under the OS tmpdir with a 10 minute ttl', () => {
   const config = ephemeralConfig({});
   assert.equal(config.maxConcurrent, 10);
-  assert.equal(config.workRoot, path.join(os.tmpdir(), 'workflow-kit'));
+  assert.equal(config.workRoot, path.join(os.tmpdir(), 'apra-agent-kit'));
   assert.equal(config.ttlMs, 600000);
 });
 
@@ -804,7 +804,7 @@ export function ephemeralConfig(env = process.env) {
     maxConcurrent: intAtLeast(0, env.WORKER_EPHEMERAL_MAX, 'WORKER_EPHEMERAL_MAX', DEFAULT_EPHEMERAL_MAX),
     workRoot: env.WORKER_EPHEMERAL_ROOT
       ? path.resolve(env.WORKER_EPHEMERAL_ROOT)
-      : path.join(os.tmpdir(), 'workflow-kit'),
+      : path.join(os.tmpdir(), 'apra-agent-kit'),
     ttlMs: intAtLeast(1, env.WORKER_EPHEMERAL_TTL_MS, 'WORKER_EPHEMERAL_TTL_MS', DEFAULT_EPHEMERAL_TTL_MS),
   };
 }
@@ -2278,7 +2278,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { createPooledFleetApi } from '../pool/pooled-fleet-api.mjs';
 import { defaultRegistry } from './registry.mjs';
 
-const SERVER_INFO = { name: 'workflow-kit', version: '1.0.0' };
+const SERVER_INFO = { name: 'apra-agent-kit', version: '1.0.0' };
 
 function toToolResult(value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -3231,7 +3231,7 @@ git commit -m "chore: provision workers from Node, cover dispatch tiers live, do
 **Deviations from the spec, and why**
 - `WorkerPool.create` takes no `fleetApi`: after removing roster verification the pool made no Fleet calls, so the parameter was dead.
 - `EphemeralWorkerFactory` takes `{ memberManager, config }`, not `(fleetApi, memberManager, config)`: it never calls Fleet directly.
-- Default ephemeral root is `path.join(os.tmpdir(), 'workflow-kit')` rather than a literal `/tmp`, so the kit runs on Windows dev machines; on Linux and Function Apps that is `/tmp/workflow-kit`.
+- Default ephemeral root is `path.join(os.tmpdir(), 'apra-agent-kit')` rather than a literal `/tmp`, so the kit runs on Windows dev machines; on Linux and Function Apps that is `/tmp/apra-agent-kit`.
 - `inspect-members` inspects the leased pair (`roles`) instead of a fixed member list — the spec only said "stop hardcoding DEMO-DOER"; inspecting another run's worker would recreate the collision the pool prevents.
 - `inspect-members` presence uses `listMembers()` + token-exact matching instead of `fleetStatus()` text, applying concurrency-spec decision #1 that the current branch never adopted.
 - `provisionRoster` registers roster members directly rather than through `provisionPair`, so roster names come from `roster.mjs` alone.

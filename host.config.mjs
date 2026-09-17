@@ -1,6 +1,6 @@
 // host.config.mjs
 export default {
-  name: 'workflow-kit',
+  name: 'apra-agent-kit',
   description: 'Fleet Agent Kit — travel research agent',
 
   fleet: {},

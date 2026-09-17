@@ -20,6 +20,6 @@ Design documents for features that have been implemented or proposed.
 | [specs/concurrency-plan.md](specs/concurrency-plan.md) | Implemented | Implementation plan for the worker pool. |
 | [specs/2026-09-10-tiered-worker-dispatch-design.md](specs/2026-09-10-tiered-worker-dispatch-design.md) | Implemented | Tiered worker dispatch: pool + ephemeral + queue. |
 | [specs/2026-09-10-tiered-worker-dispatch-plan.md](specs/2026-09-10-tiered-worker-dispatch-plan.md) | Implemented | Implementation plan for tiered dispatch. |
-| [specs/2026-09-09-fleet-agent-kit-spec.md](specs/2026-09-09-fleet-agent-kit-spec.md) | Proposed | Future vision: evolving workflow-kit into a modular Fleet Agent Kit. |
+| [specs/2026-09-09-fleet-agent-kit-spec.md](specs/2026-09-09-fleet-agent-kit-spec.md) | Proposed | Future vision: evolving apra-agent-kit into a modular Fleet Agent Kit. |
 
 The [root README](../README.md) is the quickstart: prerequisites, provisioning, and the commands to run things.
