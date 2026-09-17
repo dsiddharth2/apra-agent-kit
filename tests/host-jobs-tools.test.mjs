@@ -31,3 +31,73 @@ test('job-status returns the record or a not_found value', async () => {
   assert.equal((await tool.run({ args: { jobId: 'job-9' }, jobs: fakeJobs })).result, 42);
   assert.deepEqual(await tool.run({ args: { jobId: 'zzz' }, jobs: fakeJobs }), { ok: false, error: 'not_found', jobId: 'zzz' });
 });
+
+test('hosted run-loop executeTool passes jobs to submit-task and does not tool_error', async () => {
+  const { createMockFleetApi, rosterNames } = await import('./helpers/mock-fleet.mjs');
+  const { runTask } = await import('../host/run-loop.mjs');
+  const { executeHostedTask } = await import('../host/tasks.mjs');
+  const { WorkerDispatcher } = await import('../pool/worker-dispatcher.mjs');
+  const { WorkerPool } = await import('../pool/worker-pool.mjs');
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+
+  let submitted;
+  const jobs = {
+    submit: async (task, opts) => {
+      submitted = { task, opts };
+      return { jobId: 'job-hosted', status: 'queued', position: 1 };
+    },
+    get: async () => null,
+  };
+  const tools = withJobTools([], jobs);
+  const promptResponses = [
+    '```tool_call\n{"tool": "submit-task", "args": {"goal": "nested-work"}}\n```',
+    '```done\n{"result": "delegated", "summary": "ok"}\n```',
+  ];
+
+  const loopOut = await runTask(
+    { id: 't-outer', goal: 'delegate work' },
+    {
+      strategy: 'open-ended',
+      tools,
+      fleetApi: createMockFleetApi({ members: rosterNames(1), promptResponses }),
+      jobs,
+    },
+  );
+  assert.equal(loopOut.status, 'completed');
+  const loopObs = loopOut.history.find(o => o.tool === 'submit-task');
+  assert.ok(loopObs, 'expected submit-task observation from runTask');
+  assert.notEqual(loopObs.error, 'tool_error', loopObs.message);
+  assert.equal(loopObs.result.ok, true);
+  assert.equal(loopObs.result.result.jobId, 'job-hosted');
+  assert.equal(submitted.task.goal, 'nested-work');
+
+  submitted = undefined;
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'jobs-tools-hosted-'));
+  const dispatcher = new WorkerDispatcher({
+    pool: WorkerPool.create({ config: { size: 1, root, acquireTimeoutMs: 5000 } }),
+    ephemeral: null,
+    config: { maxQueueSize: 4, queueTimeoutMs: 5000 },
+  });
+  try {
+    const hostedOut = await executeHostedTask({ goal: 'delegate work' }, {
+      api: createMockFleetApi({ members: rosterNames(1), promptResponses }),
+      activeDispatcher: dispatcher,
+      toolRegistry: tools,
+      runLoopConfig: { strategy: 'open-ended' },
+      budgetsConfig: null,
+      guardrailsMod: null,
+      jobs,
+    });
+    assert.equal(hostedOut.status, 'completed');
+    const hostedObs = hostedOut.history.find(o => o.tool === 'submit-task');
+    assert.ok(hostedObs, 'expected submit-task observation from executeHostedTask');
+    assert.notEqual(hostedObs.error, 'tool_error', hostedObs.message);
+    assert.equal(hostedObs.result.ok, true);
+    assert.equal(hostedObs.result.result.jobId, 'job-hosted');
+    assert.equal(submitted.task.goal, 'nested-work');
+  } finally {
+    await dispatcher.close();
+  }
+});

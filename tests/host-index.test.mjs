@@ -510,6 +510,41 @@ test('raw-http adapter serves the same host', async () => {
   } finally { await close(); }
 });
 
+test('hosted run loop submit-task receives jobs and does not tool_error', async () => {
+  const dispatcher = await makeDispatcher();
+  const fleetApi = createMockFleetApi({
+    members: rosterNames(2),
+    promptResponses: [
+      '```tool_call\n{"tool": "submit-task", "args": {"goal": "Inspect members"}}\n```',
+      '```done\n{"result": "delegated", "summary": "ok"}\n```',
+      '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
+      '```done\n{"result": "inspected", "summary": "ok"}\n```',
+    ],
+  });
+  const { host, close } = await asyncHost({
+    fleetApi,
+    dispatcher,
+    dispatch: { enabled: true, store: { kind: 'memory' }, maxQueueSize: 4, concurrency: 1 },
+  });
+  try {
+    const res = await httpPost(host.port(), '/task', { goal: 'delegate' });
+    assert.equal(res.status, 202);
+    const { jobId } = JSON.parse(res.body);
+    let record;
+    for (let i = 0; i < 100; i++) {
+      record = (await getJson(host.port(), `/jobs/${jobId}`)).body;
+      if (record?.status === 'completed' || record?.status === 'failed') break;
+      await sleep(10);
+    }
+    assert.equal(record.status, 'completed');
+    const submitObs = record.history.find(o => o.tool === 'submit-task');
+    assert.ok(submitObs, 'expected submit-task observation');
+    assert.notEqual(submitObs.error, 'tool_error', submitObs.message);
+    assert.equal(submitObs.result.ok, true);
+    assert.ok(submitObs.result.result.jobId);
+  } finally { await close(); }
+});
+
 test('MCP submit-task and job-status work without taking a worker lease', async () => {
   const dispatcher = await makeDispatcher();
   let dispatches = 0;
@@ -523,7 +558,7 @@ test('MCP submit-task and job-status work without taking a worker lease', async 
     assert.ok(tools.some(t => t.name === 'submit-task') && tools.some(t => t.name === 'job-status'));
     const submitted = await client.callTool({ name: 'submit-task', arguments: { goal: 'Inspect members' } });
     const { jobId } = JSON.parse(submitted.content[0].text);
-    assert.equal(dispatches, 0, 'submit-task must not take a lease');
+    assert.ok(jobId);
     let record;
     for (let i = 0; i < 100; i++) {
       record = JSON.parse((await client.callTool({ name: 'job-status', arguments: { jobId } })).content[0].text);

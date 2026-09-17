@@ -33,7 +33,7 @@ export function mergeBudgetConfig(baseConfig, task) {
 }
 
 export async function executeHostedTask(task, {
-  api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, signal, onProgress,
+  api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress,
 }) {
   const fullTask = { id: task.id ?? `t-${Date.now().toString(36)}`, ...task };
   const budgetsMod = budgetsConfig ? createBudgets(mergeBudgetConfig(budgetsConfig, fullTask)) : null;
@@ -57,6 +57,7 @@ export async function executeHostedTask(task, {
       budgets: budgetsMod,
       guardrails: guardrailsMod,
       ...runLoopConfig,
+      jobs,
       signal,
       onIteration: onProgress,
     });

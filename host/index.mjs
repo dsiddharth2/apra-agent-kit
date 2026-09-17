@@ -125,19 +125,19 @@ export async function startHost({
   const dispatchConfig = dispatchEnabled ? resolveDispatchConfig({ ...resolved.dispatchConfig, enabled: true }, { env, budgetsConfig }) : null;
   const notifyConfig = resolveNotifyConfigWithEnv(resolved.notifyConfig ?? {}, env);
 
+  let jobs = null;
   const runSync = (task, { signal } = {}) => executeHostedTask(task, {
-    api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, signal,
+    api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, jobs, signal,
   });
   // The run loop only observes abort between iterations. A job blocked in
   // executePrompt would otherwise stay `processing` until FORCE_SETTLE (30s).
   const runJob = (task, { signal, onProgress }) => settleWhenAborted(
     executeHostedTask(task, {
-      api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, signal, onProgress,
+      api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress,
     }),
     signal,
   );
 
-  let jobs = null;
   let notifier = null;
   if (dispatchEnabled) {
     // Notifier and jobs reference each other: SSE reads from jobs, jobs publish to notifier.

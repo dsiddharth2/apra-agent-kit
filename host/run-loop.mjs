@@ -10,6 +10,7 @@ export async function runTask(task, {
   signal,
   budgets,
   guardrails,
+  jobs,
   maxReplanAttempts = 3,
   maxReviewAttempts = 2,
   maxStepReviewAttempts = 2,
@@ -20,7 +21,7 @@ export async function runTask(task, {
   onIteration,
 } = {}) {
   const strategyOpts = {
-    task, tools, fleetApi, guardrails,
+    task, tools, fleetApi, guardrails, jobs,
     maxReplanAttempts, maxReviewAttempts, maxStepReviewAttempts,
     maxNoActionTurns, minReviewPolicy, agentName, agentDescription,
   };
