@@ -27,6 +27,11 @@ test('dispatch env overrides win over config values', () => {
   assert.equal(c.leaseTimeoutMs, 660_000);
 });
 
+test('DURABLE_POLL_MS overrides dispatch.durable.pollMs', () => {
+  const c = resolveDispatchConfig({ enabled: true }, { env: { DURABLE_POLL_MS: '500' } });
+  assert.equal(c.durable.pollMs, 500);
+});
+
 test('dispatch rejects unknown backend and store kind', () => {
   assert.throws(() => resolveDispatchConfig({ enabled: true, backend: 'redis' }, { env: {} }), /backend/);
   assert.throws(() => resolveDispatchConfig({ enabled: true, store: { kind: 'postgres' } }, { env: {} }), /store\.kind/);

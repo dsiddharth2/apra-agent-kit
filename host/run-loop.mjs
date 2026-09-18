@@ -11,6 +11,7 @@ export async function runTask(task, {
   budgets,
   guardrails,
   jobs,
+  workspace,
   maxReplanAttempts = 3,
   maxReviewAttempts = 2,
   maxStepReviewAttempts = 2,
@@ -28,7 +29,7 @@ export async function runTask(task, {
   const runTraceId = traceId ?? task?.traceId ?? `tr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   const strategyOpts = {
-    task, tools, fleetApi, guardrails, jobs,
+    task, tools, fleetApi, guardrails, jobs, workspace,
     maxReplanAttempts, maxReviewAttempts, maxStepReviewAttempts,
     maxNoActionTurns, minReviewPolicy, agentName, agentDescription,
     traceId: runTraceId,

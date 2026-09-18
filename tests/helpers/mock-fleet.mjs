@@ -50,7 +50,7 @@ export function createMockFleetApi({
       promptCalls.push(options);
       let text = 'pong';
       if (typeof promptResponses === 'function') {
-        text = promptResponses(options);
+        text = await promptResponses(options);
       } else if (Array.isArray(promptResponses) && promptResponses.length > 0) {
         const idx = Math.min(promptCalls.length - 1, promptResponses.length - 1);
         text = promptResponses[idx];

@@ -15,7 +15,7 @@
     "host": "node host/index.mjs",
     "test:host": "node --test tests/host-config.test.mjs tests/host-registry.test.mjs tests/host-executor.test.mjs tests/comm-express.test.mjs tests/host-index.test.mjs tests/host-tasks.test.mjs tests/host-routes.test.mjs",
     "test:phase2": "node --test tests/host-response-parser.test.mjs tests/host-format-tools.test.mjs tests/host-budgets.test.mjs tests/host-guardrails.test.mjs tests/host-mock-fleet.test.mjs tests/host-prompts.test.mjs tests/host-strategy-open-ended.test.mjs tests/host-strategy-plan-execute.test.mjs tests/host-run-loop.test.mjs",
-    "test:phase4": "node --test tests/host-jobs-record.test.mjs tests/host-jobs-store.test.mjs tests/host-jobs-in-process.test.mjs tests/host-jobs-config.test.mjs tests/host-jobs-tools.test.mjs tests/host-notify.test.mjs tests/comm-contract.test.mjs tests/package-scripts.test.mjs tests/host-jobs-durable.test.mjs tests/comm-azure-orchestrator.test.mjs tests/comm-azure-http.test.mjs",
+    "test:phase4": "node --test tests/host-jobs-record.test.mjs tests/host-jobs-store.test.mjs tests/host-jobs-in-process.test.mjs tests/host-jobs-config.test.mjs tests/host-jobs-tools.test.mjs tests/host-notify.test.mjs tests/comm-contract.test.mjs tests/package-scripts.test.mjs tests/host-jobs-durable.test.mjs tests/comm-azure-orchestrator.test.mjs tests/comm-azure-http.test.mjs tests/comm-azure-activity.test.mjs",
     "test:chat": "node --test tests/host-chat-routes.test.mjs tests/host-chat-transcript.test.mjs tests/host-chat-e2e.test.mjs",
     "test:concurrency": "node --test tests/acceptance/concurrency.acceptance.test.mjs",
     "test:acceptance": "node --test tests/acceptance/"
