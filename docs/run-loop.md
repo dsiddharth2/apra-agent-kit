@@ -21,7 +21,7 @@ cancellation, see [jobs.md](jobs.md).
 ## Architecture
 
 ```text
-POST /task { goal, constraints, budget }
+POST /task?wait=true { goal, constraints, budget }   (or async via jobs — see jobs.md)
   │
   ├─ mergeBudgetConfig()        server defaults ∩ request constraints (stricter wins)
   ├─ dispatcher.dispatch()      acquire a worker lease (doer + reviewer pair)
@@ -310,10 +310,16 @@ const result = await host.run(task);
 
 ## `/task` API
 
+With `dispatch.enabled: true` (default in `host.config.mjs`), `POST /task` without
+`?wait=true` returns `202 { jobId, status: 'queued', position, links }`. Poll
+`GET /jobs/:id`, stream `GET /jobs/:id/events`, or pass `callbackUrl` — see
+[jobs.md](jobs.md). Add `?wait=true` to block until the run loop finishes and receive
+the synchronous body below.
+
 ### Request
 
 ```
-POST /task
+POST /task?wait=true
 Content-Type: application/json
 
 {
@@ -334,7 +340,7 @@ Content-Type: application/json
 Only `goal` is required. `constraints` and `budget` tighten the server defaults —
 the stricter value wins.
 
-### Response
+### Response (`?wait=true`)
 
 ```json
 {
@@ -377,10 +383,10 @@ docker compose up --build
 docker compose run --rm -p 3000:3000 fleet node host/index.mjs
 ```
 
-Then POST to `/task`:
+Then POST to `/task?wait=true` (or `POST /task` and poll — see [jobs.md](jobs.md)):
 
 ```bash
-curl -X POST http://localhost:3000/task \
+curl -X POST "http://localhost:3000/task?wait=true" \
   -H "Content-Type: application/json" \
   -d '{"goal":"Plan a trip to Jaipur","constraints":{"timeoutMs":300000}}'
 ```

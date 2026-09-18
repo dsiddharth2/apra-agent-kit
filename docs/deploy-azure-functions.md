@@ -19,11 +19,12 @@ HTTP trigger (POST /task)
             ├─ callActivity(runTask)  ──► activity.mjs
             │                              └─ executeHostedTask → run loop
             ├─ waitForExternalEvent('progress')  ◄── raiseEvent from activity
-            └─ waitForExternalEvent('cancel')      ◄── terminateInstance on DELETE
+            └─ waitForExternalEvent('cancel')      ◄── raiseEvent on DELETE (Running)
 
 One Fleet child per Functions instance, spawned when comm/azure-functions/main.mjs loads.
 Progress: activity calls client.raiseEvent('progress', { type, iteration, kind, ... }).
-Cancel: DELETE sets customStatus.cancelRequested; activity polls getStatus every pollMs.
+Cancel: DELETE → Pending → client.terminate; Running → raiseEvent('cancel') sets
+        customStatus.cancelRequested; activity polls getStatus every pollMs.
 Events: orchestrator keeps customStatus.events as a ring of 50 with stable seq
         (queued, started, settled always retained).
 ```

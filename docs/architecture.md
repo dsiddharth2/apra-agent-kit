@@ -399,8 +399,10 @@ the in-flight `callTool`; the process is not restarted.
 
 **Two seams: comm adapter vs jobs backend.** The comm layer (`express`, `raw-http`,
 `azure-functions`) translates HTTP into neutral routes. The jobs backend (`in-process`,
-`durable`) owns queueing, records, and cancellation. Either backend can pair with any
-adapter that mounts the same route table.
+`durable`) owns queueing, records, and cancellation. Pair **`in-process`** with
+**`express`** or **`raw-http`** on a VM or Docker container. Pair **`durable`** with
+**`azure-functions`** only — `loadConfig` throws
+`dispatch.backend "durable" requires comm.adapter "azure-functions"` otherwise.
 
 **Progress events are rich.** Progress SSE/webhook payloads include a `kind` field
 (`plan`, `step_started`, `step_completed`, …) and `stepIndex` so a UI can render the
