@@ -10,3 +10,4 @@ node_modules/
 workdir/*
 !workdir/.gitkeep
 jobs.db
+jobs.db-*
