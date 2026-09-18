@@ -76,6 +76,12 @@ export async function startHost({
 
   let api = fleetApi;
   let stopFleet = null;
+  if (!api && env.FLEET_MOCK_SCRIPT) {
+    if (env.NODE_ENV !== 'test') throw new Error('FLEET_MOCK_SCRIPT is only honoured when NODE_ENV=test');
+    const { createScriptedFleetApi, loadScript } = await import('../tests/helpers/scripted-fleet.mjs');
+    api = createScriptedFleetApi(await loadScript(env.FLEET_MOCK_SCRIPT));
+    console.warn(`[host] using scripted fleet from ${env.FLEET_MOCK_SCRIPT} — no LLM calls will be made`);
+  }
   if (!api) {
     const { ensureApralabs } = await import('../workflows/demo/ensure-apralabs.mjs');
     ensureApralabs();
