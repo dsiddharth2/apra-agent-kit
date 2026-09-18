@@ -91,16 +91,20 @@ when you want autonomous agent execution:
 node host/index.mjs
 ```
 
-Then POST a task:
+Then POST a task. With `dispatch.enabled: true` (default in `host.config.mjs`), a plain
+`POST /task` returns `202 { jobId, status, position, links }` — poll `GET /jobs/:id` or
+use SSE; see [jobs.md](jobs.md). Block for the synchronous run-loop body with
+`?wait=true`:
 
 ```bash
-curl -X POST http://localhost:3000/task \
+curl -X POST "http://localhost:3000/task?wait=true" \
   -H "Content-Type: application/json" \
   -d '{"goal":"Plan a trip to Tokyo","constraints":{"timeoutMs":300000}}'
 ```
 
 The host reads `host.config.mjs` for strategy, budget, and guardrail settings.
-See [run-loop.md](run-loop.md) for the full `/task` API reference.
+See [run-loop.md](run-loop.md) for run-loop behavior and [jobs.md](jobs.md) for async
+submission, polling, and cancellation.
 
 In Docker:
 

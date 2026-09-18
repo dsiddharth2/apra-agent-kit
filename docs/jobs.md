@@ -160,7 +160,7 @@ Failed deliveries retry 3 times with exponential backoff starting at 1 s. A webh
 - **`maxQueueSize`** — when the queue is full, `POST /task` returns `429` with `Retry-After: 30`.
 - **`retentionMs`** (default 24 h) — terminal records are purged; unknown ids return `404`.
 - **Restart** — `queued` jobs resume; `processing` jobs settle as `failed` with `error.code = 'interrupted'`.
-- **SQLite** — exactly one Node process per database file. Two processes sharing a volume would not corrupt the file but could double-run jobs; use the durable backend for multi-instance scale-out.
+- **SQLite** — exactly one Node process per database file. Two processes sharing a volume would not corrupt the file, but `claim` is `UPDATE … WHERE status = 'queued'`, so a second process skips a job already claimed — double-run is not the risk. Lost events, stale polls, and racing cancel are; use the durable backend for multi-instance scale-out.
 
 ## Configuration
 
