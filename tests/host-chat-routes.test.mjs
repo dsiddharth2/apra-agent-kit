@@ -29,7 +29,7 @@ test('chat page route serves HTML with the escaped title and the script tag', as
   assert.doesNotMatch(res.text, /\{\{title\}\}/);
   assert.doesNotMatch(res.text, /<Travel>/);
   assert.match(res.text, /<script type="module" src="\/chat\/app\.mjs"><\/script>/);
-  for (const id of ['status', 'transcript', 'composer', 'goal', 'send', 'stop']) assert.match(res.text, new RegExp(`id="${id}"`), `missing #${id}`);
+  for (const id of ['status-pill', 'transcript', 'composer', 'goal', 'send', 'thread-title']) assert.match(res.text, new RegExp(`id="${id}"`), `missing #${id}`);
 });
 
 test('chat script route serves reducer plus app as one import-free module', async () => {
