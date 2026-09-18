@@ -11,8 +11,10 @@
   const sendEl = $('#send');
   const stopEl = $('#stop');
   const pillEl = $('#status');
+  const titleEl = $('#topbar-title');
+  const sidebarCurrent = $('#sidebar-current');
 
-  const ICONS = { pending: '○', running: '◔', completed: '✓', failed: '✗', retrying: '↻' };
+  const GLYPHS = { pending: '○', running: '●', completed: '✓', failed: '✗', retrying: '↻' };
   let current = null;   // { turn, card, source, grouped }
 
   function el(tag, className, text) {
@@ -25,66 +27,147 @@
   function statusText(turn) {
     switch (turn.status) {
       case 'submitting': return 'sending…';
-      case 'queued': return turn.position ? `queued #${turn.position}` : 'queued';
-      case 'running': return turn.iteration ? `running · iteration ${turn.iteration}` : 'running';
-      case 'cancelling': return 'cancelling…';
-      case 'completed': return 'done';
-      case 'error': return 'error';
-      default: return turn.status.replace('_', ' ');
+      case 'queued': return turn.position ? 'queued #' + turn.position : 'queued';
+      case 'running': return turn.iteration ? 'RUNNING · STEP ' + turn.iteration : 'RUNNING';
+      case 'cancelling': return 'CANCELLING…';
+      case 'completed': return 'DONE';
+      case 'error': return 'ERROR';
+      default: return turn.status.replace(/_/g, ' ').toUpperCase();
     }
   }
 
-  function stepLabel(step) {
-    const name = step.tool ?? step.type;
-    const extra = step.description && step.description !== name ? ` — ${step.description}` : '';
-    return `${ICONS[step.status] ?? '○'} ${name}${extra}`;
+  function planSummary(turn) {
+    if (!turn.plan) return '';
+    var done = turn.plan.steps.filter(function(s) { return s.status === 'completed'; }).length;
+    var total = turn.plan.steps.length;
+    if (done === total && total > 0) return 'DONE · ' + total + ' STEPS';
+    return done + ' OF ' + total + ' DONE';
+  }
+
+  function renderPlanCard(turn) {
+    var card = el('div', 'plan-card');
+    // Header
+    var header = el('div', 'plan-header');
+    header.append(el('span', 'plan-label', 'PLAN'));
+    header.append(el('span', 'plan-meta', planSummary(turn)));
+    card.append(header);
+    // Progress bar
+    var total = turn.plan.steps.length;
+    var done = turn.plan.steps.filter(function(s) { return s.status === 'completed'; }).length;
+    var running = turn.plan.steps.filter(function(s) { return s.status === 'running'; }).length;
+    var pct = total > 0 ? Math.round(((done + running * 0.5) / total) * 100) : 0;
+    var progWrap = el('div', 'plan-progress');
+    var progBar = el('div', 'plan-progress-bar');
+    progBar.style.width = pct + '%';
+    progWrap.append(progBar);
+    card.append(progWrap);
+    // Steps
+    var stepsWrap = el('div', 'plan-steps');
+    for (var i = 0; i < turn.plan.steps.length; i++) {
+      var step = turn.plan.steps[i];
+      var hasDetail = step.result != null || step.error;
+      var isExpanded = false;  // collapsed by default
+      var row = el('div', 'plan-step' + (step.status === 'running' ? ' running' : ''));
+      // Caret
+      var caret = el('span', 'caret', hasDetail ? '▶' : '');
+      row.append(caret);
+      // Glyph
+      var glyph = el('span', 'glyph ' + step.status);
+      if (step.status === 'running') {
+        var dot = el('span', 'running-dot blink');
+        glyph.textContent = '';
+        glyph.append(dot);
+      } else {
+        glyph.textContent = GLYPHS[step.status] || '○';
+      }
+      row.append(glyph);
+      // Tool name
+      var nameEl = el('span', 'tool-name' + (step.status === 'running' ? ' running' : ''), step.tool || step.type);
+      row.append(nameEl);
+      // Timing placeholder
+      row.append(el('span', 'timing', ''));
+      // Detail (collapsed)
+      if (hasDetail) {
+        var detail = el('div', step.error ? 'step-error' : 'step-detail', step.error || step.result);
+        detail.style.display = 'none';
+        row.append(detail);
+        (function(caretEl, detailEl, rowEl) {
+          caretEl.addEventListener('click', function() {
+            var showing = detailEl.style.display !== 'none';
+            detailEl.style.display = showing ? 'none' : 'block';
+            caretEl.textContent = showing ? '▶' : '▼';
+            rowEl.className = showing ? rowEl.className.replace(' expanded', '') : rowEl.className + ' expanded';
+          });
+        })(caret, detail, row);
+      }
+      stepsWrap.append(row);
+    }
+    card.append(stepsWrap);
+    // Reviews in footer
+    if (turn.reviews.length) {
+      var footer = el('div', 'plan-footer');
+      for (var r = 0; r < turn.reviews.length; r++) {
+        var rev = turn.reviews[r];
+        var badge = el('span', 'badge' + (rev.approved ? '' : ' no'), rev.reviewType + ' review ' + (rev.approved ? '✓' : '✗'));
+        if (rev.feedback) badge.title = rev.feedback;
+        footer.append(badge);
+      }
+      card.append(footer);
+    }
+    return card;
   }
 
   function renderCard(card, turn) {
     card.replaceChildren();
-    card.append(el('div', `status ${turn.status}`, statusText(turn)));
-    if (turn.replans) card.append(el('div', 'notice', `Plan revised (${turn.replans})`));
+    // Apra mark avatar
+    var markImg = document.querySelector('.sidebar-brand img');
+    var markSrc = markImg ? markImg.src : '';
+    var img = el('img', 'assistant-mark');
+    img.src = markSrc;
+    img.alt = '';
+    card.append(img);
+    var body = el('div', 'assistant-body');
+    // Status line
+    body.append(el('div', 'assistant-status ' + turn.status, statusText(turn)));
+    // Replan notice
+    if (turn.replans) body.append(el('div', 'assistant-status', 'Plan revised (' + turn.replans + ')'));
+    // Plan — 3c dense ledger
     if (turn.plan) {
-      const list = el('ol', 'plan');
-      for (const step of turn.plan.steps) {
-        const li = el('li', `step ${step.status}`);
-        if (step.result != null || step.error) {
-          const details = el('details');
-          details.append(el('summary', null, stepLabel(step)));
-          details.append(el('pre', step.error ? 'error' : null, step.error ?? step.result));
-          li.append(details);
-        } else {
-          li.append(el('span', null, stepLabel(step)));
-        }
-        list.append(li);
-      }
-      card.append(list);
+      body.append(renderPlanCard(turn));
     }
-    if (turn.reviews.length) {
-      const row = el('div', 'reviews');
-      for (const review of turn.reviews) {
-        const badge = el('span', `badge ${review.approved ? 'ok' : 'no'}`, `${review.reviewType} review ${review.approved ? '✓' : '✗'}`);
-        if (review.feedback) badge.title = review.feedback;
-        row.append(badge);
+    // Reviews (when no plan card renders them)
+    if (turn.reviews.length && !turn.plan) {
+      var revs = el('div', 'reviews');
+      for (var r = 0; r < turn.reviews.length; r++) {
+        var rev = turn.reviews[r];
+        var badge = el('span', 'badge' + (rev.approved ? '' : ' no'), rev.reviewType + ' review ' + (rev.approved ? '✓' : '✗'));
+        if (rev.feedback) badge.title = rev.feedback;
+        revs.append(badge);
       }
-      card.append(row);
+      body.append(revs);
     }
+    // Answer
     if (turn.status === 'completed') {
-      card.append(typeof turn.answer === 'string'
-        ? el('div', 'answer', turn.answer)
-        : el('pre', 'answer', JSON.stringify(turn.answer, null, 2)));
+      if (typeof turn.answer === 'string') {
+        body.append(el('div', 'answer', turn.answer));
+      } else {
+        body.append(el('pre', 'answer', JSON.stringify(turn.answer, null, 2)));
+      }
     } else if (turn.error) {
-      card.append(el('div', 'error-card', `${turn.status}: ${turn.error.message}`));
+      body.append(el('div', 'error-card', turn.status.replace(/_/g, ' ') + ': ' + turn.error.message));
     }
+    card.append(body);
+    // Status pill
     pillEl.textContent = statusText(turn);
-    pillEl.className = `pill ${turn.status}`;
+    pillEl.className = 'topbar-status ' + turn.status;
   }
 
   function setBusy(busy) {
     sendEl.disabled = busy;
     goalEl.disabled = busy;
-    const canStop = busy && current?.turn.jobId && isLive(current.turn) && current.turn.status !== 'cancelling';
+    var canStop = busy && current && current.turn.jobId && isLive(current.turn) && current.turn.status !== 'cancelling';
     stopEl.disabled = !canStop;
+    stopEl.className = 'btn-stop' + (busy ? ' visible' : '');
   }
 
   function finish() {
@@ -103,73 +186,88 @@
   }
 
   function subscribe(url) {
-    const source = new EventSource(url);
+    var source = new EventSource(url);
     current.source = source;
-    for (const type of ['queued', 'started', 'progress', 'settled']) {
-      source.addEventListener(type, (msg) => {
-        let event;
-        try { event = JSON.parse(msg.data); } catch (err) { console.error('unparseable event', msg.data, err); return; }
-        console.log(event.type, event.kind ?? '', event);
-        apply((turn) => reduce(turn, event));
-      });
+    var types = ['queued', 'started', 'progress', 'settled'];
+    for (var t = 0; t < types.length; t++) {
+      (function(type) {
+        source.addEventListener(type, function(msg) {
+          var event;
+          try { event = JSON.parse(msg.data); } catch (err) { console.error('unparseable event', msg.data, err); return; }
+          console.log(event.type, event.kind || '', event);
+          apply(function(turn) { return reduce(turn, event); });
+        });
+      })(types[t]);
     }
-    source.onerror = (err) => console.error('event stream error; the browser will reconnect with Last-Event-ID', err);
+    source.onerror = function(err) { console.error('event stream error; the browser will reconnect with Last-Event-ID', err); };
   }
 
-  async function send(goal) {
-    transcriptEl.append(el('div', 'user', goal));
-    const card = el('div', 'assistant');
+  function send(goal) {
+    // User bubble
+    var userWrap = el('div', 'user');
+    var bubble = el('div', 'user-bubble', goal);
+    userWrap.append(bubble);
+    transcriptEl.append(userWrap);
+    // Update sidebar
+    var short = goal.length > 32 ? goal.slice(0, 32) + '…' : goal;
+    sidebarCurrent.textContent = short;
+    titleEl.textContent = short;
+    // Assistant card
+    var card = el('div', 'assistant');
     transcriptEl.append(card);
-    current = { turn: initialTurn(goal), card, source: null, grouped: false };
+    current = { turn: initialTurn(goal), card: card, source: null, grouped: false };
     renderCard(card, current.turn);
     setBusy(true);
 
-    let res, body;
-    try {
-      res = await fetch('/task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal }) });
-      body = await res.json().catch(() => null);
-    } catch (err) {
-      console.error('submit failed', err);
-      apply((turn) => submitFailed(turn, { message: err.message }));
-      return;
-    }
-    if (res.status !== 202) {
-      const retry = res.headers.get('retry-after');
-      const message = `${body?.message ?? body?.error ?? `HTTP ${res.status}`}${retry ? ` (retry in ${retry}s)` : ''}`;
-      console.error('submit rejected', res.status, body);
-      apply((turn) => submitFailed(turn, { message }));
-      return;
-    }
-    console.group(`job ${body.jobId}`);
-    current.grouped = true;
-    console.log('accepted', body);
-    apply((turn) => accepted(turn, { jobId: body.jobId, position: body.position }));
-    subscribe(body.links?.events ?? `/jobs/${body.jobId}/events`);
+    fetch('/task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: goal }) })
+      .then(function(res) {
+        return res.json().catch(function() { return null; }).then(function(body) { return { res: res, body: body }; });
+      })
+      .then(function(r) {
+        var res = r.res, body = r.body;
+        if (res.status !== 202) {
+          var retry = res.headers.get('retry-after');
+          var message = (body && body.message ? body.message : body && body.error ? body.error : 'HTTP ' + res.status) + (retry ? ' (retry in ' + retry + 's)' : '');
+          console.error('submit rejected', res.status, body);
+          apply(function(turn) { return submitFailed(turn, { message: message }); });
+          return;
+        }
+        console.group('job ' + body.jobId);
+        current.grouped = true;
+        console.log('accepted', body);
+        apply(function(turn) { return accepted(turn, { jobId: body.jobId, position: body.position }); });
+        subscribe(body.links && body.links.events ? body.links.events : '/jobs/' + body.jobId + '/events');
+      })
+      .catch(function(err) {
+        console.error('submit failed', err);
+        apply(function(turn) { return submitFailed(turn, { message: err.message }); });
+      });
   }
 
-  async function stop() {
-    if (!current?.turn.jobId || !isLive(current.turn)) return;
+  function stop() {
+    if (!current || !current.turn.jobId || !isLive(current.turn)) return;
     stopEl.disabled = true;
-    let res, body;
-    try {
-      res = await fetch(`/jobs/${current.turn.jobId}`, { method: 'DELETE' });
-      body = await res.json().catch(() => null);
-    } catch (err) {
-      console.error('cancel failed', err);
-      stopEl.disabled = false;
-      return;
-    }
-    console.log('cancel', res.status, body);
-    if (res.status === 200 || res.status === 202) apply((turn) => cancelling(turn));
-    else stopEl.disabled = false;   // 409 already terminal: the settled event will land, or has
+    fetch('/jobs/' + current.turn.jobId, { method: 'DELETE' })
+      .then(function(res) {
+        return res.json().catch(function() { return null; }).then(function(body) { return { res: res, body: body }; });
+      })
+      .then(function(r) {
+        console.log('cancel', r.res.status, r.body);
+        if (r.res.status === 200 || r.res.status === 202) apply(function(turn) { return cancelling(turn); });
+        else stopEl.disabled = false;
+      })
+      .catch(function(err) {
+        console.error('cancel failed', err);
+        stopEl.disabled = false;
+      });
   }
 
-  composerEl.addEventListener('submit', (e) => {
+  composerEl.addEventListener('submit', function(e) {
     e.preventDefault();
-    const goal = goalEl.value.trim();
+    var goal = goalEl.value.trim();
     if (goal && !sendEl.disabled) send(goal);
   });
-  goalEl.addEventListener('keydown', (e) => {
+  goalEl.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); composerEl.requestSubmit(); }
   });
   stopEl.addEventListener('click', stop);

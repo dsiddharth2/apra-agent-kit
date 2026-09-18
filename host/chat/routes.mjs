@@ -23,8 +23,10 @@ export async function buildChatRoutes({ chatConfig, hostName, dir = HERE } = {})
   if (!chatConfig?.enabled) return { chatPage: null, chatScript: null };
   const title = escapeHtml(chatConfig.title ?? hostName ?? 'apra-agent-kit');
   const read = (name) => fs.readFile(path.join(dir, name), 'utf8');
-  const [html, transcript, app] = await Promise.all([read('index.html'), read('transcript.mjs'), read('app.mjs')]);
-  const page = html.replaceAll('{{title}}', title);
+  const readBin = (name) => fs.readFile(path.join(dir, name));
+  const [html, transcript, app, mark] = await Promise.all([read('index.html'), read('transcript.mjs'), read('app.mjs'), readBin('apra-mark.png')]);
+  const markDataUri = `data:image/png;base64,${mark.toString('base64')}`;
+  const page = html.replaceAll('{{title}}', title).replaceAll('{{mark}}', markDataUri);
   const script = `${stripExports(transcript)}\n${app}`;
   const serve = (text, contentType) => async () => ({
     status: 200,

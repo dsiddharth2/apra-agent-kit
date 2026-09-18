@@ -4,52 +4,141 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{title}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Jost:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #f6f7f9; --card: #fff; --ink: #1c1f24; --muted: #6b7280; --line: #e5e7eb; --ok: #15803d; --bad: #b91c1c; --run: #2563eb; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: var(--ink); background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
-  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--card); }
-  header h1 { font-size: 16px; margin: 0; }
-  .pill { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: var(--line); color: var(--muted); }
-  .pill.running, .pill.queued, .pill.submitting, .pill.cancelling { background: #dbeafe; color: var(--run); }
-  .pill.completed { background: #dcfce7; color: var(--ok); }
-  .pill.failed, .pill.cancelled, .pill.budget_exceeded, .pill.error { background: #fee2e2; color: var(--bad); }
-  #transcript { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-  .user, .assistant { max-width: 760px; padding: 12px 14px; border-radius: 12px; white-space: pre-wrap; word-break: break-word; }
-  .user { align-self: flex-end; background: #dbeafe; }
-  .assistant { align-self: flex-start; background: var(--card); border: 1px solid var(--line); width: 100%; }
-  .status { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-  .notice { font-size: 12px; color: var(--run); margin: 4px 0; }
-  ol.plan { margin: 6px 0; padding-left: 0; list-style: none; }
-  ol.plan li { padding: 3px 0; }
-  li.running { color: var(--run); } li.completed { color: var(--ok); } li.failed { color: var(--bad); } li.retrying { color: #b45309; }
-  details summary { cursor: pointer; }
-  details pre { margin: 4px 0 0 18px; padding: 8px; background: var(--bg); border-radius: 6px; font-size: 12px; max-height: 240px; overflow: auto; white-space: pre-wrap; }
-  pre.error { color: var(--bad); }
-  .reviews { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
-  .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); }
-  .badge.ok { color: var(--ok); } .badge.no { color: var(--bad); }
-  .answer { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
-  pre.answer { font-size: 12px; overflow: auto; }
-  .error-card { margin-top: 8px; color: var(--bad); }
-  form { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--card); }
-  textarea { flex: 1; resize: none; min-height: 44px; max-height: 160px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
-  button { padding: 0 16px; border: 0; border-radius: 8px; font: inherit; cursor: pointer; background: var(--run); color: #fff; }
-  button#stop { background: var(--bad); }
-  button:disabled { opacity: .45; cursor: default; }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.45 Archivo,system-ui,sans-serif;color:#14171A;background:#fff;display:flex;height:100vh}
+
+  /* --- Sidebar (1a shell) --- */
+  .sidebar{width:236px;flex:none;background:#F5F6F2;border-right:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column}
+  .sidebar-brand{display:flex;align-items:center;gap:9px;padding:18px 18px 16px}
+  .sidebar-brand img{width:22px;height:auto;display:block}
+  .sidebar-brand span{font:600 14px Archivo,sans-serif;color:#14171A;letter-spacing:-.2px}
+  .sidebar-section{padding:14px 18px 8px;font:600 10px 'IBM Plex Mono',monospace;letter-spacing:.09em;color:rgba(0,0,0,.4)}
+  .sidebar-item{padding:9px 10px;margin:0 10px 2px;border-radius:6px;font:400 12.5px Archivo,sans-serif;color:rgba(0,0,0,.62);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sidebar-item.active{background:#fff;border:1px solid rgba(0,0,0,.08);font-weight:500;color:#14171A}
+  .sidebar-footer{margin-top:auto;padding:14px 16px;border-top:1px solid rgba(0,0,0,.08);display:flex;align-items:center;gap:9px}
+  .sidebar-footer .avatar{width:26px;height:26px;border-radius:50%;background:#14171A;color:#94BA33;font:600 9.5px 'IBM Plex Mono',monospace;display:flex;align-items:center;justify-content:center}
+  .sidebar-footer span{font:400 12px Archivo,sans-serif;color:rgba(0,0,0,.7)}
+
+  /* --- Main area --- */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;max-width:860px;margin:0 auto;width:100%}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:15px 30px;border-bottom:1px solid rgba(0,0,0,.08)}
+  .topbar-title{font:600 13.5px Archivo,sans-serif;color:#14171A}
+  .topbar-status{font:400 10.5px 'IBM Plex Mono',monospace;color:rgba(0,0,0,.45)}
+  .topbar-status.running,.topbar-status.queued,.topbar-status.submitting,.topbar-status.cancelling{color:#5a7a1e}
+  .topbar-status.completed{color:#6B9420}
+  .topbar-status.failed,.topbar-status.cancelled,.topbar-status.budget_exceeded,.topbar-status.error{color:#b91c1c}
+
+  /* --- Transcript --- */
+  #transcript{flex:1;overflow-y:auto;padding:0 30px}
+
+  /* User message — 1a style */
+  .user{display:flex;justify-content:flex-end;padding:20px 0}
+  .user-bubble{max-width:440px;background:#EFF3E3;border:1px solid #DCE6C2;border-radius:12px 12px 4px 12px;padding:12px 15px;font:400 13.5px/1.6 Archivo,sans-serif;color:#14171A;white-space:pre-wrap;word-break:break-word}
+
+  /* Assistant card */
+  .assistant{padding:20px 0;border-top:1px solid rgba(0,0,0,.08);display:flex;gap:13px}
+  .assistant-mark{width:24px;height:auto;flex:none;align-self:flex-start;margin-top:2px;display:block}
+  .assistant-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:13px}
+  .assistant-status{font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(0,0,0,.38)}
+  .assistant-status.running,.assistant-status.queued,.assistant-status.submitting,.assistant-status.cancelling{color:#5a7a1e}
+
+  /* Dense ledger plan (3c) */
+  .plan-card{border:1px solid rgba(0,0,0,.1);border-radius:9px;overflow:hidden;padding:0}
+  .plan-header{display:flex;align-items:baseline;justify-content:space-between;padding:13px 16px 11px}
+  .plan-label{font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(0,0,0,.45)}
+  .plan-meta{font:400 10px 'IBM Plex Mono',monospace;color:rgba(0,0,0,.35)}
+  .plan-progress{height:2px;background:rgba(0,0,0,.08);margin:0 16px 10px}
+  .plan-progress-bar{height:2px;background:#6B9420;transition:width .3s}
+  .plan-steps{display:flex;flex-direction:column}
+  .plan-step{display:grid;grid-template-columns:14px 14px 1fr auto;align-items:center;gap:10px;padding:7px 16px;border-top:1px solid rgba(0,0,0,.07)}
+  .plan-step .caret{font:400 9px Archivo,sans-serif;color:rgba(0,0,0,.3);cursor:pointer;user-select:none;width:14px;text-align:center}
+  .plan-step .glyph{font:500 12px 'IBM Plex Mono',monospace;color:#6B9420;width:14px;text-align:center}
+  .plan-step .glyph.pending{color:rgba(0,0,0,.25)}
+  .plan-step .glyph.running{color:#6B9420}
+  .plan-step .glyph.failed{color:#b91c1c}
+  .plan-step .glyph.retrying{color:#8a6a1e}
+  .plan-step .tool-name{font:400 12.5px 'IBM Plex Mono',monospace;color:#14171A}
+  .plan-step .tool-name.running{font-weight:500}
+  .plan-step .timing{font:400 10.5px 'IBM Plex Mono',monospace;color:rgba(0,0,0,.35)}
+  .plan-step.running{background:#FAFBF7}
+  .plan-step.running .caret{color:#6B9420}
+  .plan-step.expanded{align-items:start;padding-top:9px;background:#FAFBF7;border-top:1px solid rgba(0,0,0,.07)}
+  .plan-step .step-detail{grid-column:3/5;padding:6px 0 4px;font:400 12.5px/1.65 Archivo,sans-serif;color:rgba(0,0,0,.66)}
+  .plan-step .step-error{grid-column:3/5;padding:6px 0 4px;font:400 12.5px/1.5 'IBM Plex Mono',monospace;color:#b91c1c}
+  .plan-footer{display:flex;gap:8px;padding:11px 16px;border-top:1px solid rgba(0,0,0,.07)}
+
+  /* Review badges (3c light) */
+  .reviews{display:flex;gap:8px;flex-wrap:wrap}
+  .badge{padding:4px 10px;border:1px solid #CBDCA4;background:#F1F6E5;border-radius:999px;font:400 10.5px 'IBM Plex Mono',monospace;color:#4F7016}
+  .badge.no{border-color:#e8c8c8;background:#fef2f2;color:#b91c1c}
+
+  /* Answer */
+  .answer{font:400 13.5px/1.72 Archivo,sans-serif;color:#22262B;white-space:pre-wrap;word-break:break-word}
+  pre.answer{font:400 12px/1.65 'IBM Plex Mono',monospace;color:#22262B;background:#F7F8F4;border:1px solid rgba(0,0,0,.08);border-radius:8px;padding:13px;overflow:auto;max-height:400px;white-space:pre-wrap}
+  .error-card{padding:12px 14px;border:1px solid rgba(180,28,28,.2);background:#fef2f2;border-radius:8px;font:400 12.5px/1.5 Archivo,sans-serif;color:#b91c1c}
+
+  /* Running dot */
+  .running-dot{width:7px;height:7px;border-radius:50%;background:#94BA33;display:inline-block;vertical-align:-1px;margin-right:6px}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+  .blink{animation:blink 1s infinite}
+
+  /* --- Composer (1a) --- */
+  #composer{padding:0 30px 22px;display:flex;flex-direction:column;gap:10px}
+  .composer-box{border:1px solid rgba(0,0,0,.16);border-radius:11px;padding:12px 14px;display:flex;align-items:flex-end;gap:12px}
+  .composer-box textarea{flex:1;border:0;outline:0;resize:none;font:400 13.5px Archivo,sans-serif;color:#14171A;min-height:22px;max-height:160px;line-height:1.5;background:transparent}
+  .composer-box textarea::placeholder{color:rgba(0,0,0,.35)}
+  .composer-actions{display:flex;align-items:center;gap:10px;flex:none}
+  .btn-send{width:30px;height:30px;background:#14171A;border:0;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#94BA33;font-size:13px;cursor:pointer}
+  .btn-send:disabled{opacity:.3;cursor:default}
+  .btn-stop{padding:5px 11px;border:1px solid rgba(0,0,0,.14);border-radius:999px;font:400 11px Archivo,sans-serif;color:rgba(0,0,0,.55);background:#fff;cursor:pointer;display:none}
+  .btn-stop.visible{display:block}
+  .btn-stop:disabled{opacity:.4;cursor:default}
+
+  /* Responsive: hide sidebar on narrow screens */
+  @media(max-width:768px){
+    .sidebar{display:none}
+    .main{max-width:100%}
+    #transcript{padding:0 16px}
+    #composer{padding:0 16px 16px}
+    .topbar{padding:12px 16px}
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>{{title}}</h1>
-  <span id="status" class="pill idle">idle</span>
-</header>
-<main id="transcript" aria-live="polite"></main>
-<form id="composer">
-  <textarea id="goal" rows="2" placeholder="Ask the agent… (Enter to send, Shift+Enter for a new line)" autofocus></textarea>
-  <button id="send" type="submit">Send</button>
-  <button id="stop" type="button" disabled>Stop</button>
-</form>
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <img src="{{mark}}" alt="Apra Labs">
+    <span>{{title}}</span>
+  </div>
+  <div class="sidebar-section">CONVERSATIONS</div>
+  <div id="sidebar-list">
+    <div class="sidebar-item active" id="sidebar-current">New conversation</div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="avatar">AL</div>
+    <span>Apra Labs</span>
+  </div>
+</aside>
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title" id="topbar-title">{{title}}</span>
+    <span id="status" class="topbar-status idle">idle</span>
+  </div>
+  <main id="transcript" aria-live="polite"></main>
+  <form id="composer">
+    <div class="composer-box">
+      <textarea id="goal" rows="1" placeholder="Ask about cameras, pipelines or alerts…" autofocus></textarea>
+      <div class="composer-actions">
+        <button id="stop" class="btn-stop" type="button" disabled>Stop</button>
+        <button id="send" class="btn-send" type="submit">↑</button>
+      </div>
+    </div>
+  </form>
+</div>
 <script type="module" src="/chat/app.mjs"></script>
 </body>
 </html>
