@@ -282,16 +282,18 @@ test('startHost rejects Express-style authenticate middleware', async () => {
   assert.fail('expected startHost to reject a 3-arg authenticate function');
 });
 
-test('startHost names missing azure-functions adapter in this build', async () => {
+test('startHost with azure-functions adapter succeeds without a listen port', async () => {
   const fleetApi = makeMockFleetApi();
   const dispatcher = await makeDispatcher();
-  await assert.rejects(
-    () => startHost({ fleetApi, dispatcher, port: 0, adapter: 'azure-functions' }),
-    /comm adapter "azure-functions" is not available in this build/,
-  );
+  const { host, close } = await startHost({ fleetApi, dispatcher, port: 0, adapter: 'azure-functions' });
+  try {
+    assert.equal(host.port(), null);
+  } finally {
+    await close();
+  }
 });
 
-test('startHost names missing durable jobs backend in this build', async () => {
+test('startHost with durable backend rejects without a Durable client', async () => {
   const fleetApi = makeMockFleetApi();
   const dispatcher = await makeDispatcher();
   await assert.rejects(
@@ -300,7 +302,7 @@ test('startHost names missing durable jobs backend in this build', async () => {
       runLoop: { enabled: true, strategy: 'open-ended' },
       dispatch: { enabled: true, backend: 'durable', store: { kind: 'memory' } },
     }),
-    /jobs backend "durable" is not available in this build/,
+    /createDurableJobs requires a Durable client/,
   );
 });
 

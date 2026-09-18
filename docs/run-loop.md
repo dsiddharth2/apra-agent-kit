@@ -15,10 +15,13 @@ These are deliberately separate. Nesting an autonomous loop inside an MCP tool c
 would create agent-inside-agent — double token spend, lost visibility, and two brains
 fighting over strategy.
 
+For async submission (`POST /task` without `?wait=true`), polling, SSE, webhooks, and
+cancellation, see [jobs.md](jobs.md).
+
 ## Architecture
 
 ```text
-POST /task { goal, constraints, budget }
+POST /task?wait=true { goal, constraints, budget }   (or async via jobs — see jobs.md)
   │
   ├─ mergeBudgetConfig()        server defaults ∩ request constraints (stricter wins)
   ├─ dispatcher.dispatch()      acquire a worker lease (doer + reviewer pair)
@@ -307,10 +310,16 @@ const result = await host.run(task);
 
 ## `/task` API
 
+With `dispatch.enabled: true` (default in `host.config.mjs`), `POST /task` without
+`?wait=true` returns `202 { jobId, status: 'queued', position, links }`. Poll
+`GET /jobs/:id`, stream `GET /jobs/:id/events`, or pass `callbackUrl` — see
+[jobs.md](jobs.md). Add `?wait=true` to block until the run loop finishes and receive
+the synchronous body below.
+
 ### Request
 
 ```
-POST /task
+POST /task?wait=true
 Content-Type: application/json
 
 {
@@ -331,7 +340,7 @@ Content-Type: application/json
 Only `goal` is required. `constraints` and `budget` tighten the server defaults —
 the stricter value wins.
 
-### Response
+### Response (`?wait=true`)
 
 ```json
 {
@@ -374,10 +383,10 @@ docker compose up --build
 docker compose run --rm -p 3000:3000 fleet node host/index.mjs
 ```
 
-Then POST to `/task`:
+Then POST to `/task?wait=true` (or `POST /task` and poll — see [jobs.md](jobs.md)):
 
 ```bash
-curl -X POST http://localhost:3000/task \
+curl -X POST "http://localhost:3000/task?wait=true" \
   -H "Content-Type: application/json" \
   -d '{"goal":"Plan a trip to Jaipur","constraints":{"timeoutMs":300000}}'
 ```
@@ -398,7 +407,7 @@ curl -X POST http://localhost:3000/task \
 |---|---|
 | `npm run test:host` | Host config, registry, executor, express, index |
 | `npm run test:phase2` | Run loop, strategies, budgets, guardrails, response parser, prompts |
-| `npm run test:phase2:live` | End-to-end with real Fleet + LLM (spends tokens) |
+| `npm run test:acceptance` | End-to-end with real Fleet + LLM (spends tokens) |
 
 Tests use a mock Fleet with scripted `promptResponses` — deterministic multi-turn agent
 loops without hitting a real LLM.

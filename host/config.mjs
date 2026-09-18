@@ -123,7 +123,7 @@ function validate(raw, env) {
       console.warn('[host/config] in-process jobs on azure-functions — jobs are lost when the instance recycles; use backend "durable"');
     }
     if (typeof budgetsConfig?.timeoutMs === 'number' && budgetsConfig.timeoutMs > dispatch.durable.maxActivityMs) {
-      console.warn(`[host/config] budgets.timeoutMs ${budgetsConfig.timeoutMs} exceeds dispatch.durable.maxActivityMs ${dispatch.durable.maxActivityMs}; the platform may kill the activity before budgets fire`);
+      console.warn(`[host/config] budgets.timeoutMs ${budgetsConfig.timeoutMs} exceeds dispatch.durable.maxActivityMs ${dispatch.durable.maxActivityMs}; Durable does not enforce maxActivityMs — budgets.timeoutMs is the run-loop limit`);
     }
     if (dispatch.store.kind === 'memory' && env.NODE_ENV !== 'test') {
       console.warn('[host/config] dispatch.store.kind "memory" — jobs are lost on restart');

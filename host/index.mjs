@@ -11,7 +11,7 @@ import { executeTool } from './tools/executor.mjs';
 import { createExpressAdapter } from '../comm/express.mjs';
 import { createRawHttpAdapter } from '../comm/raw-http.mjs';
 import { createGuardrails } from './guardrails.mjs';
-import { executeHostedTask } from './tasks.mjs';
+import { executeHostedTask, settleWhenAborted } from './tasks.mjs';
 import { createJobsBackend } from './jobs/index.mjs';
 import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config.mjs';
 import { createNotifier } from './notify/index.mjs';
@@ -41,38 +41,6 @@ function defaultConfigDir() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 }
 
-function settleWhenAborted(run, signal) {
-  if (!signal) return run;
-  if (signal.aborted) {
-    run.catch(() => {});
-    return Promise.resolve({ status: 'cancelled', result: null, history: [], budget: null });
-  }
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const onAbort = () => {
-      if (settled) return;
-      settled = true;
-      run.catch(() => {});
-      resolve({ status: 'cancelled', result: null, history: [], budget: null });
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-    run.then(
-      (value) => {
-        if (settled) return;
-        settled = true;
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      },
-      (err) => {
-        if (settled) return;
-        settled = true;
-        signal.removeEventListener('abort', onAbort);
-        reject(err);
-      },
-    );
-  });
-}
-
 function resolveModules(config, { runLoop, budgets, guardrails, dispatch, notify, chat } = {}) {
   return {
     runLoopConfig: runLoop ?? config.modules?.runLoop,
@@ -96,7 +64,7 @@ export async function startHost({
   fleetApi, dispatcher, port, bindHost: bindHostOption, adapter: adapterName, createAdapter,
   env = process.env, registry, configDir, authenticate = defaultAuthenticate,
   runLoop: runLoopOption, budgets: budgetsOption, guardrails: guardrailsOption,
-  dispatch: dispatchOption, notify: notifyOption, chat: chatOption, durableClient = null,
+  dispatch: dispatchOption, notify: notifyOption, chat: chatOption, durableClient = null, getDurableClient = null,
 } = {}) {
   const config = await loadConfig(configDir ?? defaultConfigDir(), env);
 
@@ -108,6 +76,12 @@ export async function startHost({
 
   let api = fleetApi;
   let stopFleet = null;
+  if (!api && env.FLEET_MOCK_SCRIPT) {
+    if (env.NODE_ENV !== 'test') throw new Error('FLEET_MOCK_SCRIPT is only honoured when NODE_ENV=test');
+    const { createScriptedFleetApi, loadScript } = await import('../tests/helpers/scripted-fleet.mjs');
+    api = createScriptedFleetApi(await loadScript(env.FLEET_MOCK_SCRIPT));
+    console.warn(`[host] using scripted fleet from ${env.FLEET_MOCK_SCRIPT} — no LLM calls will be made`);
+  }
   if (!api) {
     const { ensureApralabs } = await import('../workflows/demo/ensure-apralabs.mjs');
     ensureApralabs();
@@ -180,7 +154,7 @@ export async function startHost({
       });
       jobs = await createJobsBackend(dispatchConfig, {
         runJob, notifier, capacity: activeDispatcher.capacity,
-        allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient,
+        allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient, getDurableClient,
       });
       late.jobs = jobs;
       await jobs.start();
@@ -267,7 +241,10 @@ export async function startHost({
   };
 
   const effectiveConfig = Object.freeze({ ...config, modules: Object.freeze({ ...config.modules, chat: chatConfig }) });
-  return { host: adapter, jobs, notifier, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry };
+  return {
+    host: adapter, jobs, notifier, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry,
+    fleetApi: api, dispatcher: activeDispatcher, guardrailsMod, runLoopConfig, budgetsConfig,
+  };
 }
 
 export function createHost(options = {}) {
