@@ -125,6 +125,7 @@ export async function executeHostedTask(task, {
     };
   }
   try {
+    const workspace = { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer };
     const result = await runTask(fullTask, {
       strategy: runLoopConfig.strategy ?? 'open-ended',
       tools: toolRegistry,
@@ -134,6 +135,7 @@ export async function executeHostedTask(task, {
       ...runLoopConfig,
       jobs,
       signal,
+      workspace,
       onIteration: onProgress,
     });
     return { taskId: fullTask.id, ...result };

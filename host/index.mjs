@@ -245,7 +245,10 @@ export async function startHost({
     await stopFleet?.();
   };
 
-  return { host: adapter, jobs, notifier, callTool, close, stop: close, config, registry: toolRegistry };
+  return {
+    host: adapter, jobs, notifier, callTool, close, stop: close, config, registry: toolRegistry,
+    fleetApi: api, dispatcher: activeDispatcher, guardrailsMod, runLoopConfig, budgetsConfig,
+  };
 }
 
 export function createHost(options = {}) {

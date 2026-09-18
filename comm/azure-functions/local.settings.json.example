@@ -1,0 +1,12 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "DURABLE_TASK_HUB": "fleetjobs",
+    "JOBS_BACKEND": "durable",
+    "WORKER_POOL_SIZE": "0",
+    "WORKER_EPHEMERAL_MAX": "2",
+    "CLAUDE_CODE_OAUTH_TOKEN": ""
+  }
+}
