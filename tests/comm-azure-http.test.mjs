@@ -9,11 +9,24 @@ function fakeApp() {
   return { registered, setup(opts) { registered.__setup = opts; }, http(name, opts) { registered[name] = opts; } };
 }
 function fakeHttpRequest({ method = 'GET', url = 'http://f/api/jobs/j1?q=2', headers = {}, params = {}, body = null, signal } = {}) {
+  let bodyUsed = false;
+  const bodyAlreadyUsed = () => {
+    throw new TypeError('body already used');
+  };
   return {
     method, url, params, query: new URL(url).searchParams,
     headers: new Headers(headers),
-    async json() { if (body === null) throw new Error('no body'); return body; },
-    async text() { return body == null ? '' : JSON.stringify(body); },
+    async json() {
+      if (bodyUsed) bodyAlreadyUsed();
+      if (body === null) throw new Error('no body');
+      bodyUsed = true;
+      return body;
+    },
+    async text() {
+      if (bodyUsed) bodyAlreadyUsed();
+      bodyUsed = true;
+      return body == null ? '' : JSON.stringify(body);
+    },
     signal: signal ?? new AbortController().signal,
   };
 }
