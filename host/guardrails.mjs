@@ -2,6 +2,12 @@ import path from 'node:path';
 import os from 'node:os';
 
 function resolvePolicy(tool, config) {
+  // Kill switch. Freezing denies every irreversible tool outright, ahead of
+  // per-tool policy, so an operator can stop writes without a redeploy and
+  // without editing the policy table tool by tool. Reads keep working.
+  if (config.freeze && tool.reversible === false) {
+    return 'deny';
+  }
   if (config.policies?.[tool.name]) {
     return config.policies[tool.name];
   }
@@ -70,6 +76,10 @@ export function createGuardrails(config = {}, tools = [], executor) {
       }
     }
 
+    if (config.freeze && tool.reversible === false) {
+      return { allowed: false, reason: 'frozen', policy: 'deny' };
+    }
+
     const policy = resolvePolicy(tool, config);
 
     if (policy === 'deny') {
@@ -92,6 +102,10 @@ export function createGuardrails(config = {}, tools = [], executor) {
       if (!result.success) {
         return { ok: false, error: 'guardrail_denied', reason: 'validation_failed', details: result.error };
       }
+    }
+
+    if (config.freeze && tool.reversible === false) {
+      return { ok: false, error: 'guardrail_denied', reason: 'frozen' };
     }
 
     const policy = resolvePolicy(tool, config);
@@ -126,5 +140,9 @@ export function createGuardrails(config = {}, tools = [], executor) {
     return config.dryRunMode === true;
   }
 
-  return { gate, execute, dryRun };
+  function frozen() {
+    return config.freeze === true;
+  }
+
+  return { gate, execute, dryRun, frozen };
 }

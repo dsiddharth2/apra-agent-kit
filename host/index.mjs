@@ -211,7 +211,7 @@ export async function startHost({
   };
 
   const chatRoutes = await buildChatRoutes({ chatConfig, hostName: config.name });
-  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes });
+  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes, guardrails: guardrailsMod });
 
   let adapter;
   const listenPort = port ?? config.comm.port;

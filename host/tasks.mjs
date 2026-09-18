@@ -111,6 +111,9 @@ export async function executeHostedTask(task, {
   api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress,
 }) {
   const fullTask = { id: task.id ?? `t-${Date.now().toString(36)}`, ...task };
+  // Accept a caller-supplied trace id so a run can be correlated with the
+  // request that started it; generate one only when the caller has none.
+  const traceId = task.traceId ?? `tr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const budgetsMod = budgetsConfig ? createBudgets(mergeBudgetConfig(budgetsConfig, fullTask)) : null;
   let lease;
   try {
@@ -118,6 +121,7 @@ export async function executeHostedTask(task, {
   } catch (err) {
     return {
       taskId: fullTask.id,
+      traceId,
       status: 'failed',
       result: { error: 'dispatch_failed', message: String(err?.message ?? err) },
       history: [],
@@ -133,6 +137,7 @@ export async function executeHostedTask(task, {
       guardrails: guardrailsMod,
       ...runLoopConfig,
       jobs,
+      traceId,
       signal,
       onIteration: onProgress,
     });
