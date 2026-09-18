@@ -52,8 +52,12 @@ export const queuedEvent = (jobId, position, now = new Date()) =>
   ({ type: 'queued', jobId, at: iso(now), position });
 export const startedEvent = (jobId, now = new Date()) =>
   ({ type: 'started', jobId, at: iso(now) });
-export const progressEvent = (jobId, iteration, message, now = new Date()) =>
-  ({ type: 'progress', jobId, at: iso(now), iteration, message });
+export const progressEvent = (jobId, iteration, detail, now = new Date()) => {
+  if (typeof detail === 'string') {
+    return { type: 'progress', jobId, at: iso(now), iteration, message: detail };
+  }
+  return { type: 'progress', jobId, at: iso(now), iteration, ...detail };
+};
 export const settledEvent = (jobId, { status, result = null, error = null }, now = new Date()) =>
   ({ type: 'settled', jobId, at: iso(now), status, result, error });
 

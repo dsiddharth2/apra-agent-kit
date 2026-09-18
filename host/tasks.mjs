@@ -4,16 +4,91 @@ import { createPooledFleetApi } from '../pool/pooled-fleet-api.mjs';
 import { runTask } from './run-loop.mjs';
 import { createBudgets } from './budgets.mjs';
 
-export const PROGRESS_TYPES = new Set(['plan', 'action', 'observation', 'review', 'step_review']);
+export const PROGRESS_TYPES = new Set(['plan', 'action', 'observation', 'review', 'step_review', 'step_started', 'step_failed']);
 
 export function describeEvent(event) {
+  switch (event.kind ?? event.type) {
+    case 'plan':           return `plan with ${event.plan?.steps?.length ?? 0} steps`;
+    case 'replan':         return `revised plan with ${event.plan?.steps?.length ?? 0} steps`;
+    case 'step_started':   return `starting step ${event.stepIndex}: ${event.step?.tool ?? event.step?.type ?? 'step'}`;
+    case 'step_completed': return `completed step ${event.stepIndex}: ${event.step?.tool ?? event.step?.type ?? 'step'}`;
+    case 'step_failed':    return `step ${event.stepIndex} failed: ${event.error ?? 'unknown'}`;
+    case 'review':         return `${event.reviewType ?? 'plan'} review ${event.approved ? 'approved' : 'rejected'}`;
+    case 'step_review':    return `step review ${event.approved ? 'approved' : 'rejected'}${event.step ? ': ' + event.step : ''}`;
+    case 'action':         return `calling ${event.tool}`;
+    case 'observation':    return `observed ${event.tool ?? event.stepType ?? 'step'}`;
+    default:               return event.kind ?? event.type;
+  }
+}
+
+function formatPlanSteps(plan) {
+  if (!plan?.steps) return [];
+  return plan.steps.map((s, i) => ({
+    index: i,
+    type: s.type,
+    ...(s.tool ? { tool: s.tool } : {}),
+    description: s.prompt ?? s.tool ?? s.type,
+    status: 'pending',
+  }));
+}
+
+export function richEvent(event, { stepIndex } = {}) {
   switch (event.type) {
-    case 'action':      return `calling ${event.tool}`;
-    case 'observation': return `observed ${event.tool ?? event.stepType ?? 'step'}`;
-    case 'plan':        return `plan with ${event.plan?.steps?.length ?? 0} steps`;
-    case 'review':      return `plan review ${event.approved ? 'approved' : 'rejected'}`;
-    case 'step_review': return `step review ${event.approved ? 'approved' : 'rejected'}: ${event.step}`;
-    default:            return event.type;
+    case 'plan':
+      return {
+        kind: event._replan ? 'replan' : 'plan',
+        message: describeEvent(event),
+        plan: { steps: formatPlanSteps(event.plan) },
+      };
+    case 'step_started':
+      return {
+        kind: 'step_started',
+        message: `starting: ${event.step?.tool ?? event.step?.type ?? 'step'}`,
+        stepIndex: event.stepIndex ?? stepIndex,
+        step: { type: event.step?.type, ...(event.step?.tool ? { tool: event.step.tool } : {}), ...(event.args ? { args: event.args } : {}) },
+      };
+    case 'observation': {
+      const ok = event.ok !== false;
+      return {
+        kind: ok ? 'step_completed' : 'step_failed',
+        message: ok
+          ? `completed: ${event.tool ?? event.stepType ?? 'step'}`
+          : `failed: ${event.tool ?? event.stepType ?? 'step'}`,
+        stepIndex: event.stepIndex ?? stepIndex,
+        step: { type: event.stepType, ...(event.tool ? { tool: event.tool } : {}) },
+        ...(ok
+          ? { result: { ok: true, result: typeof event.result === 'string' ? event.result : (event.text ?? JSON.stringify(event.result ?? null)) } }
+          : { error: event.error ?? event.message ?? 'unknown error', willRetry: false }),
+      };
+    }
+    case 'step_failed':
+      return {
+        kind: 'step_failed',
+        message: `failed: ${event.step?.tool ?? 'step'}`,
+        stepIndex: event.stepIndex ?? stepIndex,
+        step: event.step ?? {},
+        error: event.error ?? 'unknown error',
+        willRetry: event.willRetry ?? false,
+      };
+    case 'review':
+    case 'step_review':
+      return {
+        kind: 'review',
+        message: describeEvent(event),
+        reviewType: event.type === 'step_review' ? 'step' : 'plan',
+        approved: event.approved,
+        feedback: event.feedback ?? null,
+        ...(event.step ? { step: event.step } : {}),
+      };
+    case 'action':
+      return {
+        kind: 'step_started',
+        message: `calling ${event.tool}`,
+        stepIndex: event.stepIndex ?? stepIndex,
+        step: { type: 'tool', tool: event.tool, ...(event.args ? { args: event.args } : {}) },
+      };
+    default:
+      return { kind: event.type, message: describeEvent(event) };
   }
 }
 

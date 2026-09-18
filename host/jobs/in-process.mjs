@@ -89,10 +89,10 @@ export function createInProcessJobs({
         return;
       }
 
-      const onProgress = async ({ iteration, message }) => {
+      const onProgress = async ({ iteration, message, ...detail }) => {
         if (entry.controller.signal.aborted) return;
         await store.update(jobId, { progress: { iteration, message, at: iso() } });
-        await publish(jobId, progressEvent(jobId, iteration, message, now()));
+        await publish(jobId, progressEvent(jobId, iteration, { message, ...detail }, now()));
       };
 
       const task = { id: jobId, ...record.task };

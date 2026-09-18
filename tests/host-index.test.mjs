@@ -339,7 +339,7 @@ test('POST /task executes a task through the run loop', async () => {
   });
 
   try {
-    const res = await httpPost(host.port(), '/task', { goal: 'Inspect members' });
+    const res = await httpPost(host.port(), '/task?wait=true', { goal: 'Inspect members' });
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.status, 'completed');
@@ -406,7 +406,7 @@ test('POST /task merges caller constraints and returns budget_exceeded', async (
   });
 
   try {
-    const res = await httpPost(host.port(), '/task', {
+    const res = await httpPost(host.port(), '/task?wait=true', {
       goal: 'Inspect twice',
       constraints: { maxIterations: 1 },
     });

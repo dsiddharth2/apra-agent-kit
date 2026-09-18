@@ -138,7 +138,9 @@ test('onIteration fires once per progress-worthy event with a message', async ()
   // open-ended yields action then observation for one tool call
   assert.deepEqual(seen.map(s => s.iteration), [1, 2]);
   assert.match(seen[0].message, /calling inspect-members/);
-  assert.match(seen[1].message, /observed inspect-members/);
+  assert.equal(seen[0].kind, 'step_started');
+  assert.match(seen[1].message, /completed.*inspect-members/);
+  assert.equal(seen[1].kind, 'step_completed');
 });
 
 test('onIteration errors do not break the run', async () => {

@@ -1,7 +1,7 @@
 // host/run-loop.mjs
 import { createOpenEndedStrategy } from './strategies/open-ended.mjs';
 import { createPlanExecuteStrategy } from './strategies/plan-execute.mjs';
-import { describeEvent, PROGRESS_TYPES } from './tasks.mjs';
+import { richEvent, PROGRESS_TYPES } from './tasks.mjs';
 
 export async function runTask(task, {
   strategy = 'open-ended',
@@ -43,7 +43,7 @@ export async function runTask(task, {
 
       if (onIteration && PROGRESS_TYPES.has(event.type)) {
         iteration += 1;
-        try { await onIteration({ iteration, message: describeEvent(event) }); } catch { /* progress is best-effort */ }
+        try { await onIteration({ iteration, ...richEvent(event) }); } catch { /* progress is best-effort */ }
       }
 
       if (event.type === 'prompt_usage' && budgets) {

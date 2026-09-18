@@ -104,7 +104,7 @@ export function createPlanExecuteStrategy({
           return null;
         }
         workingPlan = replanParsed.payload;
-        yield { type: 'plan', plan: workingPlan };
+        yield { type: 'plan', plan: workingPlan, _replan: true };
       }
 
       return workingPlan;
@@ -131,7 +131,7 @@ export function createPlanExecuteStrategy({
       }
 
       const revisedPlan = rpParsed.payload;
-      yield { type: 'plan', plan: revisedPlan };
+      yield { type: 'plan', plan: revisedPlan, _replan: true };
 
       return yield* reviewPlan(revisedPlan);
     }
@@ -148,7 +148,7 @@ export function createPlanExecuteStrategy({
     }
 
     currentPlan = planParsed.payload;
-    yield { type: 'plan', plan: currentPlan };
+    yield { type: 'plan', plan: currentPlan, _replan: false };
 
     const reviewedPlan = yield* reviewPlan(currentPlan);
     if (!reviewedPlan) return;
@@ -175,10 +175,14 @@ export function createPlanExecuteStrategy({
             }
           }
 
+          yield { type: 'step_started', stepIndex: i, step: { type: 'tool', tool: step.tool }, args };
+
           let result = await runTool(step.tool, args);
           if (result.ok === false) {
             const toolDef = tools.find(t => t.name === step.tool);
-            if (toolDef?.retryable) {
+            const willRetry = !!(toolDef?.retryable);
+            yield { type: 'step_failed', stepIndex: i, step: { type: 'tool', tool: step.tool }, error: result.message ?? result.error ?? 'Tool execution failed', willRetry };
+            if (willRetry) {
               const retryLimit = toolDef.retryLimit ?? 1;
               for (let retry = 0; retry < retryLimit && result.ok === false; retry++) {
                 result = await runTool(step.tool, args);
@@ -197,7 +201,7 @@ export function createPlanExecuteStrategy({
           }
 
           observations.push({ type: 'observation', stepType: 'tool', tool: step.tool, args, result });
-          yield { type: 'observation', stepType: 'tool', tool: step.tool, args, ...result };
+          yield { type: 'observation', stepType: 'tool', tool: step.tool, args, stepIndex: i, ...result };
 
           if (shouldReview(step)) {
             for (let retryRound = 0; retryRound <= maxStepReviewAttempts; retryRound++) {
@@ -240,11 +244,12 @@ export function createPlanExecuteStrategy({
             if (restartExecution) break;
           }
         } else if (step.type === 'reason') {
+          yield { type: 'step_started', stepIndex: i, step: { type: 'reason' } };
           const reasonPrompt = buildReasonPrompt({ task, step, history: observations, systemPrompt });
           let reasonText = await callPrompt('doer', reasonPrompt);
           yield { type: 'prompt_usage', text: reasonText };
           observations.push({ type: 'observation', stepType: 'reason', text: reasonText });
-          yield { type: 'observation', stepType: 'reason', text: reasonText };
+          yield { type: 'observation', stepType: 'reason', text: reasonText, stepIndex: i };
 
           if (shouldReview(step)) {
             for (let retryRound = 0; retryRound <= maxStepReviewAttempts; retryRound++) {

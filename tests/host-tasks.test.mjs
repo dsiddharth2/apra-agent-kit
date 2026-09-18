@@ -34,6 +34,10 @@ test('describeEvent renders each progress event type', () => {
   assert.equal(describeEvent({ type: 'plan', plan: { steps: [1, 2, 3] } }), 'plan with 3 steps');
   assert.equal(describeEvent({ type: 'review', approved: true }), 'plan review approved');
   assert.equal(describeEvent({ type: 'step_review', approved: false, step: 'weather' }), 'step review rejected: weather');
+  assert.equal(describeEvent({ kind: 'step_started', stepIndex: 0, step: { tool: 'weather' } }), 'starting step 0: weather');
+  assert.equal(describeEvent({ kind: 'step_completed', stepIndex: 1, step: { tool: 'geocode' } }), 'completed step 1: geocode');
+  assert.equal(describeEvent({ kind: 'step_failed', stepIndex: 2, error: 'timeout' }), 'step 2 failed: timeout');
+  assert.equal(describeEvent({ kind: 'replan', plan: { steps: [1, 2] } }), 'revised plan with 2 steps');
 });
 
 test('executeHostedTask runs a task and forwards progress', async () => {
