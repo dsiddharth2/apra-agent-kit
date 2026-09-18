@@ -145,12 +145,18 @@
       }
       body.append(revs);
     }
-    // Answer
+    // Answer — render markdown when marked is available
     if (turn.status === 'completed') {
       if (typeof turn.answer === 'string') {
-        body.append(el('div', 'answer', turn.answer));
+        var answerDiv = el('div', 'answer');
+        if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+          answerDiv.innerHTML = DOMPurify.sanitize(marked.parse(turn.answer));
+        } else {
+          answerDiv.textContent = turn.answer;
+        }
+        body.append(answerDiv);
       } else {
-        body.append(el('pre', 'answer', JSON.stringify(turn.answer, null, 2)));
+        body.append(el('pre', 'answer-raw', JSON.stringify(turn.answer, null, 2)));
       }
     } else if (turn.error) {
       body.append(el('div', 'error-card', turn.status.replace(/_/g, ' ') + ': ' + turn.error.message));

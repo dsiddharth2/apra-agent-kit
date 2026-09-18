@@ -44,7 +44,10 @@ test('chat script route serves reducer plus app as one import-free module', asyn
   assert.ok(res.text.indexOf('function reduce') < res.text.indexOf('new EventSource'), 'reducer must precede app code');
   assert.ok(res.text.includes("fetch('/task'"));
   assert.ok(res.text.includes('console.group'));
-  assert.doesNotMatch(res.text, /innerHTML/);
+  // innerHTML is allowed only when wrapped in DOMPurify.sanitize — verify no raw innerHTML usage
+  var innerHtmlUses = res.text.match(/\.innerHTML\s*=/g) || [];
+  var sanitizedUses = res.text.match(/\.innerHTML\s*=\s*DOMPurify\.sanitize\(/g) || [];
+  assert.equal(innerHtmlUses.length, sanitizedUses.length, 'all innerHTML assignments must use DOMPurify.sanitize');
 });
 
 test('served script parses as JavaScript', async () => {
