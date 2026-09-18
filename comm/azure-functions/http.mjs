@@ -8,12 +8,16 @@ import { runHandler, lowerHeaders } from '../router.mjs';
 export const toFunctionsRoute = (path) =>
   path.replace(/^\//, '').replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, '{$1}');
 
-export async function toNeutralRequest(req, params = {}) {
+export async function toNeutralRequest(req, params = {}, { bodyText } = {}) {
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/api(?=\/|$)/, '') || '/';
   let body = null;
   if (req.method !== 'GET' && req.method !== 'DELETE') {
-    try { body = await req.json(); } catch { body = null; }
+    if (bodyText !== undefined) {
+      try { body = JSON.parse(bodyText); } catch { body = null; }
+    } else {
+      try { body = await req.json(); } catch { body = null; }
+    }
   }
   return {
     method: req.method, path, params: { ...params }, query: Object.fromEntries(url.searchParams),
@@ -49,7 +53,11 @@ export function createAzureFunctionsAdapter({ app: injectedApp, extraInputs = []
           app.http(name, {
             ...common,
             handler: async (req) => {
-              const request = await toNeutralRequest(req, req.params);
+              let bodyText;
+              if (req.method !== 'GET' && req.method !== 'DELETE') {
+                bodyText = await req.text();
+              }
+              const request = await toNeutralRequest(req, req.params, { bodyText });
               const user = route.auth === false ? null : await authenticate(request);
               if (route.auth !== false && !user) return toHttpResponse({ status: 401, body: { ok: false, error: 'unauthorized' } });
               if (route.web) return route.web(req, user);
@@ -59,7 +67,7 @@ export function createAzureFunctionsAdapter({ app: injectedApp, extraInputs = []
               const transport = new Transport({ sessionIdGenerator: undefined });
               try {
                 await server.connect(transport);
-                const webReq = new Request(req.url, { method: req.method, headers: req.headers, body: await req.text() });
+                const webReq = new Request(req.url, { method: req.method, headers: req.headers, body: bodyText });
                 const webRes = await transport.handleRequest(webReq);
                 return {
                   status: webRes.status,
