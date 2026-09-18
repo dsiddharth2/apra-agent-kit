@@ -61,6 +61,11 @@ If `apra-fleet` is not on PATH, set `APRA_FLEET_BIN` to the binary.
 | `node --test tests/demo.live.test.mjs` | yes | yes |
 | `node tests/load-test.mjs --tool <name> --concurrency <n>` | no | no |
 | `python3 tools/weather/weather.py [city]` | no | no |
+| `npm run test:phase4` | no | no |
+| `npm run test:acceptance` | yes | yes |
+| `npm run test:e2e` | no (scripted) / yes (live) | no (scripted) / yes (live) |
+| `npm run e2e:vm` | no (scripted default) | no |
+| `npm run e2e:durable` | no (scripted default) | no |
 
 A successful live workflow run prints `agent result: pong` and **returns to the shell**
 with exit 0. If it prints `pong` and hangs, the transport was not stopped — check the
@@ -105,7 +110,22 @@ docker compose run --rm -p 3000:3000 fleet node host/index.mjs
 
 ## Testing
 
-Tests split by what they need, and the split is the point.
+Tests split into three tiers.
+
+**Unit (mock)** — `npm test`, `npm run test:host`, and `npm run test:phase4`. No Fleet
+binary, no tokens, no network for most files. Mock tests inject a fake `fleetApi`;
+`test:phase4` covers jobs backends, notifier, comm adapters, and the scripted fleet switch.
+
+**Acceptance (real Fleet, in-process)** — `npm run test:acceptance`. Spawns real Fleet
+and spends LLM tokens against an in-process host with a memory jobs store. Run before
+merging changes that touch Fleet integration or the run loop.
+
+**E2E (containers over HTTP)** — `npm run test:e2e`, `npm run e2e:vm`, and
+`npm run e2e:durable`. Black-box tests hit `/task` and `/jobs/*` over HTTP. Default
+`E2E_MODE=scripted` uses `FLEET_MOCK_SCRIPT` (requires `NODE_ENV=test`); set
+`E2E_MODE=live` and provide a token for real LLM runs.
+
+The older split still applies within unit tests:
 
 **Mock tests** (`tests/transport-stdio-fleet.test.mjs`, `tests/pool-*.test.mjs`,
 `tests/demo.test.mjs`, `tests/inspect-members.test.mjs`) run anywhere — no Fleet

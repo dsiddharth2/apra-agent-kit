@@ -34,6 +34,19 @@ CLAUDE_CODE_OAUTH_TOKEN="your-token" docker compose up -d
 claude mcp add --transport http fleet http://127.0.0.1:3000/mcp
 ```
 
+### Async tasks
+
+Submit a goal and get a job id immediately; stream progress or poll for the result.
+
+```bash
+curl.exe -sX POST localhost:3000/task -H "content-type: application/json" -d "{\"goal\":\"What is the weather in Tokyo?\"}"
+curl.exe -N localhost:3000/jobs/<jobId>/events
+curl.exe -s localhost:3000/jobs/<jobId>
+```
+
+See [docs/jobs.md](docs/jobs.md) for the full API. To deploy on Azure Functions with
+horizontal scale, see [docs/deploy-azure-functions.md](docs/deploy-azure-functions.md).
+
 ## Without Docker
 
 ```bash
@@ -59,3 +72,5 @@ npm test    # mock tests — no Fleet binary, no tokens needed
 | [docs/run-loop.md](docs/run-loop.md) | Autonomous agent: strategies, budgets, guardrails, `/task` API |
 | [docs/chat-ui.md](docs/chat-ui.md) | Built-in chat page: turn on `modules.chat`, open `/chat` |
 | [docs/concurrency.md](docs/concurrency.md) | Parallel task execution: worker pool, job queue, config, testing |
+| [docs/jobs.md](docs/jobs.md) | Async jobs: submit, poll, SSE, webhooks, cancellation |
+| [docs/deploy-azure-functions.md](docs/deploy-azure-functions.md) | Azure Functions Premium deployment with Durable backend |
