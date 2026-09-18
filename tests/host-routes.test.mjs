@@ -70,3 +70,13 @@ test('route table shape: task absent without runLoop; job routes absent without 
   assert.equal(some.jobGet.method, 'GET'); assert.equal(some.jobGet.path, '/jobs/:id');
   assert.equal(some.jobCancel.method, 'DELETE'); assert.equal(some.jobEvents, null);
 });
+
+test('buildRoutes mounts chat routes only when given', async () => {
+  const base = buildRoutes({ jobs: fakeJobs(), notifier: null, runSync: async () => ({}), mcpRaw: () => {}, runLoopEnabled: true });
+  assert.equal(base.chatPage, null); assert.equal(base.chatScript, null);
+  const chatPage = { method: 'GET', path: '/chat', auth: false, handler: async () => ({ status: 200, text: 'x' }) };
+  const chatScript = { method: 'GET', path: '/chat/app.mjs', auth: false, handler: async () => ({ status: 200, text: 'y' }) };
+  const withChat = buildRoutes({ jobs: fakeJobs(), notifier: null, runSync: async () => ({}), mcpRaw: () => {}, runLoopEnabled: true, chatRoutes: { chatPage, chatScript } });
+  assert.equal(withChat.chatPage, chatPage); assert.equal(withChat.chatScript, chatScript);
+  assert.deepEqual(Object.keys(withChat), ['health', 'mcp', 'task', 'jobGet', 'jobCancel', 'jobEvents', 'chatPage', 'chatScript']);
+});

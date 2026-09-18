@@ -5,12 +5,24 @@ import { pathToFileURL } from 'node:url';
 import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config.mjs';
 
 const SUPPORTED_ADAPTERS = new Set(['express', 'raw-http', 'azure-functions']);
-const KNOWN_MODULES = new Set(['runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch', 'notify']);
-const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails', 'dispatch', 'notify']);
+const KNOWN_MODULES = new Set(['runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch', 'notify', 'chat']);
+const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails', 'dispatch', 'notify', 'chat']);
 
 export async function loadConfig(configDir, env = process.env) {
   const raw = await resolveConfig(configDir);
   return validate(raw, env);
+}
+
+// modules.chat → { enabled, title }. CHAT_ENABLED=true|false|1|0 wins over the file.
+export function resolveChatConfig(raw = {}, { env = process.env, name = '' } = {}) {
+  const chat = { enabled: !!raw?.enabled, title: raw?.title === undefined ? name : raw.title };
+  const flag = String(env.CHAT_ENABLED ?? '').toLowerCase();
+  if (flag === '1' || flag === 'true') chat.enabled = true;
+  else if (flag === '0' || flag === 'false') chat.enabled = false;
+  if (typeof chat.title !== 'string' || !chat.title.trim()) {
+    throw new Error('chat.title must be a non-empty string');
+  }
+  return chat;
 }
 
 async function resolveConfig(dir) {
@@ -100,6 +112,17 @@ function validate(raw, env) {
   const notify = resolveNotifyConfigWithEnv(modules.notify ?? {}, env);
   if (notify.webhook.allowHttp) console.warn('[host/config] notify.webhook.allowHttp is on — plain-http callback URLs are accepted');
   modules.notify = notify;
+
+  const chat = resolveChatConfig(modules.chat, { env, name: raw.name });
+  if (chat.enabled) {
+    if (!modules.dispatch?.enabled) {
+      throw new Error('chat enabled but dispatch disabled — the chat page streams job events; enable dispatch or disable chat');
+    }
+    if (!notify.sse.enabled) {
+      throw new Error('chat enabled but notify.sse disabled — the chat page needs the SSE stream');
+    }
+  }
+  modules.chat = chat;
 
   return Object.freeze({
     name: raw.name,

@@ -355,6 +355,7 @@ test('POST /task returns 404 when run loop is disabled', async () => {
   const { host, close } = await startHost({
     fleetApi, dispatcher, port: 0,
     runLoop: { enabled: false },
+    chat: { enabled: false },
   });
 
   try {
@@ -562,7 +563,7 @@ test('builder .dispatch().notify() start returns jobs and submit works programma
     .dispatch({ store: { kind: 'memory' } })
     .notify({ sse: { enabled: false } })
     .build();
-  const { jobs, close } = await agent.start({ port: 0 });
+  const { jobs, close } = await agent.start({ port: 0, chat: { enabled: false } });
   try {
     const { jobId } = await jobs.submit({ goal: 'x' });
     for (let i = 0; i < 100 && (await jobs.get(jobId)).status !== 'completed'; i++) await sleep(10);

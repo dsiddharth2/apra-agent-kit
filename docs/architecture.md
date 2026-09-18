@@ -176,7 +176,10 @@ a single HTTP server that serves both `/mcp` and `/task`.
 | File | Responsibility |
 |---|---|
 | `index.mjs` | `startHost()` and `createHost()` builder. Boots Fleet, dispatcher, loads config, mounts routes. |
-| `config.mjs` | Loads `host.config.mjs`, validates module sections (`runLoop`, `budgets`, `guardrails`). |
+| `config.mjs` | Loads `host.config.mjs`, validates module sections (`runLoop`, `budgets`, `guardrails`, `dispatch`, `notify`, `chat`). |
+| `chat/routes.mjs` | `buildChatRoutes()` — serves `/chat` and `/chat/app.mjs` from memory when `modules.chat` is enabled. |
+| `chat/transcript.mjs` | Pure reducer that turns job events into the chat card state; shared by the browser and the tests. |
+| `chat/app.mjs`, `chat/index.html` | The chat page: submit a task, stream its events, render the plan checklist and answer. |
 | `run-loop.mjs` | `runTask()` — selects strategy, iterates events, checks budgets on each LLM call, returns `{ status, result, history, budget }`. |
 | `budgets.mjs` | `createBudgets()` — tracks iterations, tokens, cost, elapsed time. `check()` returns which cap was hit. |
 | `guardrails.mjs` | `createGuardrails()` — per-tool policy gate (`allow`/`deny`/`approve`), input validation, filesystem sandbox, dry-run mode. |
@@ -398,12 +401,20 @@ export default {
       sandboxFs: false,
       dryRunMode: false,
     },
+    chat: {
+      enabled: true,                 // serves /chat; needs dispatch + notify.sse
+      title: 'Travel agent',         // defaults to name
+    },
   },
 };
 ```
 
 When `runLoop` is enabled, the host mounts `POST /task`. When disabled, only `/mcp` +
 `/health` are served.
+
+When `chat` is enabled, the host also mounts `GET /chat` and `GET /chat/app.mjs`; see
+[chat-ui.md](chat-ui.md). Comm adapters serve these through the contract's text response
+form (`{ status, headers, text }`), alongside the JSON and stream forms.
 
 ## Extension points
 

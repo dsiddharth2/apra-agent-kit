@@ -122,6 +122,23 @@ export function runCommContract(name, createAdapter) {
     });
   });
 
+  test(`${name}: text response is served verbatim with its content type`, async () => {
+    await withAdapter({
+      page: { method: 'GET', path: '/chat', auth: false, handler: async () => ({ status: 200, headers: { 'content-type': 'text/html; charset=utf-8' }, text: '<h1>hi</h1>' }) },
+      plain: { method: 'GET', path: '/plain', auth: false, handler: async () => ({ status: 200, text: 'ok' }) },
+    }, async (base) => {
+      const page = await fetch(`${base}/chat`);
+      assert.equal(page.status, 200);
+      assert.equal(page.headers.get('content-type'), 'text/html; charset=utf-8');
+      assert.equal(page.headers.get('content-length'), '11');
+      assert.equal(await page.text(), '<h1>hi</h1>');
+      const plain = await fetch(`${base}/plain`);
+      assert.equal(plain.status, 200);
+      assert.equal(plain.headers.get('content-type'), 'text/plain; charset=utf-8');
+      assert.equal(await plain.text(), 'ok');
+    });
+  });
+
   test(`${name}: stop() closes the listener`, async () => {
     const adapter = createAdapter();
     await adapter.start({ routes: { health: { method: 'GET', path: '/health', auth: false, handler: async () => ({ status: 200, body: {} }) } }, port: 0, host: '127.0.0.1', authenticate });

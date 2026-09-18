@@ -19,6 +19,8 @@
 //              headers has lower-case keys; body is parsed JSON or null.
 //   response = { status, headers?, body? }                          // JSON body
 //            | { status, headers?, stream: AsyncIterable<string> }  // chunked text (SSE)
+//            | { status, headers?, text: string }                   // plain text / HTML / JS, served verbatim
+//              text defaults content-type to text/plain; charset=utf-8 and always sets content-length.
 //
 //   authenticate(request) → user | null     null → adapter answers 401
 //

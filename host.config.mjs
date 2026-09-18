@@ -41,5 +41,9 @@ export default {
     notify: {
       sse: { enabled: true },
     },
+    chat: {
+      enabled: true,
+      title: 'Fleet Agent Kit — travel research agent',
+    },
   },
 };

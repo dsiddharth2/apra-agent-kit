@@ -5,7 +5,7 @@ import { buildMcpServer } from '../mcp/server.mjs';
 import { authenticateRequest as defaultAuthenticate } from '../mcp/auth.mjs';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { createPooledFleetApi } from '../pool/pooled-fleet-api.mjs';
-import { loadConfig } from './config.mjs';
+import { loadConfig, resolveChatConfig } from './config.mjs';
 import { extendRegistry, withJobTools } from './tools/registry.mjs';
 import { executeTool } from './tools/executor.mjs';
 import { createExpressAdapter } from '../comm/express.mjs';
@@ -16,6 +16,7 @@ import { createJobsBackend } from './jobs/index.mjs';
 import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config.mjs';
 import { createNotifier } from './notify/index.mjs';
 import { buildRoutes } from './routes.mjs';
+import { buildChatRoutes } from './chat/routes.mjs';
 
 const SUPPORTED_ADAPTERS = {
   'express': () => createExpressAdapter(),
@@ -72,13 +73,14 @@ function settleWhenAborted(run, signal) {
   });
 }
 
-function resolveModules(config, { runLoop, budgets, guardrails, dispatch, notify } = {}) {
+function resolveModules(config, { runLoop, budgets, guardrails, dispatch, notify, chat } = {}) {
   return {
     runLoopConfig: runLoop ?? config.modules?.runLoop,
     budgetsConfig: budgets ?? config.modules?.budgets,
     guardrailsConfig: guardrails ?? config.modules?.guardrails,
     dispatchConfig: dispatch ?? config.modules?.dispatch,
     notifyConfig: notify ?? config.modules?.notify,
+    chatOverride: chat ?? null,
   };
 }
 
@@ -94,7 +96,7 @@ export async function startHost({
   fleetApi, dispatcher, port, bindHost: bindHostOption, adapter: adapterName, createAdapter,
   env = process.env, registry, configDir, authenticate = defaultAuthenticate,
   runLoop: runLoopOption, budgets: budgetsOption, guardrails: guardrailsOption,
-  dispatch: dispatchOption, notify: notifyOption, durableClient = null,
+  dispatch: dispatchOption, notify: notifyOption, chat: chatOption, durableClient = null,
 } = {}) {
   const config = await loadConfig(configDir ?? defaultConfigDir(), env);
 
@@ -129,7 +131,7 @@ export async function startHost({
   const baseRegistry = registry ?? extendRegistry();
   const toolRegistry = [...baseRegistry];   // job tools appended below once jobs exists
   const resolved = resolveModules(config, {
-    runLoop: runLoopOption, budgets: budgetsOption, guardrails: guardrailsOption, dispatch: dispatchOption, notify: notifyOption,
+    runLoop: runLoopOption, budgets: budgetsOption, guardrails: guardrailsOption, dispatch: dispatchOption, notify: notifyOption, chat: chatOption,
   });
   const { runLoopEnabled, runLoopConfig, budgetsConfig, guardrailsMod } = createPhase2Modules(toolRegistry, resolved);
 
@@ -137,6 +139,23 @@ export async function startHost({
   const dispatchEnabled = runLoopEnabled && !!(resolved.dispatchConfig?.enabled ?? (dispatchOption ? true : false));
   const dispatchConfig = dispatchEnabled ? resolveDispatchConfig({ ...resolved.dispatchConfig, enabled: true }, { env, budgetsConfig }) : null;
   const notifyConfig = resolveNotifyConfigWithEnv(resolved.notifyConfig ?? {}, env);
+
+  // Chat rides on the async job routes and the SSE stream. When the flag comes
+  // from the file, loadConfig already validated it against the file's dispatch
+  // and notify blocks; builder overrides can change both, so check the resolved
+  // values here and unwind exactly like a jobs-backend failure would.
+  const chatConfig = resolved.chatOverride
+    ? resolveChatConfig({ enabled: true, ...resolved.chatOverride }, { env, name: config.name })
+    : config.modules.chat;
+  const chatProblem = !chatConfig.enabled ? null
+    : !dispatchEnabled ? 'chat enabled but dispatch disabled — the chat page streams job events; enable dispatch or disable chat'
+    : !notifyConfig.sse.enabled ? 'chat enabled but notify.sse disabled — the chat page needs the SSE stream'
+    : null;
+  if (chatProblem) {
+    try { await ownDispatcher?.close(); } catch { /* preserve original error */ }
+    try { await stopFleet?.(); } catch { /* preserve original error */ }
+    throw new Error(chatProblem);
+  }
 
   let jobs = null;
   const runSync = (task, { signal } = {}) => executeHostedTask(task, {
@@ -191,7 +210,8 @@ export async function startHost({
     }
   };
 
-  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled });
+  const chatRoutes = await buildChatRoutes({ chatConfig, hostName: config.name });
+  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes });
 
   let adapter;
   const listenPort = port ?? config.comm.port;
@@ -210,7 +230,8 @@ export async function startHost({
 
   console.log(
     `host '${config.name}' listening on http://${bindHost}:${adapter.port() ?? '(platform)'} ` +
-    `(worker capacity ${activeDispatcher.capacity}${jobs ? `, jobs backend ${dispatchConfig.backend}` : ''})`,
+    `(worker capacity ${activeDispatcher.capacity}${jobs ? `, jobs backend ${dispatchConfig.backend}` : ''}` +
+    `${chatConfig.enabled ? ', chat at /chat' : ''})`,
   );
 
   async function callTool(name, args = {}, { signal } = {}) {
@@ -245,7 +266,8 @@ export async function startHost({
     await stopFleet?.();
   };
 
-  return { host: adapter, jobs, notifier, callTool, close, stop: close, config, registry: toolRegistry };
+  const effectiveConfig = Object.freeze({ ...config, modules: Object.freeze({ ...config.modules, chat: chatConfig }) });
+  return { host: adapter, jobs, notifier, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry };
 }
 
 export function createHost(options = {}) {
@@ -265,6 +287,7 @@ export function createHost(options = {}) {
     guardrails(config) { overrides.guardrails = config; return builder; },
     dispatch(config)   { overrides.dispatch = { enabled: true, ...config }; return builder; },
     notify(config)     { overrides.notify = config; return builder; },
+    chat(config)       { overrides.chat = { enabled: true, ...(config ?? {}) }; return builder; },
     build() {
       const hostOptions = overrides;
       return {
