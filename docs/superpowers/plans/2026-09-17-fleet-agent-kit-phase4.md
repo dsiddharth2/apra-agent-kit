@@ -4667,7 +4667,7 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=90s --retries=12 \
 ```json
 // deploy/azure-functions/wwwroot-package.json
 {
-  "name": "workflow-kit-functions",
+  "name": "apra-agent-kit-functions",
   "private": true,
   "type": "module",
   "main": "comm/azure-functions/main.mjs",
@@ -4684,7 +4684,7 @@ Because the wwwroot `package.json` replaces the repo one after `npm ci`, depende
 # Profiles:  vm       → agent-vm (in-process jobs, SQLite)
 #            durable  → azurite + agent-durable (Azure Functions host + Durable)
 # Run:       docker compose -f docker-compose.e2e.yml --profile vm run --rm e2e
-name: workflow-kit-e2e
+name: apra-agent-kit-e2e
 
 x-agent-env: &agent-env
   NODE_ENV: ${E2E_NODE_ENV:-test}
@@ -4775,9 +4775,9 @@ Quick reference:
     BASE_URL=http://localhost:7071/api E2E_TARGET=durable docker compose -f docker-compose.e2e.yml run --rm e2e
 
     # push to Azure (Premium plan, custom container)
-    az acr build -r <registry> -t workflow-kit-functions:latest -f deploy/azure-functions/Dockerfile .
+    az acr build -r <registry> -t apra-agent-kit-functions:latest -f deploy/azure-functions/Dockerfile .
     az functionapp create -g <rg> -n <app> -p <premium-plan> -s <storage> \
-      --functions-version 4 --runtime node --image <registry>.azurecr.io/workflow-kit-functions:latest
+      --functions-version 4 --runtime node --image <registry>.azurecr.io/apra-agent-kit-functions:latest
     az functionapp config appsettings set -g <rg> -n <app> --settings \
       JOBS_BACKEND=durable DURABLE_TASK_HUB=fleetjobs WORKER_POOL_SIZE=0 WORKER_EPHEMERAL_MAX=2 \
       CLAUDE_CODE_OAUTH_TOKEN=<token>
@@ -4946,14 +4946,14 @@ Replace the two `docker run` steps under `host-integration-tests` with:
 ```yaml
       - name: Run host unit tests in Docker
         run: |
-          docker run --rm workflow-kit-ci sh -c "npm run test:host && npm run test:phase2 && npm run test:phase4"
+          docker run --rm apra-agent-kit-ci sh -c "npm run test:host && npm run test:phase2 && npm run test:phase4"
 
       - name: Run acceptance suite (real Fleet)
         if: ${{ env.HAS_OAUTH_TOKEN == 'true' }}
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          docker run --rm -e CLAUDE_CODE_OAUTH_TOKEN workflow-kit-ci npm run test:acceptance
+          docker run --rm -e CLAUDE_CODE_OAUTH_TOKEN apra-agent-kit-ci npm run test:acceptance
 ```
 
 Add to the `host-integration-tests` job (GitHub does not allow `secrets` in `if:` expressions; this mirrors the pattern already used in `ci.yml`):
