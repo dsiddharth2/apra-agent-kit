@@ -17,11 +17,13 @@ memory, etc.
 One container runs one agent. Scaling is horizontal: more containers, each with its own
 agent.
 
-<p align="center">
-  <img src="docs/chat-plan-steps.png" alt="Chat UI — plan with 9 tool steps" width="420" />
-  <img src="docs/chat-answer.png" alt="Chat UI — final travel itinerary" width="420" />
-</p>
-<p align="center"><em>Chat UI: a 9-step travel plan (left) and the final itinerary (right)</em></p>
+<table align="center"><tr>
+<td><img src="docs/chat-plan-steps.png" alt="Chat UI — plan with 9 tool steps" width="400" /></td>
+<td><img src="docs/chat-answer.png" alt="Chat UI — final travel itinerary" width="400" /></td>
+</tr><tr>
+<td align="center"><em>9-step travel plan</em></td>
+<td align="center"><em>Final itinerary</em></td>
+</tr></table>
 
 ## Quick start
 
