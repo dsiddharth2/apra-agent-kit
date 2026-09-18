@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   # Fast job — no Fleet, no Docker. Runs pool/dispatcher/config unit tests.
@@ -102,68 +101,23 @@ jobs:
           echo "$output" >> "$GITHUB_OUTPUT"
           echo "LOAD_EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Post load test report to PR
+      - name: Save load test report
         if: github.event_name == 'pull_request'
-        continue-on-error: true
-        uses: actions/github-script@v7
+        run: |
+          mkdir -p /tmp/load-report
+          echo '${{ github.event.number }}' > /tmp/load-report/pr_number
+          cat > /tmp/load-report/report.json <<'REPORT_EOF'
+          {
+            "dispatch": ${{ toJSON(steps.load-dispatch.outputs.report) }},
+            "full": ${{ toJSON(steps.load-full.outputs.report) }},
+            "e2e": ${{ toJSON(steps.load-e2e.outputs.report) }}
+          }
+          REPORT_EOF
+
+      - name: Upload load test report artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const dispatch = `${{ steps.load-dispatch.outputs.report }}`;
-            const full = `${{ steps.load-full.outputs.report }}`;
-            const e2e = `${{ steps.load-e2e.outputs.report }}`;
-
-            const sections = [
-              '## Load Test Results',
-              '',
-              '### Dispatch tiers (pool=2, ephemeral=3, 8 concurrent inspect-members)',
-              '```',
-              dispatch,
-              '```',
-              '',
-              '### Full capacity (20 concurrent inspect-members)',
-              '```',
-              full,
-              '```',
-            ];
-
-            if (e2e) {
-              sections.push(
-                '',
-                '### End-to-end city-briefing (8 concurrent, LLM + weather + timezone)',
-                '```',
-                e2e,
-                '```',
-              );
-            } else {
-              sections.push(
-                '',
-                '> **Note:** city-briefing load test skipped — `CLAUDE_CODE_OAUTH_TOKEN` secret not configured.',
-              );
-            }
-
-            const body = sections.join('\n');
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const marker = '## Load Test Results';
-            const existing = comments.find(c =>
-              c.user.type === 'Bot' && c.body.startsWith(marker)
-            );
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
+          name: load-test-report
+          path: /tmp/load-report/
+          retention-days: 1
