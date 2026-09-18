@@ -1,0 +1,3 @@
+{ "id": "s02", "title": "NYC time and weather (plan-execute)", "goal": "What time is it in New York and what is the weather like?",
+  "strategy": "plan-execute", "constraints": { "maxIterations": 15 },
+  "expectedStatus": ["completed"], "expectedTools": ["timezone", "weather"] }
