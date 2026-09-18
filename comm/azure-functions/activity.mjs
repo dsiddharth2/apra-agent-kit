@@ -3,7 +3,7 @@
 // external events (raiseEvent 'progress'); cancellation is read back from the
 // orchestrator's customStatus, polled from the task hub, because the activity
 // can run on a different instance from the one that received DELETE /jobs/:id.
-import { executeHostedTask } from '../../host/tasks.mjs';
+import { executeHostedTask, settleWhenAborted } from '../../host/tasks.mjs';
 import { settleFromRunResult } from '../../host/jobs/record.mjs';
 
 let factory = null;
@@ -43,16 +43,19 @@ export function createRunTaskActivity({ getClient, pollMs = 2000, getContext = g
     cancelPoll.unref?.();
 
     try {
-      const run = await executeHostedTask({ ...task, id: jobId }, {
-        api: hostCtx.api,
-        activeDispatcher: hostCtx.activeDispatcher,
-        toolRegistry: hostCtx.toolRegistry,
-        runLoopConfig: hostCtx.runLoopConfig,
-        budgetsConfig: hostCtx.budgetsConfig,
-        guardrailsMod: hostCtx.guardrailsMod,
-        signal: controller.signal,
-        onProgress: (progress) => raise({ type: 'progress', jobId, at: iso(), ...progress }),
-      });
+      const run = await settleWhenAborted(
+        executeHostedTask({ ...task, id: jobId }, {
+          api: hostCtx.api,
+          activeDispatcher: hostCtx.activeDispatcher,
+          toolRegistry: hostCtx.toolRegistry,
+          runLoopConfig: hostCtx.runLoopConfig,
+          budgetsConfig: hostCtx.budgetsConfig,
+          guardrailsMod: hostCtx.guardrailsMod,
+          signal: controller.signal,
+          onProgress: (progress) => raise({ type: 'progress', jobId, at: iso(), ...progress }),
+        }),
+        controller.signal,
+      );
       const settled = settleFromRunResult(run);
       if (controller.signal.aborted && controller.signal.reason === 'cancelled') {
         settled.status = 'cancelled';

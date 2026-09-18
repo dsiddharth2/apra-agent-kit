@@ -92,6 +92,38 @@ export function richEvent(event, { stepIndex } = {}) {
   }
 }
 
+export function settleWhenAborted(run, signal) {
+  if (!signal) return run;
+  if (signal.aborted) {
+    run.catch(() => {});
+    return Promise.resolve({ status: 'cancelled', result: null, history: [], budget: null });
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      run.catch(() => {});
+      resolve({ status: 'cancelled', result: null, history: [], budget: null });
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    run.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
 export function mergeBudgetConfig(baseConfig, task) {
   const merged = { ...baseConfig };
   const constraints = task.constraints ?? {};

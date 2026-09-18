@@ -394,6 +394,44 @@ test('non-retryable tool failure triggers replan', async () => {
   assert.ok(events.some(e => e.type === 'observation' && e.tool === 'weather'));
 });
 
+test('runTool passes workspace to tool executor', async () => {
+  let seenWorkspace = null;
+  const tools = [
+    { name: 'needs-workspace', description: 'Requires workspace', reversible: true, timeout: 5000,
+      run: async ({ workspace }) => {
+        seenWorkspace = workspace;
+        if (!workspace?.doer || !workspace?.reviewer) {
+          throw new Error('requires a workspace with doer and reviewer');
+        }
+        return { ok: true };
+      },
+    },
+  ];
+  const api = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: [
+      '```plan\n{"steps": [{"type": "tool", "tool": "needs-workspace", "args": {}, "reason": "x", "review": false}]}\n```',
+      '```review\n{"approved": true}\n```',
+      '```done\n{"result": "ok", "summary": "ok"}\n```',
+    ],
+  });
+  const workspace = { workerId: 'w-1', doer: { name: 'doer-1' }, reviewer: { name: 'rev-1' } };
+  const strategy = createPlanExecuteStrategy({
+    task: { id: 't-1', goal: 'Workspace test' },
+    tools,
+    fleetApi: api,
+    workspace,
+    maxReplanAttempts: 3,
+    maxReviewAttempts: 2,
+    maxStepReviewAttempts: 2,
+    maxNoActionTurns: 3,
+  });
+  for await (const _ of strategy.iterate()) { /* drain */ }
+  assert.ok(seenWorkspace);
+  assert.equal(seenWorkspace.doer.name, 'doer-1');
+  assert.equal(seenWorkspace.reviewer.name, 'rev-1');
+});
+
 test('history returns all observations', async () => {
   const api = createMockFleetApi({
     members: rosterNames(1),
