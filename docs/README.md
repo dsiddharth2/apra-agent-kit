@@ -6,6 +6,8 @@
 | [development.md](development.md) | You are setting up, running tests, adding a workflow, or debugging a failure. |
 | [mcp-interface.md](mcp-interface.md) | You are setting up or extending the MCP server — tool catalog, registry contract, timeouts, auth, and hosting. |
 | [run-loop.md](run-loop.md) | You want the detailed reference for the autonomous run loop: strategies, budgets, guardrails, prompt templates, and the `/task` API. |
+| [jobs.md](jobs.md) | Async jobs API: submit, poll, SSE, webhooks, cancellation, and MCP job tools. |
+| [deploy-azure-functions.md](deploy-azure-functions.md) | Deploy the agent on Azure Functions Premium with the Durable jobs backend. |
 
 ### Specs
 
@@ -19,5 +21,6 @@ Design documents for features that have been implemented or proposed.
 | [specs/2026-09-09-fleet-agent-kit-spec.md](specs/2026-09-09-fleet-agent-kit-spec.md) | Implemented | Vision spec for the modular agent kit. |
 | [specs/2026-09-11-fleet-agent-kit-phase1-spec.md](specs/2026-09-11-fleet-agent-kit-phase1-spec.md) | Implemented | Host layer: config, tools, communication adapter. |
 | [specs/2026-09-16-fleet-agent-kit-phase2-spec.md](specs/2026-09-16-fleet-agent-kit-phase2-spec.md) | Implemented | Run loop, strategies, budgets, guardrails. |
+| [specs/2026-09-17-fleet-agent-kit-phase4-spec.md](specs/2026-09-17-fleet-agent-kit-phase4-spec.md) | Implemented | Async jobs API, notifier, Durable backend, Azure Functions adapter. |
 
 The [root README](../README.md) is the quickstart: prerequisites, provisioning, and the commands to run things.

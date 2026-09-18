@@ -71,7 +71,14 @@ the Claude process is spawned by Fleet, not by your Node process. Nearly every
 │                                                                  │
 │   host/              POST /task — autonomous agent endpoint       │
 │     │                POST /mcp  — MCP tool server                │
-│     │                GET /health                                 │
+│     │                GET /health  GET /jobs/:id/events           │
+│     │                                                            │
+│     ├─ jobs/         POST /task → backend → executeHostedTask    │
+│     │   ├─ in-process  SQLite queue + worker loops (VM/Docker)   │
+│     │   └─ durable     Azure Durable orchestrator + activity     │
+│     ├─ notify/       SSE + webhook fan-out from job events       │
+│     ├─ routes.mjs    /task, /jobs/*, /mcp, /health               │
+│     ├─ tasks.mjs     executeHostedTask — shared by sync + async  │
 │     │                                                            │
 │     ├─ run-loop       runTask() — drives a strategy to completion│
 │     │   ├─ strategies/  open-ended (ReAct) or plan-execute       │
@@ -85,6 +92,8 @@ the Claude process is spawned by Fleet, not by your Node process. Nearly every
 │   mcp/             tool catalog — registry entries for both      │
 │     │              /mcp (external LLM picks tools) and           │
 │     │              /task (internal LLM picks tools)              │
+│   comm/            adapter: express | raw-http | azure-functions │
+│     │                                                            │
 │     ▼                                                            │
 │   workflows/       runDemo(), runInspectMembers(), etc.           │
 │     │                                                            │
@@ -183,6 +192,30 @@ a single HTTP server that serves both `/mcp` and `/task`.
 | `response-parser.mjs` | Extracts fenced JSON blocks from LLM responses. |
 | `tools/registry.mjs` | Extends the MCP registry with reversibility, timeout, and retry metadata. |
 | `tools/executor.mjs` | Runs a tool with validation, timeout, and error handling. |
+| `routes.mjs` | Route table: `/health`, `/mcp`, `/task`, `/jobs/:id`, `/jobs/:id/events`. |
+| `tasks.mjs` | `executeHostedTask()` — dispatch lease, budgets, run loop; shared by sync and async paths. |
+
+#### `host/jobs/`
+
+| File | Responsibility |
+|---|---|
+| `interface.mjs` | Backend contract, error types, `validateCallbackUrl()`. |
+| `record.mjs` | `JobRecord` shape, status transitions, event helpers, `ringEvents()`. |
+| `in-process.mjs` | SQLite-backed queue with worker loops for VM/Docker. |
+| `durable.mjs` | Durable Functions backend — orchestrator status, poll-based subscribe. |
+| `index.mjs` | `createJobsBackend()` factory. |
+| `config.mjs` | Resolves `dispatch` config and env overrides. |
+| `store/interface.mjs` | Store contract for records and events. |
+| `store/sqlite.mjs` | WAL-mode SQLite persistence. |
+| `store/memory.mjs` | In-memory store for unit tests. |
+
+#### `host/notify/`
+
+| File | Responsibility |
+|---|---|
+| `index.mjs` | `createNotifier()` — fans out events to SSE and webhook channels. |
+| `sse.mjs` | `GET /jobs/:id/events` handler with replay, subscribe, and heartbeat. |
+| `webhook.mjs` | POSTs `settled` (and optional `progress`) to `callbackUrl`. |
 
 #### `host/strategies/`
 
@@ -211,6 +244,18 @@ Prompt builders. Each returns a string sent to the doer or reviewer via
 | `reason.mjs` | Plan-execute | Reasoning step → analysis text |
 | `replan.mjs` | Plan-execute | Failed plan + feedback → revised plan |
 | `format-tools.mjs` | Both | Tool registry → text catalog with names, params, reversibility |
+
+### `comm/`
+
+| File | Responsibility |
+|---|---|
+| `router.mjs` | Neutral request/response routing, param matching, auth hook. |
+| `raw-http.mjs` | Node `http` adapter implementing the comm contract. |
+| `express.mjs` | Express adapter (default for VM/Docker). |
+| `azure-functions/http.mjs` | Functions HTTP triggers, `/api` prefix strip, MCP web-standard transport. |
+| `azure-functions/orchestrator.mjs` | Durable orchestrator — records events in `customStatus`. |
+| `azure-functions/activity.mjs` | Durable activity wrapping `executeHostedTask`. |
+| `azure-functions/main.mjs` | Functions entry — `startHost()`, registers triggers and durable functions. |
 
 ### `tools/`
 
@@ -261,22 +306,38 @@ Claude Code chooses a tool from tools/list
        └─ lease.release()
 ```
 
-### An autonomous task (POST /task)
+### A synchronous task (POST /task?wait=true)
 
 ```text
-POST /task { goal: "Plan a trip to Jaipur", constraints: { timeoutMs: 300000 } }
+POST /task?wait=true { goal, constraints, budget }
   ├─ mergeBudgetConfig()              server defaults ∩ request (stricter wins)
-  ├─ dispatcher.dispatch()            acquire lease → doer + reviewer pair
-  └─ runTask(task, { strategy, tools, budgets, guardrails })
+  ├─ executeHostedTask()              host/tasks.mjs
+  │    ├─ dispatcher.dispatch()       acquire lease → doer + reviewer pair
+  │    └─ runTask()                   strategy → budgets → guardrails
+  └─ return { taskId, status, result, history, budget }
+       └─ lease.release()
+```
+
+### An async task (POST /task)
+
+```text
+POST /task { goal, callbackUrl? }
+  └─ jobs.submit()
+       ├─ store record (queued)        emit queued event
+       ├─ notifier.publish()           SSE subscribers + webhook (if configured)
        │
-       │  strategy.iterate() yields events:
-       │    prompt_usage → budgets.check()
-       │    observation  → accumulate history
-       │    done         → return result
-       │    error        → return failure
+       ├─ in-process backend           worker loop picks head → processing
+       │    or durable backend          startNew(orchestrator) → activity
        │
-       └─ return { status, result, history, budget }
-            └─ lease.release()
+       ├─ executeHostedTask()          same run loop as sync path
+       │    onProgress → progress events with kind (plan, step_started, …)
+       │
+       ├─ emit started → progress* → settled
+       └─ notifier.publish()           fan-out to SSE + webhook
+
+GET /jobs/:id          → poll JobRecord
+GET /jobs/:id/events   → SSE stream (replay + live)
+DELETE /jobs/:id       → cancel (cooperative abort)
 ```
 
 ## Design decisions
@@ -336,6 +397,20 @@ Routes depend only on `req.user`, so real auth drops in without editing `auth.mj
 **Teardown is idempotent `stop()`.** Safe to call twice. Unexpected child exit rejects
 the in-flight `callTool`; the process is not restarted.
 
+**Two seams: comm adapter vs jobs backend.** The comm layer (`express`, `raw-http`,
+`azure-functions`) translates HTTP into neutral routes. The jobs backend (`in-process`,
+`durable`) owns queueing, records, and cancellation. Either backend can pair with any
+adapter that mounts the same route table.
+
+**Progress events are rich.** Progress SSE/webhook payloads include a `kind` field
+(`plan`, `step_started`, `step_completed`, …) and `stepIndex` so a UI can render the
+plan and step timeline without parsing LLM output.
+
+**Cancellation is cooperative and polled on Azure.** In-process backends abort via
+`AbortSignal` when the run loop yields. On Durable Functions, the activity polls
+`customStatus.cancelRequested` at `pollMs` because DELETE may hit a different instance
+than the activity.
+
 ## Where state lives
 
 | State | Location | Lifetime |
@@ -365,6 +440,14 @@ The downstream Fleet child lives for the MCP server process, not per HTTP reques
 | `APRA_FLEET_BIN` | `apra-fleet` on PATH | Path to the Fleet binary when it is not on PATH. |
 | `PORT` | `3000` | Server listen port. |
 | `MCP_BIND_HOST` | `127.0.0.1` | Server bind address. Compose sets `0.0.0.0`. |
+| `JOBS_BACKEND` | `in-process` | Jobs backend: `in-process` or `durable`. |
+| `JOBS_MAX_QUEUE_SIZE` | `100` | Max queued jobs before `429`. |
+| `JOBS_CONCURRENCY` | `1` | In-process worker loops. |
+| `JOBS_DB_PATH` | `./workdir/jobs.db` | SQLite database path. |
+| `JOBS_RETENTION_MS` | `86400000` | Terminal record retention (24 h). |
+| `DURABLE_TASK_HUB` | `fleetjobs` | Durable Functions task hub name. |
+| `DURABLE_POLL_MS` | `2000` | Cancel/SSE poll interval on Azure. |
+| `WEBHOOK_ALLOW_HTTP` | (unset) | Allow `http:` callback URLs (dev only). |
 
 ### Host config (`host.config.mjs`)
 
@@ -398,12 +481,22 @@ export default {
       sandboxFs: false,
       dryRunMode: false,
     },
+    dispatch: {
+      enabled: true,
+      store: { kind: 'sqlite', dbPath: './jobs.db' },
+      concurrency: 2,
+      maxQueueSize: 10,
+    },
+    notify: {
+      sse: { enabled: true },
+    },
   },
 };
 ```
 
-When `runLoop` is enabled, the host mounts `POST /task`. When disabled, only `/mcp` +
-`/health` are served.
+When `runLoop` is enabled, the host mounts `POST /task` and, when `dispatch.enabled`
+is true, the async jobs API (`/jobs/*`). When disabled, only `/mcp` + `/health` are
+served.
 
 ## Extension points
 

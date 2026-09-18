@@ -15,6 +15,9 @@ These are deliberately separate. Nesting an autonomous loop inside an MCP tool c
 would create agent-inside-agent — double token spend, lost visibility, and two brains
 fighting over strategy.
 
+For async submission (`POST /task` without `?wait=true`), polling, SSE, webhooks, and
+cancellation, see [jobs.md](jobs.md).
+
 ## Architecture
 
 ```text
@@ -398,7 +401,7 @@ curl -X POST http://localhost:3000/task \
 |---|---|
 | `npm run test:host` | Host config, registry, executor, express, index |
 | `npm run test:phase2` | Run loop, strategies, budgets, guardrails, response parser, prompts |
-| `npm run test:phase2:live` | End-to-end with real Fleet + LLM (spends tokens) |
+| `npm run test:acceptance` | End-to-end with real Fleet + LLM (spends tokens) |
 
 Tests use a mock Fleet with scripted `promptResponses` — deterministic multi-turn agent
 loops without hitting a real LLM.
