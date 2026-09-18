@@ -89,15 +89,16 @@ The guardrails answer *may this tool run*. They do not answer *why did the model
 
 ## 5. Not yet built — and what that means for an adopter
 
-Stated plainly so adopters can plan around it rather than discover it.
+Stated plainly so adopters can plan around these rather than discover them. What exists today is a
+tool server plus an autonomous run loop with budgets and guardrails; the rest is not here yet.
 
-| # | Capability | Phase | Impact while missing |
-|---|---|---|---|
-| 5.1 | Platform adapters beyond Express | 4 | An agent deploys as an Express service. Adopters who must deploy to a specific serverless platform take a dependency on this phase |
-| 5.2 | Eval harness | 3 (now after 4) | No automated quality gate. Adopters should write fixtures anyway — they become its input, and writing them forces behaviour to be specified rather than improvised |
-| 5.3 | Async dispatch (202 + polling) | 4 | `POST /task` is synchronous. Any caller that cannot hold a connection open for the length of a run is blocked |
-| 5.4 | Memory, run-state checkpoints, crash recovery | 3 | A crashed run cannot resume. Acceptable for short plans; not for fan-out or long-running work |
-| 5.5 | Human-in-the-loop approval transport | unspecified | The `approvalCallback` interface exists; how a human reaches it is left to the adopter. In-session chat satisfies it only for interactive use |
+| # | Missing capability | Impact while it is missing |
+|---|---|---|
+| 5.1 | **Platform adapters beyond Express** | An agent deploys as an Express service. An adopter who must deploy onto a specific serverless platform is blocked until an adapter for it exists |
+| 5.2 | **Eval harness** | No automated quality gate. Write the fixtures anyway — a fixed question set with known-good outputs. They become the harness's input when it lands, and writing them early forces behaviour to be specified rather than improvised |
+| 5.3 | **Async dispatch** (accept-then-poll) | `POST /task` is synchronous and blocks for the length of the run. Any caller that cannot hold a connection open that long is blocked |
+| 5.4 | **Memory, run-state checkpoints, crash recovery** | A crashed run cannot resume. Acceptable for short plans; not for fan-out or long-running work |
+| 5.5 | **Human-in-the-loop approval transport** | The `approvalCallback` interface exists, but how a human actually reaches it is left to the adopter. In-session chat satisfies it only for interactive use |
 
 ---
 
@@ -142,5 +143,5 @@ Not blocking, but each changes the shape of an adoption:
 
 ---
 
-*Raised 2026-09-17 during the first adoption of the kit, from the Phase 1 and Phase 2 specs and the
+*Raised 2026-09-17 during the first adoption of the kit, from the specs in docs/specs and the
 implementation in `host/`. Adopter-specific findings are kept out of this document deliberately.*
