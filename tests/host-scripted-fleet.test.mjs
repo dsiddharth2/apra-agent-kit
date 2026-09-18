@@ -52,7 +52,7 @@ test('startHost uses the scripted fleet under NODE_ENV=test and refuses it other
     /NODE_ENV=test/,
   );
 
-  const { host, close } = await startHost({ port: 0, env: { ...base, NODE_ENV: 'test' }, runLoop: { enabled: true, strategy: 'open-ended' }, dispatch: { enabled: false } });
+  const { host, close } = await startHost({ port: 0, env: { ...base, NODE_ENV: 'test' }, runLoop: { enabled: true, strategy: 'open-ended' }, dispatch: { enabled: false }, chat: { enabled: false } });
   try {
     const res = await fetch(`http://127.0.0.1:${host.port()}/task?wait=true`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: 'What is the weather in Tokyo?' }),
