@@ -9,11 +9,12 @@ function syncResponse(result) {
   return json(200, result);
 }
 
-export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEnabled }) {
+export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEnabled, chatRoutes = null }) {
   const routes = {
     health: { method: 'GET', path: '/health', auth: false, handler: async () => json(200, { ok: true }) },
     mcp: { method: 'POST', path: '/mcp', raw: true, handler: mcpRaw, web: mcpWeb },
     task: null, jobGet: null, jobCancel: null, jobEvents: null,
+    chatPage: chatRoutes?.chatPage ?? null, chatScript: chatRoutes?.chatScript ?? null,
   };
 
   if (runLoopEnabled) {
