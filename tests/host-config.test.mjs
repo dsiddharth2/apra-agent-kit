@@ -265,7 +265,7 @@ test('azure-functions with in-process backend warns; budgets timeout above maxAc
   const { result, warnings } = await captureWarnings(() => loadConfig(dir));
   assert.equal(result.modules.dispatch.backend, 'in-process');
   assert.ok(warnings.some(w => /in-process.*azure-functions|lost when the instance recycles/i.test(w)));
-  assert.ok(warnings.some(w => /timeoutMs.*maxActivityMs/i.test(w)));
+  assert.ok(warnings.some(w => /timeoutMs.*maxActivityMs/i.test(w) && /does not enforce maxActivityMs/i.test(w)));
   assert.ok(warnings.some(w => /allowHttp/i.test(w)));
 });
 

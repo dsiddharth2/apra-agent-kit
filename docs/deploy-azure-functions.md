@@ -88,7 +88,7 @@ Scale to 2 instances and verify both answer `GET /jobs/:id` for the same job id 
 
 ## Limits and tuning
 
-- **`budgets.timeoutMs`** vs **`dispatch.durable.maxActivityMs`** (default 3 600 000 ms): if the budget timeout exceeds the activity cap, the plan kills the activity before budgets would. Keep `timeoutMs` below `maxActivityMs`.
+- **`budgets.timeoutMs`** vs **`dispatch.durable.maxActivityMs`**: Durable here does not enforce `maxActivityMs` (`host.json` sets `functionTimeout: -1`). `budgets.timeoutMs` is the actual run-loop limit. `maxActivityMs` is configuration only.
 - **`pollMs`** (`DURABLE_POLL_MS`): lower values improve cancel and SSE latency but increase task-hub reads.
 - **Event ring:** orchestrator keeps the last 50 events in `customStatus.events`; `queued`, `started`, and `settled` are always retained.
 - **SSE idle cut:** Azure closes idle connections after ~230 s. The server emits `: ping` every 25 s; clients that disconnect reconnect with `Last-Event-ID` and miss nothing.

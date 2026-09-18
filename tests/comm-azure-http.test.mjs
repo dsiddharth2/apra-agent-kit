@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { createAzureFunctionsAdapter, toNeutralRequest, toHttpResponse, toFunctionsRoute } = await import('../comm/azure-functions/http.mjs');
+const { createAzureFunctionsAdapter, toNeutralRequest, toHttpResponse, toFunctionsRoute, getHttpDurableClient } = await import('../comm/azure-functions/http.mjs');
 
 function fakeApp() {
   const registered = {};
@@ -104,6 +104,34 @@ test('adapter registers one anonymous function per non-null route, with extraInp
   assert.equal(adapter.port(), null);
   assert.equal(adapter.address(), null);
   await adapter.stop();
+});
+
+test('overlapping HTTP invocations keep distinct Durable clients', async () => {
+  const app = fakeApp();
+  const adapter = createAzureFunctionsAdapter({
+    app,
+    extraInputs: [{ name: 'client', type: 'durableClient' }],
+    getClient: (context) => ({ id: context.invocationId }),
+  });
+  await adapter.start({
+    routes: {
+      jobGet: {
+        method: 'GET', path: '/jobs/:id', auth: false,
+        handler: async () => {
+          await new Promise(r => setTimeout(r, 15));
+          return { status: 200, body: { client: getHttpDurableClient().id } };
+        },
+      },
+    },
+    authenticate: () => ({ id: 'u' }),
+    mcpServerFactory: () => ({ connect: async () => {}, close: async () => {} }),
+  });
+  const [a, b] = await Promise.all([
+    app.registered.jobGet.handler(fakeHttpRequest({ params: { id: '1' } }), { invocationId: 'A' }),
+    app.registered.jobGet.handler(fakeHttpRequest({ params: { id: '2' } }), { invocationId: 'B' }),
+  ]);
+  assert.equal(a.jsonBody.client, 'A');
+  assert.equal(b.jsonBody.client, 'B');
 });
 
 test('raw route: 401 when denied; delegates to route.web when present', async () => {

@@ -158,8 +158,8 @@ Failed deliveries retry 3 times with exponential backoff starting at 1 s. A webh
 ## Backpressure, retention, restart
 
 - **`maxQueueSize`** — when the queue is full, `POST /task` returns `429` with `Retry-After: 30`.
-- **`retentionMs`** (default 24 h) — terminal records are purged; unknown ids return `404`.
-- **Restart** — `queued` jobs resume; `processing` jobs settle as `failed` with `error.code = 'interrupted'`.
+- **`retentionMs`** (default 24 h) — **in-process only:** terminal records are purged; unknown ids return `404`. The durable backend accepts `retentionMs` but never purges; task-hub history remains until purged outside this repo.
+- **Restart** — **in-process only:** `queued` jobs resume; `processing` jobs settle as `failed` with `error.code = 'interrupted'`. Durable does not settle `interrupted` on a Functions recycle; hub history remains, and a recycled activity surfaces as `activity_failed` until purged outside this repo.
 - **SQLite** — exactly one Node process per database file. Two processes sharing a volume would not corrupt the file, but `claim` is `UPDATE … WHERE status = 'queued'`, so a second process skips a job already claimed — double-run is not the risk. Lost events, stale polls, and racing cancel are; use the durable backend for multi-instance scale-out.
 
 ## Configuration
@@ -184,7 +184,7 @@ notify: {
 | `JOBS_MAX_QUEUE_SIZE` | `100` | Max queued jobs before `429` |
 | `JOBS_CONCURRENCY` | `1` | Worker loops (in-process only) |
 | `JOBS_DB_PATH` | `./workdir/jobs.db` | SQLite file path |
-| `JOBS_RETENTION_MS` | `86400000` | How long to keep terminal records |
+| `JOBS_RETENTION_MS` | `86400000` | In-process purge window for terminal records (unused by durable) |
 | `DURABLE_TASK_HUB` | `fleetjobs` | Durable Functions task hub name |
 | `DURABLE_POLL_MS` | `2000` | Cancel/SSE poll interval on Azure |
 | `WEBHOOK_ALLOW_HTTP` | (unset) | Set `true` to allow `http:` callback URLs (dev only) |

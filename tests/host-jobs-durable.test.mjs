@@ -146,3 +146,48 @@ test('submit after stop throws JobsClosedError and stop clears pollers', async (
   await jobs.stop();
   await assert.rejects(() => jobs.submit({ goal: 'g' }), JobsClosedError);
 });
+
+test('overlapping getClient identities cannot clobber each other', async () => {
+  const { AsyncLocalStorage } = await import('node:async_hooks');
+  const als = new AsyncLocalStorage();
+  const jobs = createDurableJobs({ getClient: () => als.getStore(), config: cfg, notifier: null, logger: quiet });
+  const clientA = fakeClient();
+  const clientB = fakeClient();
+  const [outA, outB] = await Promise.all([
+    als.run(clientA, () => jobs.submit({ goal: 'from-a' })),
+    als.run(clientB, () => jobs.submit({ goal: 'from-b' })),
+  ]);
+  assert.equal(clientA.calls.startNew.length, 1);
+  assert.equal(clientB.calls.startNew.length, 1);
+  assert.equal(clientA.calls.startNew[0].input.task.goal, 'from-a');
+  assert.equal(clientB.calls.startNew[0].input.task.goal, 'from-b');
+  const [recA, recB] = await Promise.all([
+    als.run(clientA, () => jobs.get(outA.jobId)),
+    als.run(clientB, () => jobs.get(outB.jobId)),
+  ]);
+  assert.equal(recA.task.goal, 'from-a');
+  assert.equal(recB.task.goal, 'from-b');
+  assert.equal(await als.run(clientA, () => jobs.get(outB.jobId)), null);
+  assert.equal(await als.run(clientB, () => jobs.get(outA.jobId)), null);
+});
+
+test('startPoller snapshots getClient once so later ticks ignore a flipped factory', async () => {
+  const clientA = fakeClient();
+  const clientB = fakeClient();
+  let current = clientA;
+  const jobs = createDurableJobs({ getClient: () => current, config: cfg, notifier: null, logger: quiet });
+  const { jobId } = await jobs.submit({ goal: 'g' });
+  const instA = clientA.instances[jobId];
+  const E = (seq, type) => ({ seq, type, jobId, at: 't' });
+  instA.customStatus = { status: 'processing', events: [E(1, 'queued')] };
+  const seen = [];
+  const unsub = jobs.subscribe(jobId, e => seen.push(e.seq));
+  current = clientB;
+  await sleep(15);
+  instA.customStatus = { status: 'processing', events: [...instA.customStatus.events, E(2, 'started')] };
+  await sleep(15);
+  unsub();
+  assert.deepEqual(seen, [1, 2]);
+  assert.equal(clientB.calls.startNew.length, 0);
+  assert.equal(Object.keys(clientB.instances).length, 0);
+});

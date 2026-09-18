@@ -64,7 +64,7 @@ export async function startHost({
   fleetApi, dispatcher, port, bindHost: bindHostOption, adapter: adapterName, createAdapter,
   env = process.env, registry, configDir, authenticate = defaultAuthenticate,
   runLoop: runLoopOption, budgets: budgetsOption, guardrails: guardrailsOption,
-  dispatch: dispatchOption, notify: notifyOption, chat: chatOption, durableClient = null,
+  dispatch: dispatchOption, notify: notifyOption, chat: chatOption, durableClient = null, getDurableClient = null,
 } = {}) {
   const config = await loadConfig(configDir ?? defaultConfigDir(), env);
 
@@ -154,7 +154,7 @@ export async function startHost({
       });
       jobs = await createJobsBackend(dispatchConfig, {
         runJob, notifier, capacity: activeDispatcher.capacity,
-        allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient,
+        allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient, getDurableClient,
       });
       late.jobs = jobs;
       await jobs.start();
