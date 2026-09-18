@@ -32,5 +32,18 @@ export default {
       validateInputs: true,
       dryRunMode: false,
     },
+    dispatch: {
+      enabled: true,
+      store: { kind: 'sqlite', dbPath: './jobs.db' },
+      concurrency: 2,
+      maxQueueSize: 10,
+    },
+    notify: {
+      sse: { enabled: true },
+    },
+    chat: {
+      enabled: true,
+      title: 'Fleet Agent Kit — travel research agent',
+    },
   },
 };

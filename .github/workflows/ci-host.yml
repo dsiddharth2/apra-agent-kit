@@ -43,4 +43,4 @@ jobs:
       - name: Run host live integration test
         run: |
           docker run --rm apra-agent-kit-ci \
-            node --test tests/host.live.test.mjs
+            node --test tests/acceptance/tool-server.acceptance.test.mjs

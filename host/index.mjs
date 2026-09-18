@@ -2,34 +2,85 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createWorkerDispatcher } from '../pool/index.mjs';
 import { buildMcpServer } from '../mcp/server.mjs';
-import { authenticate as defaultAuthenticate } from '../mcp/auth.mjs';
+import { authenticateRequest as defaultAuthenticate } from '../mcp/auth.mjs';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { createPooledFleetApi } from '../pool/pooled-fleet-api.mjs';
-import { loadConfig } from './config.mjs';
-import { extendRegistry } from './tools/registry.mjs';
+import { loadConfig, resolveChatConfig } from './config.mjs';
+import { extendRegistry, withJobTools } from './tools/registry.mjs';
 import { executeTool } from './tools/executor.mjs';
 import { createExpressAdapter } from '../comm/express.mjs';
-import { runTask } from './run-loop.mjs';
-import { createBudgets } from './budgets.mjs';
+import { createRawHttpAdapter } from '../comm/raw-http.mjs';
 import { createGuardrails } from './guardrails.mjs';
+import { executeHostedTask } from './tasks.mjs';
+import { createJobsBackend } from './jobs/index.mjs';
+import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config.mjs';
+import { createNotifier } from './notify/index.mjs';
+import { buildRoutes } from './routes.mjs';
+import { buildChatRoutes } from './chat/routes.mjs';
 
-const SUPPORTED_ADAPTERS = { express: createExpressAdapter };
+const SUPPORTED_ADAPTERS = {
+  'express': () => createExpressAdapter(),
+  'raw-http': () => createRawHttpAdapter(),
+  'azure-functions': async () => (await import('../comm/azure-functions/http.mjs')).createAzureFunctionsAdapter(),
+};
 
-function resolveAdapter(name) {
+async function resolveAdapter(name) {
   const factory = SUPPORTED_ADAPTERS[name];
   if (!factory) throw new Error(`unsupported comm adapter: "${name}"`);
-  return factory();
+  try {
+    return await factory();
+  } catch (err) {
+    if (err?.code === 'ERR_MODULE_NOT_FOUND') {
+      throw new Error(`comm adapter "${name}" is not available in this build`);
+    }
+    throw err;
+  }
 }
 
 function defaultConfigDir() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 }
 
-function resolvePhase2Modules(config, { runLoop, budgets, guardrails } = {}) {
+function settleWhenAborted(run, signal) {
+  if (!signal) return run;
+  if (signal.aborted) {
+    run.catch(() => {});
+    return Promise.resolve({ status: 'cancelled', result: null, history: [], budget: null });
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      run.catch(() => {});
+      resolve({ status: 'cancelled', result: null, history: [], budget: null });
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    run.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
+function resolveModules(config, { runLoop, budgets, guardrails, dispatch, notify, chat } = {}) {
   return {
     runLoopConfig: runLoop ?? config.modules?.runLoop,
     budgetsConfig: budgets ?? config.modules?.budgets,
     guardrailsConfig: guardrails ?? config.modules?.guardrails,
+    dispatchConfig: dispatch ?? config.modules?.dispatch,
+    notifyConfig: notify ?? config.modules?.notify,
+    chatOverride: chat ?? null,
   };
 }
 
@@ -37,97 +88,23 @@ function createPhase2Modules(toolRegistry, { runLoopConfig, budgetsConfig, guard
   const runLoopEnabled = runLoopConfig?.enabled ?? !!runLoopConfig?.strategy;
   const budgetsEnabled = budgetsConfig && (budgetsConfig.enabled ?? true);
   const guardrailsEnabled = guardrailsConfig && (guardrailsConfig.enabled ?? true);
-  const guardrailsMod = guardrailsEnabled
-    ? createGuardrails(guardrailsConfig, toolRegistry, executeTool)
-    : null;
-  const budgetsMod = budgetsEnabled ? createBudgets(budgetsConfig) : null;
-  return { runLoopEnabled, runLoopConfig, budgetsConfig: budgetsEnabled ? budgetsConfig : null, budgetsMod, guardrailsMod };
+  const guardrailsMod = guardrailsEnabled ? createGuardrails(guardrailsConfig, toolRegistry, executeTool) : null;
+  return { runLoopEnabled, runLoopConfig, budgetsConfig: budgetsEnabled ? budgetsConfig : null, guardrailsMod };
 }
 
-function mergeBudgetConfig(baseConfig, task) {
-  const merged = { ...baseConfig };
-  const constraints = task.constraints ?? {};
-  const budgetOverride = task.budget ?? {};
-
-  const pickStricter = (configKey, ...sources) => {
-    const values = sources
-      .map(src => src[configKey])
-      .filter(v => typeof v === 'number');
-    if (typeof merged[configKey] === 'number') values.push(merged[configKey]);
-    if (values.length === 0) return;
-    merged[configKey] = Math.min(...values);
-  };
-
-  pickStricter('maxIterations', constraints);
-  pickStricter('timeoutMs', constraints);
-  pickStricter('maxCostUsd', budgetOverride);
-  pickStricter('maxTokens', budgetOverride);
-
-  return merged;
-}
-
-function createRequestBudgets(budgetsConfig, task) {
-  if (!budgetsConfig) return null;
-  return createBudgets(mergeBudgetConfig(budgetsConfig, task));
-}
-
-async function executeHostedTask(task, {
-  api,
-  activeDispatcher,
-  toolRegistry,
-  runLoopConfig,
-  budgetsConfig,
-  guardrailsMod,
-  signal,
-}) {
-  const fullTask = { id: task.id ?? `t-${Date.now().toString(36)}`, ...task };
-  const budgetsMod = createRequestBudgets(budgetsConfig, fullTask);
-  let lease;
-  try {
-    lease = await activeDispatcher.dispatch({ signal });
-  } catch (err) {
-    return {
-      taskId: fullTask.id,
-      status: 'failed',
-      result: { error: 'dispatch_failed', message: String(err?.message ?? err) },
-    };
-  }
-  try {
-    const pooledApi = createPooledFleetApi(api, lease);
-    const result = await runTask(fullTask, {
-      strategy: runLoopConfig.strategy ?? 'open-ended',
-      tools: toolRegistry,
-      fleetApi: pooledApi,
-      budgets: budgetsMod,
-      guardrails: guardrailsMod,
-      ...runLoopConfig,
-      signal,
-    });
-    return { taskId: fullTask.id, ...result };
-  } finally {
-    await lease.release();
-  }
-}
-
-// Thin entry point mirroring startMcpServer's injection pattern.
-// Accepts optional fleetApi + dispatcher for testing. When omitted, spawns
-// Fleet and creates the dispatcher from the pool, same as mcp/main.mjs.
 export async function startHost({
-  fleetApi,
-  dispatcher,
-  port,
-  bindHost: bindHostOption,
-  adapter: adapterName,
-  createAdapter,
-  env = process.env,
-  registry,
-  configDir,
-  authenticate = defaultAuthenticate,
-  runLoop: runLoopOption,
-  budgets: budgetsOption,
-  guardrails: guardrailsOption,
+  fleetApi, dispatcher, port, bindHost: bindHostOption, adapter: adapterName, createAdapter,
+  env = process.env, registry, configDir, authenticate = defaultAuthenticate,
+  runLoop: runLoopOption, budgets: budgetsOption, guardrails: guardrailsOption,
+  dispatch: dispatchOption, notify: notifyOption, chat: chatOption, durableClient = null,
 } = {}) {
   const config = await loadConfig(configDir ?? defaultConfigDir(), env);
+
+  if (typeof authenticate === 'function' && authenticate.length >= 3) {
+    throw new Error(
+      'startHost({ authenticate }) expects authenticateRequest(request) => user | null, not Express middleware (req, res, next)',
+    );
+  }
 
   let api = fleetApi;
   let stopFleet = null;
@@ -151,28 +128,79 @@ export async function startHost({
     }
   }
 
-  const toolRegistry = registry ?? extendRegistry();
-  const phase2 = createPhase2Modules(
-    toolRegistry,
-    resolvePhase2Modules(config, {
-      runLoop: runLoopOption,
-      budgets: budgetsOption,
-      guardrails: guardrailsOption,
+  const baseRegistry = registry ?? extendRegistry();
+  const toolRegistry = [...baseRegistry];   // job tools appended below once jobs exists
+  const resolved = resolveModules(config, {
+    runLoop: runLoopOption, budgets: budgetsOption, guardrails: guardrailsOption, dispatch: dispatchOption, notify: notifyOption, chat: chatOption,
+  });
+  const { runLoopEnabled, runLoopConfig, budgetsConfig, guardrailsMod } = createPhase2Modules(toolRegistry, resolved);
+
+  // Phase 4 modules. Builder overrides arrive raw, config-file values arrive resolved; resolve again idempotently.
+  const dispatchEnabled = runLoopEnabled && !!(resolved.dispatchConfig?.enabled ?? (dispatchOption ? true : false));
+  const dispatchConfig = dispatchEnabled ? resolveDispatchConfig({ ...resolved.dispatchConfig, enabled: true }, { env, budgetsConfig }) : null;
+  const notifyConfig = resolveNotifyConfigWithEnv(resolved.notifyConfig ?? {}, env);
+
+  // Chat rides on the async job routes and the SSE stream. When the flag comes
+  // from the file, loadConfig already validated it against the file's dispatch
+  // and notify blocks; builder overrides can change both, so check the resolved
+  // values here and unwind exactly like a jobs-backend failure would.
+  const chatConfig = resolved.chatOverride
+    ? resolveChatConfig({ enabled: true, ...resolved.chatOverride }, { env, name: config.name })
+    : config.modules.chat;
+  const chatProblem = !chatConfig.enabled ? null
+    : !dispatchEnabled ? 'chat enabled but dispatch disabled — the chat page streams job events; enable dispatch or disable chat'
+    : !notifyConfig.sse.enabled ? 'chat enabled but notify.sse disabled — the chat page needs the SSE stream'
+    : null;
+  if (chatProblem) {
+    try { await ownDispatcher?.close(); } catch { /* preserve original error */ }
+    try { await stopFleet?.(); } catch { /* preserve original error */ }
+    throw new Error(chatProblem);
+  }
+
+  let jobs = null;
+  const runSync = (task, { signal } = {}) => executeHostedTask(task, {
+    api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, jobs, signal,
+  });
+  // The run loop only observes abort between iterations. A job blocked in
+  // executePrompt would otherwise stay `processing` until FORCE_SETTLE (30s).
+  const runJob = (task, { signal, onProgress }) => settleWhenAborted(
+    executeHostedTask(task, {
+      api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress,
     }),
+    signal,
   );
-  const { runLoopEnabled, runLoopConfig, budgetsConfig, guardrailsMod } = phase2;
+
+  let notifier = null;
+  if (dispatchEnabled) {
+    try {
+      // Notifier and jobs reference each other: SSE reads from jobs, jobs publish to notifier.
+      const late = { jobs: null };
+      notifier = createNotifier(notifyConfig, {
+        jobs: { get: (id) => late.jobs.get(id), events: (id, o) => late.jobs.events(id, o), subscribe: (id, fn) => late.jobs.subscribe(id, fn) },
+      });
+      jobs = await createJobsBackend(dispatchConfig, {
+        runJob, notifier, capacity: activeDispatcher.capacity,
+        allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient,
+      });
+      late.jobs = jobs;
+      await jobs.start();
+      toolRegistry.push(...withJobTools([], jobs));
+    } catch (err) {
+      try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve original error */ }
+      try { await ownDispatcher?.close(); } catch { /* preserve original error */ }
+      try { await stopFleet?.(); } catch { /* preserve original error */ }
+      throw err;
+    }
+  }
 
   const mcpExecute = guardrailsMod
     ? (tool, executorArgs) => guardrailsMod.execute(tool, executorArgs)
     : (tool, executorArgs) => executeTool(tool, executorArgs);
 
-  const mcpHandler = async (req, res) => {
-    const server = buildMcpServer({
-      fleetApi: api,
-      dispatcher: activeDispatcher,
-      registry: toolRegistry,
-      execute: mcpExecute,
-    });
+  const mcpServerFactory = () => buildMcpServer({ fleetApi: api, dispatcher: activeDispatcher, registry: toolRegistry, execute: mcpExecute, jobs });
+
+  const mcpRaw = async (req, res) => {
+    const server = mcpServerFactory();
     const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     try {
       await server.connect(transport);
@@ -182,82 +210,45 @@ export async function startHost({
     }
   };
 
-  const adapter = createAdapter
-    ? createAdapter()
-    : resolveAdapter(adapterName ?? config.comm.adapter);
+  const chatRoutes = await buildChatRoutes({ chatConfig, hostName: config.name });
+  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes });
+
+  let adapter;
   const listenPort = port ?? config.comm.port;
   const bindHost = bindHostOption ?? config.comm.host;
 
   try {
-    await adapter.start({
-      routes: {
-        mcp: mcpHandler,
-        task: runLoopEnabled
-          ? async (req, res) => {
-              const result = await executeHostedTask(req.body, {
-                api,
-                activeDispatcher,
-                toolRegistry,
-                runLoopConfig,
-                budgetsConfig,
-                guardrailsMod,
-              });
-              if (result.status === 'failed' && result.result?.error === 'dispatch_failed') {
-                res.status(503).json({
-                  ok: false,
-                  error: 'dispatch_failed',
-                  message: result.result.message,
-                });
-                return;
-              }
-              res.json(result);
-            }
-          : null,
-        jobs: null,
-        health: (req, res) => res.json({ ok: true }),
-      },
-      port: listenPort,
-      host: bindHost,
-      authenticate,
-    });
+    adapter = createAdapter ? createAdapter() : await resolveAdapter(adapterName ?? config.comm.adapter);
+    await adapter.start({ routes, port: listenPort, host: bindHost, authenticate, mcpServerFactory });
   } catch (err) {
-    try { await adapter.stop(); } catch { /* preserve */ }
+    try { await adapter?.stop(); } catch { /* preserve */ }
+    try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve */ }
     try { await ownDispatcher?.close(); } catch { /* preserve */ }
     try { await stopFleet?.(); } catch { /* preserve */ }
     throw err;
   }
 
   console.log(
-    `host '${config.name}' listening on http://${bindHost}:${adapter.port()} ` +
-    `(worker capacity ${activeDispatcher.capacity})`,
+    `host '${config.name}' listening on http://${bindHost}:${adapter.port() ?? '(platform)'} ` +
+    `(worker capacity ${activeDispatcher.capacity}${jobs ? `, jobs backend ${dispatchConfig.backend}` : ''}` +
+    `${chatConfig.enabled ? ', chat at /chat' : ''})`,
   );
 
   async function callTool(name, args = {}, { signal } = {}) {
     const tool = toolRegistry.find(t => t.name === name);
-    if (!tool) {
-      return { ok: false, error: 'not_found', message: `tool "${name}" not found` };
-    }
+    if (!tool) return { ok: false, error: 'not_found', message: `tool "${name}" not found` };
     let lease;
     try {
       lease = await activeDispatcher.dispatch({ signal });
     } catch (err) {
-      return {
-        ok: false,
-        error: 'dispatch_failed',
-        message: String(err?.message ?? err),
-      };
+      return { ok: false, error: 'dispatch_failed', message: String(err?.message ?? err) };
     }
     try {
       const executorArgs = {
-        fleetApi: createPooledFleetApi(api, lease),
-        args,
-        signal: lease.signal ?? signal,
-        reportPhase: () => {},
-        workspace: { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer },
+        fleetApi: createPooledFleetApi(api, lease), args, signal: lease.signal ?? signal,
+        reportPhase: () => {}, workspace: { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer }, jobs,
       };
-      return guardrailsMod
-        ? await guardrailsMod.execute(tool, executorArgs)
-        : await executeTool(tool, executorArgs);
+      return guardrailsMod ? await guardrailsMod.execute(tool, executorArgs) : await executeTool(tool, executorArgs);
     } finally {
       await lease.release();
     }
@@ -269,27 +260,21 @@ export async function startHost({
     closed = true;
     activeDispatcher.beginShutdown();
     await adapter.stop();
+    await jobs?.stop({ drainMs: dispatchConfig?.drainMs });
+    await notifier?.stop();
     await ownDispatcher?.close();
     await stopFleet?.();
   };
 
-  return {
-    host: adapter,
-    callTool,
-    close,
-    stop: close,
-    config,
-    registry: toolRegistry,
-  };
+  const effectiveConfig = Object.freeze({ ...config, modules: Object.freeze({ ...config.modules, chat: chatConfig }) });
+  return { host: adapter, jobs, notifier, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry };
 }
 
-// Builder API — sugar over startHost.
 export function createHost(options = {}) {
-  let overrides = { ...options };
-
+  const overrides = { ...options };
   const builder = {
-    tools(registry)   { overrides.registry = registry; return builder; },
-    comm(commConfig)  {
+    tools(registry)    { overrides.registry = registry; return builder; },
+    comm(commConfig)   {
       if (commConfig && typeof commConfig === 'object') {
         if ('port' in commConfig) overrides.port = commConfig.port;
         if ('host' in commConfig) overrides.bindHost = commConfig.host;
@@ -300,37 +285,23 @@ export function createHost(options = {}) {
     runLoop(config)    { overrides.runLoop = { enabled: true, ...config }; return builder; },
     budget(config)     { overrides.budgets = config; return builder; },
     guardrails(config) { overrides.guardrails = config; return builder; },
+    dispatch(config)   { overrides.dispatch = { enabled: true, ...config }; return builder; },
+    notify(config)     { overrides.notify = config; return builder; },
+    chat(config)       { overrides.chat = { enabled: true, ...(config ?? {}) }; return builder; },
     build() {
       const hostOptions = overrides;
       return {
         start: (startOpts = {}) => startHost({ ...hostOptions, ...startOpts }),
         run: async (task, runOpts = {}) => {
-          const config = await loadConfig(
-            hostOptions.configDir ?? defaultConfigDir(),
-            hostOptions.env ?? process.env,
-          );
+          const config = await loadConfig(hostOptions.configDir ?? defaultConfigDir(), hostOptions.env ?? process.env);
           const toolRegistry = hostOptions.registry ?? extendRegistry();
-          const { runLoopEnabled, runLoopConfig, budgetsConfig, guardrailsMod } = createPhase2Modules(
-            toolRegistry,
-            resolvePhase2Modules(config, hostOptions),
-          );
-          if (!runLoopEnabled) {
-            throw new Error('run loop is not enabled');
-          }
+          const { runLoopEnabled, runLoopConfig, budgetsConfig, guardrailsMod } =
+            createPhase2Modules(toolRegistry, resolveModules(config, hostOptions));
+          if (!runLoopEnabled) throw new Error('run loop is not enabled');
           const api = hostOptions.fleetApi;
           const activeDispatcher = hostOptions.dispatcher;
-          if (!api || !activeDispatcher) {
-            throw new Error('fleetApi and dispatcher are required for agent.run()');
-          }
-          return executeHostedTask(task, {
-            api,
-            activeDispatcher,
-            toolRegistry,
-            runLoopConfig,
-            budgetsConfig,
-            guardrailsMod,
-            signal: runOpts.signal,
-          });
+          if (!api || !activeDispatcher) throw new Error('fleetApi and dispatcher are required for agent.run()');
+          return executeHostedTask(task, { api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, signal: runOpts.signal });
         },
       };
     },
@@ -338,7 +309,6 @@ export function createHost(options = {}) {
   return builder;
 }
 
-// Main module guard — same pattern as mcp/main.mjs.
 function isMainModule() {
   const entry = process.argv[1];
   if (!entry) return false;

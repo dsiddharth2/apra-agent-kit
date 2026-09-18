@@ -49,3 +49,4 @@ npm test    # mock tests — no Fleet binary, no tokens needed
 | [docs/development.md](docs/development.md) | Setup, testing, adding workflows, conventions |
 | [docs/mcp-interface.md](docs/mcp-interface.md) | MCP tool catalog, registry contract, timeouts, auth |
 | [docs/run-loop.md](docs/run-loop.md) | Autonomous agent: strategies, budgets, guardrails, `/task` API |
+| [docs/chat-ui.md](docs/chat-ui.md) | Built-in chat page: turn on `modules.chat`, open `/chat` |

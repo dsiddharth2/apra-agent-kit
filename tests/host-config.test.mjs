@@ -223,3 +223,139 @@ test('budgets without runLoop logs dependency warning', async () => {
     console.warn = origWarn;
   }
 });
+
+function captureWarnings(fn) {
+  const seen = [];
+  const orig = console.warn;
+  console.warn = (m) => seen.push(String(m));
+  return fn().finally(() => { console.warn = orig; }).then(r => ({ result: r, warnings: seen }));
+}
+
+test('accepts raw-http and azure-functions adapters', async () => {
+  for (const adapter of ['raw-http', 'azure-functions']) {
+    const dir = await tmpDir();
+    await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: '${adapter}' } };`);
+    assert.equal((await loadConfig(dir)).comm.adapter, adapter);
+  }
+});
+
+test('dispatch without runLoop is an error', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' },
+    modules: { dispatch: { enabled: true } } };`);
+  await assert.rejects(() => loadConfig(dir), /dispatch.*runLoop/);
+});
+
+test('durable backend requires the azure-functions adapter', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' },
+    modules: { runLoop: { enabled: true }, dispatch: { enabled: true, backend: 'durable' } } };`);
+  await assert.rejects(() => loadConfig(dir), /durable.*azure-functions/);
+});
+
+test('azure-functions with in-process backend warns; budgets timeout above maxActivityMs warns; allowHttp warns', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'azure-functions' },
+    modules: {
+      runLoop: { enabled: true },
+      budgets: { enabled: true, timeoutMs: 7200000 },
+      dispatch: { enabled: true, backend: 'in-process', durable: { maxActivityMs: 3600000 } },
+      notify: { webhook: { allowHttp: true } },
+    } };`);
+  const { result, warnings } = await captureWarnings(() => loadConfig(dir));
+  assert.equal(result.modules.dispatch.backend, 'in-process');
+  assert.ok(warnings.some(w => /in-process.*azure-functions|lost when the instance recycles/i.test(w)));
+  assert.ok(warnings.some(w => /timeoutMs.*maxActivityMs/i.test(w)));
+  assert.ok(warnings.some(w => /allowHttp/i.test(w)));
+});
+
+test('memory store kind warns outside tests', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' },
+    modules: { runLoop: { enabled: true }, dispatch: { enabled: true, store: { kind: 'memory' } } } };`);
+  const { warnings } = await captureWarnings(() => loadConfig(dir, { NODE_ENV: 'production' }));
+  assert.ok(warnings.some(w => /memory.*lost on restart/i.test(w)));
+});
+
+test('resolved dispatch and notify configs are exposed on the frozen config', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' },
+    modules: { runLoop: { enabled: true }, dispatch: { enabled: true, maxQueueSize: 3 }, notify: { sse: { heartbeatMs: 5 } } } };`);
+  const config = await loadConfig(dir, { JOBS_CONCURRENCY: '1' });
+  assert.equal(config.modules.dispatch.maxQueueSize, 3);
+  assert.equal(config.modules.dispatch.store.kind, 'sqlite');
+  assert.equal(config.modules.notify.sse.heartbeatMs, 5);
+  assert.equal(config.modules.notify.webhook.enabled, true);
+});
+
+const chatBase = (chat, extra = '') => `export default {
+  name: 'chat-host', fleet: {}, comm: { adapter: 'express' },
+  modules: {
+    runLoop: { enabled: true },
+    dispatch: { enabled: true, store: { kind: 'memory' } },
+    ${extra}
+    chat: ${chat},
+  } };`;
+const testEnv = { NODE_ENV: 'test' };
+
+test('chat absent resolves to disabled with title defaulting to name', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'plain-host', fleet: {}, comm: { adapter: 'express' } };`);
+  const config = await loadConfig(dir, testEnv);
+  assert.deepEqual(config.modules.chat, { enabled: false, title: 'plain-host' });
+});
+
+test('chat enabled with dispatch and sse resolves; title falls back to name', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', chatBase(`{ enabled: true }`));
+  const config = await loadConfig(dir, testEnv);
+  assert.deepEqual(config.modules.chat, { enabled: true, title: 'chat-host' });
+});
+
+test('chat.title is kept when given', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', chatBase(`{ enabled: true, title: 'Travel agent' }`));
+  const config = await loadConfig(dir, testEnv);
+  assert.equal(config.modules.chat.title, 'Travel agent');
+});
+
+test('chat enabled without dispatch throws', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default {
+    name: 'x', fleet: {}, comm: { adapter: 'express' },
+    modules: { runLoop: { enabled: true }, chat: { enabled: true } } };`);
+  await assert.rejects(() => loadConfig(dir, testEnv), /chat enabled but dispatch disabled/);
+});
+
+test('chat enabled with notify.sse disabled throws', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', chatBase(`{ enabled: true }`, `notify: { sse: { enabled: false } },`));
+  await assert.rejects(() => loadConfig(dir, testEnv), /chat enabled but notify\.sse disabled/);
+});
+
+test('CHAT_ENABLED env overrides the file in both directions', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', chatBase(`{ enabled: true }`));
+  const off = await loadConfig(dir, { ...testEnv, CHAT_ENABLED: 'false' });
+  assert.equal(off.modules.chat.enabled, false);
+  const dir2 = await tmpDir();
+  await writeConfig(dir2, 'host.config.mjs', chatBase(`{ enabled: false }`));
+  const on = await loadConfig(dir2, { ...testEnv, CHAT_ENABLED: 'true' });
+  assert.equal(on.modules.chat.enabled, true);
+});
+
+test('chat.title must be a non-empty string', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', chatBase(`{ enabled: true, title: '' }`));
+  await assert.rejects(() => loadConfig(dir, testEnv), /chat\.title must be a non-empty string/);
+  const dir2 = await tmpDir();
+  await writeConfig(dir2, 'host.config.mjs', chatBase(`{ enabled: true, title: 42 }`));
+  await assert.rejects(() => loadConfig(dir2, testEnv), /chat\.title must be a non-empty string/);
+});
+
+test('resolveChatConfig is exported for builder overrides', async () => {
+  const { resolveChatConfig } = await import('../host/config.mjs');
+  assert.deepEqual(resolveChatConfig({ enabled: true }, { env: {}, name: 'n' }), { enabled: true, title: 'n' });
+  assert.deepEqual(resolveChatConfig(undefined, { env: {}, name: 'n' }), { enabled: false, title: 'n' });
+  assert.deepEqual(resolveChatConfig({ enabled: true }, { env: { CHAT_ENABLED: '0' }, name: 'n' }), { enabled: false, title: 'n' });
+});

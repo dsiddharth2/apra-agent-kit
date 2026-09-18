@@ -1,10 +1,10 @@
-// tests/host.live.test.mjs
-import './setup-fleet-modules.mjs';
+// tests/acceptance/tool-server.acceptance.test.mjs
+import '../setup-fleet-modules.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 
-const { startHost } = await import('../host/index.mjs');
+const { startHost } = await import('../../host/index.mjs');
 
 test('host serves inspect-members over MCP with live Fleet', { timeout: 180000 }, async () => {
   const { host, close } = await startHost({ port: 0 });

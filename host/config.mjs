@@ -2,16 +2,27 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config.mjs';
 
-const SUPPORTED_ADAPTERS = new Set(['express']);
-const KNOWN_MODULES = new Set([
-  'runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch',
-]);
-const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails']);
+const SUPPORTED_ADAPTERS = new Set(['express', 'raw-http', 'azure-functions']);
+const KNOWN_MODULES = new Set(['runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch', 'notify', 'chat']);
+const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails', 'dispatch', 'notify', 'chat']);
 
 export async function loadConfig(configDir, env = process.env) {
   const raw = await resolveConfig(configDir);
   return validate(raw, env);
+}
+
+// modules.chat → { enabled, title }. CHAT_ENABLED=true|false|1|0 wins over the file.
+export function resolveChatConfig(raw = {}, { env = process.env, name = '' } = {}) {
+  const chat = { enabled: !!raw?.enabled, title: raw?.title === undefined ? name : raw.title };
+  const flag = String(env.CHAT_ENABLED ?? '').toLowerCase();
+  if (flag === '1' || flag === 'true') chat.enabled = true;
+  else if (flag === '0' || flag === 'false') chat.enabled = false;
+  if (typeof chat.title !== 'string' || !chat.title.trim()) {
+    throw new Error('chat.title must be a non-empty string');
+  }
+  return chat;
 }
 
 async function resolveConfig(dir) {
@@ -76,6 +87,43 @@ function validate(raw, env) {
     }
   }
 
+  const modules = { ...(raw.modules ?? {}) };
+  const runLoopEnabled = !!modules.runLoop?.enabled;
+  const budgetsConfig = modules.budgets?.enabled ? modules.budgets : null;
+
+  if (modules.dispatch?.enabled) {
+    if (!runLoopEnabled) throw new Error('dispatch enabled but runLoop disabled — there is nothing to run; enable runLoop or disable dispatch');
+    const dispatch = resolveDispatchConfig(modules.dispatch, { env, budgetsConfig });
+    if (dispatch.backend === 'durable' && raw.comm.adapter !== 'azure-functions') {
+      throw new Error('dispatch.backend "durable" requires comm.adapter "azure-functions"');
+    }
+    if (raw.comm.adapter === 'azure-functions' && dispatch.backend === 'in-process') {
+      console.warn('[host/config] in-process jobs on azure-functions — jobs are lost when the instance recycles; use backend "durable"');
+    }
+    if (typeof budgetsConfig?.timeoutMs === 'number' && budgetsConfig.timeoutMs > dispatch.durable.maxActivityMs) {
+      console.warn(`[host/config] budgets.timeoutMs ${budgetsConfig.timeoutMs} exceeds dispatch.durable.maxActivityMs ${dispatch.durable.maxActivityMs}; the platform may kill the activity before budgets fire`);
+    }
+    if (dispatch.store.kind === 'memory' && env.NODE_ENV !== 'test') {
+      console.warn('[host/config] dispatch.store.kind "memory" — jobs are lost on restart');
+    }
+    modules.dispatch = dispatch;
+  }
+
+  const notify = resolveNotifyConfigWithEnv(modules.notify ?? {}, env);
+  if (notify.webhook.allowHttp) console.warn('[host/config] notify.webhook.allowHttp is on — plain-http callback URLs are accepted');
+  modules.notify = notify;
+
+  const chat = resolveChatConfig(modules.chat, { env, name: raw.name });
+  if (chat.enabled) {
+    if (!modules.dispatch?.enabled) {
+      throw new Error('chat enabled but dispatch disabled — the chat page streams job events; enable dispatch or disable chat');
+    }
+    if (!notify.sse.enabled) {
+      throw new Error('chat enabled but notify.sse disabled — the chat page needs the SSE stream');
+    }
+  }
+  modules.chat = chat;
+
   return Object.freeze({
     name: raw.name,
     description: raw.description ?? '',
@@ -85,6 +133,6 @@ function validate(raw, env) {
       port,
       host,
     }),
-    modules: Object.freeze(raw.modules ?? {}),
+    modules: Object.freeze(modules),
   });
 }
