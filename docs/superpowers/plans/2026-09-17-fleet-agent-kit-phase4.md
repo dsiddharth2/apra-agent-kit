@@ -3733,6 +3733,8 @@ git commit -m "feat: add Durable Functions jobs backend"
 
 ### Task 12: Azure Functions adapter, orchestrator, and activity
 
+<!-- Task 0 MCP streamable transport exports: @modelcontextprotocol/server → WebStandardStreamableHTTPServerTransport; @modelcontextprotocol/node → NodeStreamableHTTPServerTransport -->
+
 Before starting, fill in the MCP transport export names recorded in Task 0 Step 3.
 
 **Files:**

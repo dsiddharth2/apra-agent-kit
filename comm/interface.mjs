@@ -1,18 +1,28 @@
 // comm/interface.mjs
 //
-// Every comm adapter must implement this shape:
+// Every comm adapter implements:
 //
-//   {
-//     async start({ routes, port, host, authenticate })
-//     async stop()
+//   { async start({ routes, port, host, authenticate }), async stop(), port(), address() }
+//
+// routes is an object keyed by route name. Null entries are not mounted.
+//
+//   RouteDef = {
+//     method:  'GET' | 'POST' | 'DELETE',
+//     path:    '/jobs/:id',            // ':name' segments become request.params
+//     handler: async (request) => response,
+//     auth:    true,                   // false → authenticate is skipped
+//     raw:     false,                  // true → handler(req, res, user) with Node objects
+//     web:     undefined,              // raw routes may also supply web(Request, user) → Response
 //   }
 //
-// routes is an object with named handlers. Null or undefined routes are not
-// mounted. The adapter provides the HTTP framework; the handlers provide logic.
+//   request  = { method, path, params, query, headers, body, signal, user }
+//              headers has lower-case keys; body is parsed JSON or null.
+//   response = { status, headers?, body? }                          // JSON body
+//            | { status, headers?, stream: AsyncIterable<string> }  // chunked text (SSE)
 //
-//   routes.mcp     POST /mcp      — MCP protocol
-//   routes.task    POST /task     — task submission (Phase 2)
-//   routes.jobs    GET  /jobs/:id — job status (Phase 4)
-//   routes.health  GET  /health   — health check
+//   authenticate(request) → user | null     null → adapter answers 401
 //
-// authenticate is an Express-compatible middleware function (req, res, next).
+// The adapter owns the HTTP framework. It never interprets routes beyond this.
+// The MCP route is the only raw route: the MCP SDK needs Node req/res (or a
+// web-standard Request), which is why RouteDef carries both `handler` and `web`.
+export {};

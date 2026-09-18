@@ -25,7 +25,7 @@ function makePhaseReporter(ctx) {
   };
 }
 
-export function buildMcpServer({ fleetApi, dispatcher, registry = defaultRegistry, execute } = {}) {
+export function buildMcpServer({ fleetApi, dispatcher, registry = defaultRegistry, execute, jobs = null } = {}) {
   if (!fleetApi) throw new Error('buildMcpServer requires fleetApi');
   if (!dispatcher) throw new Error('buildMcpServer requires dispatcher');
   const server = new McpServer(SERVER_INFO);
@@ -40,6 +40,19 @@ export function buildMcpServer({ fleetApi, dispatcher, registry = defaultRegistr
     // deliberately no try/catch -- only the finally that returns the lease.
     const invoke = async (args, ctx) => {
       const reportPhase = makePhaseReporter(ctx);
+
+      // Job-control tools touch no Fleet member: no lease.
+      if (entry.tags?.includes('jobs')) {
+        if (!jobs) return { content: [{ type: 'text', text: 'jobs backend not enabled' }], isError: true };
+        const executorArgs = { args, jobs, signal: ctx.mcpReq.signal, reportPhase, fleetApi: null };
+        if (execute) {
+          const execResult = await execute(entry, executorArgs);
+          if (!execResult.ok) return { content: [{ type: 'text', text: JSON.stringify(execResult) }], isError: true };
+          return toToolResult(execResult.result);
+        }
+        return toToolResult(await entry.run(executorArgs));
+      }
+
       const lease = await dispatcher.dispatch({ signal: ctx.mcpReq.signal, reportPhase });
       try {
         const executorArgs = {
