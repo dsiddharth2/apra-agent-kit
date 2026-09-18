@@ -17,6 +17,12 @@ memory, etc.
 One container runs one agent. Scaling is horizontal: more containers, each with its own
 agent.
 
+<p align="center">
+  <img src="docs/chat-plan-steps.png" alt="Chat UI — plan with 9 tool steps" width="420" />
+  <img src="docs/chat-answer.png" alt="Chat UI — final travel itinerary" width="420" />
+</p>
+<p align="center"><em>Chat UI: a 9-step travel plan (left) and the final itinerary (right)</em></p>
+
 ## Quick start
 
 ```bash
@@ -50,3 +56,4 @@ npm test    # mock tests — no Fleet binary, no tokens needed
 | [docs/mcp-interface.md](docs/mcp-interface.md) | MCP tool catalog, registry contract, timeouts, auth |
 | [docs/run-loop.md](docs/run-loop.md) | Autonomous agent: strategies, budgets, guardrails, `/task` API |
 | [docs/chat-ui.md](docs/chat-ui.md) | Built-in chat page: turn on `modules.chat`, open `/chat` |
+| [docs/concurrency.md](docs/concurrency.md) | Parallel task execution: worker pool, job queue, config, testing |
