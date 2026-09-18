@@ -12,7 +12,6 @@
   const stopEl = $('#stop');
   const pillEl = $('#status');
   const titleEl = $('#topbar-title');
-  const sidebarCurrent = $('#sidebar-current');
 
   const GLYPHS = { pending: '○', running: '●', completed: '✓', failed: '✗', retrying: '↻' };
   let current = null;   // { turn, card, source, grouped }
@@ -120,7 +119,7 @@
   function renderCard(card, turn) {
     card.replaceChildren();
     // Apra mark avatar
-    var markImg = document.querySelector('.sidebar-brand img');
+    var markImg = document.querySelector('.topbar-brand img');
     var markSrc = markImg ? markImg.src : '';
     var img = el('img', 'assistant-mark');
     img.src = markSrc;
@@ -208,9 +207,8 @@
     var bubble = el('div', 'user-bubble', goal);
     userWrap.append(bubble);
     transcriptEl.append(userWrap);
-    // Update sidebar
+    // Update topbar title with the message
     var short = goal.length > 32 ? goal.slice(0, 32) + '…' : goal;
-    sidebarCurrent.textContent = short;
     titleEl.textContent = short;
     // Assistant card
     var card = el('div', 'assistant');
