@@ -11,7 +11,7 @@ import { executeTool } from './tools/executor.mjs';
 import { createExpressAdapter } from '../comm/express.mjs';
 import { createRawHttpAdapter } from '../comm/raw-http.mjs';
 import { createGuardrails } from './guardrails.mjs';
-import { executeHostedTask } from './tasks.mjs';
+import { executeHostedTask, settleWhenAborted } from './tasks.mjs';
 import { createJobsBackend } from './jobs/index.mjs';
 import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config.mjs';
 import { createNotifier } from './notify/index.mjs';
@@ -38,38 +38,6 @@ async function resolveAdapter(name) {
 
 function defaultConfigDir() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-}
-
-function settleWhenAborted(run, signal) {
-  if (!signal) return run;
-  if (signal.aborted) {
-    run.catch(() => {});
-    return Promise.resolve({ status: 'cancelled', result: null, history: [], budget: null });
-  }
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const onAbort = () => {
-      if (settled) return;
-      settled = true;
-      run.catch(() => {});
-      resolve({ status: 'cancelled', result: null, history: [], budget: null });
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-    run.then(
-      (value) => {
-        if (settled) return;
-        settled = true;
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      },
-      (err) => {
-        if (settled) return;
-        settled = true;
-        signal.removeEventListener('abort', onAbort);
-        reject(err);
-      },
-    );
-  });
 }
 
 function resolveModules(config, { runLoop, budgets, guardrails, dispatch, notify } = {}) {

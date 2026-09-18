@@ -24,6 +24,7 @@ export function createPlanExecuteStrategy({
   fleetApi,
   guardrails,
   jobs,
+  workspace,
   maxReplanAttempts = 3,
   maxReviewAttempts = 2,
   maxStepReviewAttempts = 2,
@@ -56,10 +57,10 @@ export function createPlanExecuteStrategy({
       return { ok: false, error: `Tool "${name}" not found in registry.` };
     }
     if (guardrails) {
-      return guardrails.execute(tool, { fleetApi, args, jobs });
+      return guardrails.execute(tool, { fleetApi, args, jobs, workspace });
     }
     const { executeTool } = await import('../tools/executor.mjs');
-    return executeTool(tool, { fleetApi, args, jobs });
+    return executeTool(tool, { fleetApi, args, jobs, workspace });
   }
 
   async function* iterate() {

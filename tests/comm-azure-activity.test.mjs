@@ -65,14 +65,21 @@ test('activity raises started, forwards rich progress, returns the settled resul
 test('activity aborts when customStatus.cancelRequested appears and settles cancelled', async () => {
   const api = createMockFleetApi({
     members: rosterNames(1),
-    promptResponses: async () => { await new Promise(r => setTimeout(r, 120)); return '```tool_call\n{"tool": "inspect-members", "args": {}}\n```'; },
+    promptResponses: async () => {
+      await new Promise((r) => setTimeout(r, 2000));
+      return '```tool_call\n{"tool": "inspect-members", "args": {}}\n```';
+    },
   });
   const dispatcher = await makeDispatcher();
   const client = fakeClient({ cancelAfterPolls: 1 });
   try {
     const activity = createRunTaskActivity({ getClient: () => client, pollMs: 30, getContext: async () => hostCtx(api, dispatcher) });
+    const start = Date.now();
     const out = await activity({ jobId: 'job-2', task: { goal: 'slow' }, callbackUrl: null }, { warn() {} });
+    const elapsed = Date.now() - start;
     assert.equal(out.status, 'cancelled');
+    assert.ok(elapsed < 500, `expected cancel without waiting for hung prompt (${elapsed}ms)`);
+    await new Promise((r) => setTimeout(r, 2100));
   } finally { await dispatcher.close(); }
 });
 
