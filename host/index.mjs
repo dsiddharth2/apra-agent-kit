@@ -147,11 +147,7 @@ export async function startHost({
   const chatConfig = resolved.chatOverride
     ? resolveChatConfig({ enabled: true, ...resolved.chatOverride }, { env, name: config.name })
     : config.modules.chat;
-  // Only re-validate when the override path was taken: a file-sourced chat
-  // config was already checked by loadConfig against the file's own dispatch
-  // and notify blocks. An explicit chat override bypasses that check, so it
-  // must be checked here against the resolved (possibly overridden) values.
-  const chatProblem = !resolved.chatOverride || !chatConfig.enabled ? null
+  const chatProblem = !chatConfig.enabled ? null
     : !dispatchEnabled ? 'chat enabled but dispatch disabled — the chat page streams job events; enable dispatch or disable chat'
     : !notifyConfig.sse.enabled ? 'chat enabled but notify.sse disabled — the chat page needs the SSE stream'
     : null;
