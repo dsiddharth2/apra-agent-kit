@@ -67,6 +67,14 @@ export async function writeNodeResponse(res, response) {
     }
     return;
   }
+  if (typeof response.text === 'string') {
+    const payload = Buffer.from(response.text, 'utf8');
+    headers['content-type'] = headers['content-type'] ?? 'text/plain; charset=utf-8';
+    headers['content-length'] = String(payload.byteLength);
+    res.writeHead(response.status ?? 200, headers);
+    res.end(payload);
+    return;
+  }
   const body = response.body === undefined ? '' : JSON.stringify(response.body);
   headers['content-type'] = headers['content-type'] ?? 'application/json';
   res.writeHead(response.status ?? 200, headers);
