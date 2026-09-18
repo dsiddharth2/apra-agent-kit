@@ -17,6 +17,7 @@ export function createOpenEndedStrategy({
   maxNoActionTurns = 3,
   agentName = 'agent',
   agentDescription = '',
+  traceId = null,
 }) {
   const systemPrompt = buildSystemPrompt({ agentName, agentDescription });
   const toolCatalog = formatTools(tools);
@@ -29,10 +30,10 @@ export function createOpenEndedStrategy({
       return { ok: false, error: `Tool "${name}" not found in registry.` };
     }
     if (guardrails) {
-      return guardrails.execute(tool, { fleetApi, args, jobs });
+      return guardrails.execute(tool, { fleetApi, args, jobs, traceId });
     }
     const { executeTool: exec } = await import('../tools/executor.mjs');
-    return exec(tool, { fleetApi, args, jobs });
+    return exec(tool, { fleetApi, args, jobs, traceId });
   }
 
   async function* iterate() {

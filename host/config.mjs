@@ -85,6 +85,28 @@ function validate(raw, env) {
         '[host/config] budgets enabled but runLoop disabled — budget enforcement will not run; disable budgets or enable runLoop',
       );
     }
+
+    // A clone inherits these defaults silently. Say something when the
+    // combination leaves irreversible tools ungated, because the failure mode
+    // is an unwanted write rather than an error.
+    const g = raw.modules?.guardrails;
+    if (g?.enabled) {
+      if ((g.defaultPolicy ?? 'allow') === 'allow' && !g.policies) {
+        console.warn(
+          '[host/config] guardrails enabled with defaultPolicy "allow" and no policies — only tools declaring reversible:false will be gated',
+        );
+      }
+      if (g.freeze) {
+        console.warn('[host/config] guardrails freeze is ON — every irreversible tool will be denied');
+      }
+      if (g.dryRunMode) {
+        console.warn('[host/config] guardrails dryRunMode is ON — no tool will actually execute');
+      }
+    } else if (g && g.enabled === false) {
+      console.warn(
+        '[host/config] guardrails explicitly disabled — irreversible tools will execute without approval',
+      );
+    }
   }
 
   const modules = { ...(raw.modules ?? {}) };

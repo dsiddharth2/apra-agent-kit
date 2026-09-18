@@ -31,6 +31,7 @@ export function createPlanExecuteStrategy({
   minReviewPolicy = 'irreversible',
   agentName = 'agent',
   agentDescription = '',
+  traceId = null,
 }) {
   const systemPrompt = buildSystemPrompt({ agentName, agentDescription });
   const toolCatalog = formatTools(tools);
@@ -56,10 +57,10 @@ export function createPlanExecuteStrategy({
       return { ok: false, error: `Tool "${name}" not found in registry.` };
     }
     if (guardrails) {
-      return guardrails.execute(tool, { fleetApi, args, jobs });
+      return guardrails.execute(tool, { fleetApi, args, jobs, traceId });
     }
     const { executeTool } = await import('../tools/executor.mjs');
-    return executeTool(tool, { fleetApi, args, jobs });
+    return executeTool(tool, { fleetApi, args, jobs, traceId });
   }
 
   async function* iterate() {

@@ -1,4 +1,5 @@
 import { JobQueueFullError, JobsClosedError, InvalidCallbackUrlError } from './jobs/interface.mjs';
+import { kitInfo } from './kit-info.mjs';
 
 const json = (status, body, headers) => ({ status, body, ...(headers ? { headers } : {}) });
 
@@ -9,9 +10,20 @@ function syncResponse(result) {
   return json(200, result);
 }
 
-export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEnabled, chatRoutes = null }) {
+export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEnabled, chatRoutes = null, guardrails = null }) {
   const routes = {
     health: { method: 'GET', path: '/health', auth: false, handler: async () => json(200, { ok: true }) },
+    // Identity and operational state sit apart from the liveness probe:
+    // /health is consumed by infrastructure that checks its shape exactly,
+    // so it stays minimal.
+    kit: {
+      method: 'GET', path: '/kit', auth: false,
+      handler: async () => json(200, {
+        kit: await kitInfo(),
+        frozen: guardrails?.frozen?.() ?? false,
+        dryRun: guardrails?.dryRun?.() ?? false,
+      }),
+    },
     mcp: { method: 'POST', path: '/mcp', raw: true, handler: mcpRaw, web: mcpWeb },
     task: null, jobGet: null, jobCancel: null, jobEvents: null,
     chatPage: chatRoutes?.chatPage ?? null, chatScript: chatRoutes?.chatScript ?? null,

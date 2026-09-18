@@ -508,7 +508,7 @@ test('POST /task?wait=true keeps the Phase 2 synchronous shape', async () => {
     const res = await httpPost(host.port(), '/task?wait=true', { goal: 'Inspect members' });
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
-    assert.deepEqual(Object.keys(body).sort(), ['budget', 'history', 'result', 'status', 'taskId']);
+    assert.deepEqual(Object.keys(body).sort(), ['budget', 'history', 'result', 'status', 'taskId', 'traceId']);
     assert.equal(body.status, 'completed');
   } finally { await close(); }
 });
