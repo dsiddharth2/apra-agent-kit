@@ -2,8 +2,17 @@
 // Azure Functions v4 (Node) HTTP trigger adapter for the neutral comm contract.
 // One `app.http()` registration per route. `start()` registers; `stop()` is a
 // no-op because the Functions host owns the process. There is no port.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Readable } from 'node:stream';
 import { runHandler, lowerHeaders } from '../router.mjs';
+
+const durableClientAls = new AsyncLocalStorage();
+
+export function getHttpDurableClient() {
+  const stored = durableClientAls.getStore();
+  if (!stored) throw new Error('Durable client is only available during an HTTP invocation');
+  return stored;
+}
 
 export const toFunctionsRoute = (path) =>
   path.replace(/^\//, '').replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, '{$1}');
@@ -39,7 +48,12 @@ async function defaultLoadWebTransport() {
   return WebStandardStreamableHTTPServerTransport;
 }
 
-export function createAzureFunctionsAdapter({ app: injectedApp, extraInputs = [], loadWebTransport = defaultLoadWebTransport } = {}) {
+export function createAzureFunctionsAdapter({ app: injectedApp, extraInputs = [], loadWebTransport = defaultLoadWebTransport, getClient } = {}) {
+  const withInvocationClient = (context, work) => {
+    if (!getClient) return work();
+    return durableClientAls.run(getClient(context), work);
+  };
+
   return {
     async start({ routes, authenticate, mcpServerFactory }) {
       const app = injectedApp ?? (await import('@azure/functions')).app;
@@ -52,7 +66,7 @@ export function createAzureFunctionsAdapter({ app: injectedApp, extraInputs = []
         if (route.raw) {
           app.http(name, {
             ...common,
-            handler: async (req) => {
+            handler: async (req, context) => withInvocationClient(context, async () => {
               let bodyText;
               if (req.method !== 'GET' && req.method !== 'DELETE') {
                 bodyText = await req.text();
@@ -77,17 +91,17 @@ export function createAzureFunctionsAdapter({ app: injectedApp, extraInputs = []
               } finally {
                 await server.close();
               }
-            },
+            }),
           });
           continue;
         }
 
         app.http(name, {
           ...common,
-          handler: async (req) => {
+          handler: async (req, context) => withInvocationClient(context, async () => {
             const request = await toNeutralRequest(req, req.params);
             return toHttpResponse(await runHandler(route, request, authenticate));
-          },
+          }),
         });
       }
     },

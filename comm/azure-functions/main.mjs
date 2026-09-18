@@ -4,21 +4,17 @@
 import { app } from '@azure/functions';
 import * as df from 'durable-functions';
 import { startHost } from '../../host/index.mjs';
-import { createAzureFunctionsAdapter } from './http.mjs';
+import { createAzureFunctionsAdapter, getHttpDurableClient } from './http.mjs';
 import { registerDurableFunctions } from './index.mjs';
 
-// HTTP triggers get a Durable client per invocation. host/jobs/durable.mjs wants
-// one stable client object, so proxy every method to the current invocation's client.
-let currentContext = null;
 const clientInput = df.input.durableClient();
-const durableClient = new Proxy({}, {
-  get: (_, method) => (...args) => df.getClient(currentContext)[method](...args),
-});
-app.hook.preInvocation((ctx) => { currentContext = ctx.invocationContext; });
 
 const started = await startHost({
-  createAdapter: () => createAzureFunctionsAdapter({ extraInputs: [clientInput] }),
-  durableClient,
+  createAdapter: () => createAzureFunctionsAdapter({
+    extraInputs: [clientInput],
+    getClient: (context) => df.getClient(context),
+  }),
+  getDurableClient: getHttpDurableClient,
 });
 
 await registerDurableFunctions({

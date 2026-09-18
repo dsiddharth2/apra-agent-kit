@@ -48,14 +48,26 @@ function withSeq(events = []) {
   return events.map((e, i) => ({ ...e, seq: e.seq ?? i + 1 }));
 }
 
-export function createDurableJobs({ client, config, notifier = null, logger = console, allowHttpCallbacks = false, now = () => new Date() }) {
-  if (!client) throw new Error('createDurableJobs requires a Durable client');
+function clientFactory({ client, getClient }) {
+  if (typeof getClient === 'function') return getClient;
+  if (client) return () => client;
+  throw new Error('createDurableJobs requires a Durable client');
+}
+
+export function createDurableJobs({ client, getClient, config, notifier = null, logger = console, allowHttpCallbacks = false, now = () => new Date() }) {
+  const resolveClient = clientFactory({ client, getClient });
   const { maxQueueSize = 100, durable: { pollMs = 2000 } = {} } = config ?? {};
   let closed = false;
   let lastStats = { queued: 0, processing: 0 };
   const pollers = new Map(); // jobId → { timer, subs: Set<fn>, lastSeq }
 
-  const activeInstances = () => client.getStatusBy({ runtimeStatus: ACTIVE });
+  function requireClient() {
+    const c = resolveClient();
+    if (!c) throw new Error('createDurableJobs requires a Durable client');
+    return c;
+  }
+
+  const activeInstances = (bound) => bound.getStatusBy({ runtimeStatus: ACTIVE });
 
   function stopPoller(jobId) {
     const s = pollers.get(jobId);
@@ -65,10 +77,11 @@ export function createDurableJobs({ client, config, notifier = null, logger = co
   }
 
   function startPoller(jobId) {
+    const bound = requireClient();
     const state = { subs: new Set(), lastSeq: 0, timer: null };
     const tick = async () => {
       try {
-        const inst = await client.getStatus(jobId, STATUS_OPTS);
+        const inst = await bound.getStatus(jobId, STATUS_OPTS);
         const events = withSeq(inst?.customStatus?.events);
         for (const e of events) {
           if (e.seq <= state.lastSeq) continue;
@@ -103,11 +116,12 @@ export function createDurableJobs({ client, config, notifier = null, logger = co
       if (closed) throw new JobsClosedError();
       if (!task || typeof task.goal !== 'string' || !task.goal.trim()) throw new TypeError('task.goal is required');
       const url = validateCallbackUrl(callbackUrl, { allowHttp: allowHttpCallbacks });
-      const active = await activeInstances();
+      const bound = requireClient();
+      const active = await activeInstances(bound);
       if (active.length >= maxQueueSize) throw new JobQueueFullError();
       const record = createRecord(task, { callbackUrl: url, metadata, now: now() });
       const position = active.filter(i => i.runtimeStatus === 'Pending').length + 1;
-      await client.startNew(ORCHESTRATOR_NAME, {
+      await bound.startNew(ORCHESTRATOR_NAME, {
         instanceId: record.id,
         input: {
           task: { id: record.id, ...record.task },
@@ -121,19 +135,20 @@ export function createDurableJobs({ client, config, notifier = null, logger = co
     },
 
     async get(jobId) {
-      return mapDurableStatus(await client.getStatus(jobId, STATUS_OPTS));
+      return mapDurableStatus(await requireClient().getStatus(jobId, STATUS_OPTS));
     },
 
     async cancel(jobId) {
-      const inst = await client.getStatus(jobId, STATUS_OPTS);
+      const bound = requireClient();
+      const inst = await bound.getStatus(jobId, STATUS_OPTS);
       if (!inst) return { ok: false, status: null };
       const rec = mapDurableStatus(inst);
       if (TERMINAL_STATUSES.has(rec.status)) return { ok: false, status: rec.status };
       if (inst.runtimeStatus === 'Pending') {
-        await client.terminate(jobId, 'cancelled before start');
+        await bound.terminate(jobId, 'cancelled before start');
         return { ok: true, status: 'cancelled' };
       }
-      await client.raiseEvent(jobId, 'cancel', {});
+      await bound.raiseEvent(jobId, 'cancel', {});
       return { ok: true, status: 'cancelling' };
     },
 
@@ -147,12 +162,12 @@ export function createDurableJobs({ client, config, notifier = null, logger = co
     },
 
     async events(jobId, { afterSeq = 0 } = {}) {
-      const inst = await client.getStatus(jobId, STATUS_OPTS);
+      const inst = await requireClient().getStatus(jobId, STATUS_OPTS);
       return withSeq(inst?.customStatus?.events).filter(e => e.seq > afterSeq);
     },
 
     async refreshStats() {
-      const active = await activeInstances();
+      const active = await activeInstances(requireClient());
       lastStats = {
         queued: active.filter(i => i.runtimeStatus === 'Pending').length,
         processing: active.filter(i => i.runtimeStatus === 'Running').length,
