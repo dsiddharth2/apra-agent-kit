@@ -18,7 +18,8 @@
     "test:phase4": "node --test tests/host-jobs-record.test.mjs tests/host-jobs-store.test.mjs tests/host-jobs-in-process.test.mjs tests/host-jobs-config.test.mjs tests/host-jobs-tools.test.mjs tests/host-notify.test.mjs tests/comm-contract.test.mjs tests/package-scripts.test.mjs tests/host-jobs-durable.test.mjs tests/comm-azure-orchestrator.test.mjs tests/comm-azure-http.test.mjs tests/comm-azure-activity.test.mjs tests/host-scripted-fleet.test.mjs",
     "test:chat": "node --test tests/host-chat-routes.test.mjs tests/host-chat-transcript.test.mjs tests/host-chat-e2e.test.mjs",
     "test:concurrency": "node --test tests/acceptance/concurrency.acceptance.test.mjs",
-    "test:acceptance": "node --test tests/acceptance/"
+    "test:acceptance": "node --test tests/acceptance/",
+    "test:e2e": "node --test tests/e2e/task.e2e.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

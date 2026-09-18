@@ -1,0 +1,37 @@
+{
+  "tools": {
+    "weather":         { "ok": true, "location": "Tokyo", "temp_c": "22", "humidity": "60", "description": "Clear", "wind_speed_kmph": "8", "uv_index": "5" },
+    "timezone":        { "ok": true, "timezone": "America/New_York", "datetime": "2026-09-17T06:00:00-04:00", "utc_offset": "-04:00", "abbreviation": "EDT" },
+    "country-info":    { "ok": true, "name": "Japan", "capital": "Tokyo", "currency_code": "JPY", "currency_name": "Japanese yen", "languages": ["Japanese"], "region": "Asia", "population": 125000000 },
+    "currency":        { "ok": true, "from": "USD", "to": "JPY", "rate": 146.2, "amount": 1, "converted": 146.2 },
+    "travel-advisory": { "ok": true, "country": "JP", "score": 1.8, "message": "Exercise normal precautions" }
+  },
+  "goals": {
+    "weather in Tokyo": [
+      "```plan\n{\"steps\": [{\"type\": \"tool\", \"tool\": \"weather\", \"args\": {\"city\": \"Tokyo\"}, \"reason\": \"weather\", \"review\": false}]}\n```",
+      "```review\n{\"approved\": true}\n```",
+      "Tokyo is 22C and clear.",
+      "```done\n{\"result\": \"Tokyo is 22C and clear.\", \"summary\": \"Weather retrieved\"}\n```"
+    ],
+    "time is it in New York": [
+      "```plan\n{\"steps\": [{\"type\": \"tool\", \"tool\": \"timezone\", \"args\": {\"city\": \"New York\"}, \"reason\": \"time\", \"review\": false}, {\"type\": \"tool\", \"tool\": \"weather\", \"args\": {\"city\": \"New York\"}, \"reason\": \"weather\", \"review\": false}, {\"type\": \"reason\", \"prompt\": \"Combine\", \"review\": false}]}\n```",
+      "```review\n{\"approved\": true}\n```",
+      "It is 06:00 EDT in New York and 22C and clear.",
+      "```done\n{\"result\": \"It is 06:00 EDT in New York, 22C and clear.\", \"summary\": \"Combined\"}\n```"
+    ],
+    "US to Japan": [
+      "```plan\n{\"steps\": [{\"type\": \"tool\", \"tool\": \"country-info\", \"args\": {\"country\": \"Japan\"}, \"reason\": \"currency code\", \"review\": false}, {\"type\": \"tool\", \"tool\": \"currency\", \"args\": {}, \"reason\": \"rate\", \"review\": false}, {\"type\": \"tool\", \"tool\": \"travel-advisory\", \"args\": {\"country\": \"JP\"}, \"reason\": \"safety\", \"review\": false}, {\"type\": \"reason\", \"prompt\": \"Synthesize\", \"review\": false}]}\n```",
+      "```review\n{\"approved\": true}\n```",
+      "```tool_call\n{\"tool\": \"currency\", \"args\": {\"from\": \"USD\", \"to\": \"JPY\"}}\n```",
+      "Bring yen. 1 USD = 146.2 JPY. Normal precautions.",
+      "```done\n{\"result\": \"Bring JPY; 1 USD = 146.2 JPY; advisory: normal precautions.\", \"summary\": \"Travel prep\"}\n```"
+    ],
+    "every capital city in Europe": [
+      "```plan\n{\"steps\": [{\"type\": \"tool\", \"tool\": \"weather\", \"args\": {\"city\": \"Paris\"}, \"reason\": \"1\", \"review\": false}, {\"type\": \"tool\", \"tool\": \"weather\", \"args\": {\"city\": \"Berlin\"}, \"reason\": \"2\", \"review\": false}, {\"type\": \"tool\", \"tool\": \"weather\", \"args\": {\"city\": \"Rome\"}, \"reason\": \"3\", \"review\": false}, {\"type\": \"tool\", \"tool\": \"weather\", \"args\": {\"city\": \"Madrid\"}, \"reason\": \"4\", \"review\": false}, {\"type\": \"tool\", \"tool\": \"weather\", \"args\": {\"city\": \"Vienna\"}, \"reason\": \"5\", \"review\": false}, {\"type\": \"tool\", \"tool\": \"weather\", \"args\": {\"city\": \"Lisbon\"}, \"reason\": \"6\", \"review\": false}, {\"type\": \"tool\", \"tool\": \"weather\", \"args\": {\"city\": \"Oslo\"}, \"reason\": \"7\", \"review\": false}]}\n```",
+      "```review\n{\"approved\": true}\n```",
+      "```done\n{\"result\": \"partial\", \"summary\": \"partial\"}\n```"
+    ]
+  },
+  "default": ["```done\n{\"result\": \"unscripted goal\", \"summary\": \"none\"}\n```"],
+  "delays": { "every capital city in Europe": 1500 }
+}
