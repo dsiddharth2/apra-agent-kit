@@ -5,6 +5,7 @@
 /* global initialTurn, accepted, submitFailed, cancelling, reduce, isLive */
 /* global marked, DOMPurify */
 (() => {
+  var apiBase = location.pathname.replace(/\/chat\/?$/, '');
   var $ = function(sel) { return document.querySelector(sel); };
   var transcriptEl = $('#transcript');
   var composerEl = $('#composer');
@@ -311,7 +312,7 @@
     renderCard(card, current.turn);
     updateComposer(true);
 
-    fetch('/task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: goal }) })
+    fetch(apiBase + '/task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: goal }) })
       .then(function(res) {
         return res.json().catch(function() { return null; }).then(function(body) { return { res: res, body: body }; });
       })
@@ -329,7 +330,7 @@
         console.log('accepted', body);
         hdrSub.textContent = 'JOB ' + body.jobId.toUpperCase();
         apply(function(turn) { return accepted(turn, { jobId: body.jobId, position: body.position }); });
-        subscribe(body.links && body.links.events ? body.links.events : '/jobs/' + body.jobId + '/events');
+        subscribe(apiBase + (body.links && body.links.events ? body.links.events : '/jobs/' + body.jobId + '/events'));
       })
       .catch(function(err) {
         console.error('submit failed', err);
@@ -339,7 +340,7 @@
 
   function doStop() {
     if (!current || !current.turn.jobId || !isLive(current.turn)) return;
-    fetch('/jobs/' + current.turn.jobId, { method: 'DELETE' })
+    fetch(apiBase + '/jobs/' + current.turn.jobId, { method: 'DELETE' })
       .then(function(res) {
         return res.json().catch(function() { return null; }).then(function(body) { return { res: res, body: body }; });
       })
