@@ -161,6 +161,17 @@ export async function executeHostedTask(task, {
     };
   }
   try {
+    const combined = new AbortController();
+    const forwardAbort = (reason) => { if (!combined.signal.aborted) combined.abort(reason); };
+    if (signal) {
+      if (signal.aborted) combined.abort(signal.reason);
+      else signal.addEventListener('abort', () => forwardAbort(signal.reason), { once: true });
+    }
+    if (lease.signal) {
+      if (lease.signal.aborted) combined.abort(lease.signal.reason);
+      else lease.signal.addEventListener('abort', () => forwardAbort(lease.signal.reason), { once: true });
+    }
+
     const workspace = { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer };
     const result = await runTask(fullTask, {
       strategy: runLoopConfig.strategy ?? 'open-ended',
@@ -171,7 +182,7 @@ export async function executeHostedTask(task, {
       ...runLoopConfig,
       jobs,
       traceId,
-      signal,
+      signal: combined.signal,
       workspace,
       onIteration: onProgress,
     });

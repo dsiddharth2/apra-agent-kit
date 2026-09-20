@@ -77,7 +77,10 @@ export class EphemeralWorkerFactory {
       released = true;
       if (ttl) clearTimeout(ttl);
       try {
-        await this.#manager.teardownPair(prefix, workRoot);
+        await Promise.race([
+          this.#manager.teardownPair(prefix, workRoot),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('teardown timeout')), 30000)),
+        ]);
       } catch (err) {
         console.warn(`[ephemeral] teardown failed for ${prefix}: ${err?.message ?? err}`);
       }
@@ -112,6 +115,14 @@ export class EphemeralWorkerFactory {
       signal: controller.signal,
       release,
     };
+  }
+
+  async reset() {
+    const count = this.#active.size;
+    if (count === 0) return 0;
+    console.warn(`[ephemeral] force-releasing ${count} orphaned worker(s)`);
+    await Promise.all([...this.#active].map((entry) => entry.release?.()));
+    return count;
   }
 
   async close() {
