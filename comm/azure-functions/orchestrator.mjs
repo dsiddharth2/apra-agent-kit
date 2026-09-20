@@ -26,41 +26,19 @@ export function buildOrchestrator({ ringSize = 50 } = {}) {
     const publish = () => df.setCustomStatus({ ...state, events: ringEvents(events, ringSize) });
 
     push(input.queuedEvent ?? { type: 'queued', jobId, at: nowIso(), position: 1 });
+    state.status = 'processing';
+    state.startedAt = nowIso();
+    push({ type: 'started', jobId, at: state.startedAt });
     publish();
 
-    const activity = df.callActivity(ACTIVITY_NAME, { ...input, jobId });
+    // Single yield — one activity, one dispatch. The previous for(;;) loop
+    // consumed waitForExternalEvent('progress') events, but each replay shifted
+    // the Durable SDK's event-ID counter, causing callActivity() to schedule a
+    // NEW activity on every replay instead of matching the original. Result:
+    // N progress events → N+1 activities → worker pool exhaustion.
+    const output = yield df.callActivity(ACTIVITY_NAME, { ...input, jobId });
 
-    let started = false;
-    const markStarted = (at) => {
-      if (started) return;
-      started = true;
-      state.status = 'processing';
-      state.startedAt = at;
-      push({ type: 'started', jobId, at });
-    };
-
-    for (;;) {
-      const progress = df.waitForExternalEvent('progress');
-      const cancel = df.waitForExternalEvent('cancel');
-      const winner = yield df.Task.any([activity, progress, cancel]);
-      if (winner === activity) break;
-      if (winner === cancel) {
-        state.cancelRequested = true;
-        publish();
-        continue;
-      }
-      const e = progress.result;
-      markStarted(e.at);
-      if (e.type === 'progress') {
-        push(e);
-        state.progress = { iteration: e.iteration, message: e.message, at: e.at };
-      }
-      publish();
-    }
-
-    const output = activity.result;
     const at = nowIso();
-    markStarted(state.startedAt ?? at);
     state.status = output.status;
     state.finishedAt = at;
     push({ type: 'settled', jobId, at, status: output.status, result: output.result ?? null, error: output.error ?? null });
