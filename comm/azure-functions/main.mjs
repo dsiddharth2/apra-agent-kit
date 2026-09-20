@@ -27,7 +27,16 @@ await registerDurableFunctions({
     budgetsConfig: started.budgetsConfig,
     guardrailsMod: started.guardrailsMod,
     notifier: started.notifier,
+    jobs: started.jobs,
   }),
+});
+
+app.http('resetWorkers', {
+  methods: ['POST'], route: 'reset-workers', authLevel: 'anonymous',
+  handler: async () => {
+    const freed = await started.dispatcher.resetWorkers();
+    return { status: 200, jsonBody: { ok: true, freed, queued: started.dispatcher.queued } };
+  },
 });
 
 app.hook.appTerminate(async () => { await started.close(); });

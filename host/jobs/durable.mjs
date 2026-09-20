@@ -60,6 +60,7 @@ export function createDurableJobs({ client, getClient, config, notifier = null, 
   let closed = false;
   let lastStats = { queued: 0, processing: 0 };
   const pollers = new Map(); // jobId → { timer, subs: Set<fn>, lastSeq }
+  const liveSeqs = new Map(); // jobId → next seq (for activity-injected events)
 
   function requireClient() {
     const c = resolveClient();
@@ -164,6 +165,19 @@ export function createDurableJobs({ client, getClient, config, notifier = null, 
     async events(jobId, { afterSeq = 0 } = {}) {
       const inst = await requireClient().getStatus(jobId, STATUS_OPTS);
       return withSeq(inst?.customStatus?.events).filter(e => e.seq > afterSeq);
+    },
+
+    emitEvent(jobId, event) {
+      const seq = (liveSeqs.get(jobId) ?? 100) + 1;
+      liveSeqs.set(jobId, seq);
+      const e = { ...event, seq };
+      const state = pollers.get(jobId);
+      if (state) {
+        state.lastSeq = Math.max(state.lastSeq, seq);
+        for (const fn of state.subs) {
+          try { fn(e); } catch (err) { logger.warn(`[durable] emitEvent subscriber error: ${err?.message ?? err}`); }
+        }
+      }
     },
 
     async refreshStats() {

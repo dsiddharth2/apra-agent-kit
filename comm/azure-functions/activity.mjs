@@ -1,8 +1,7 @@
 // comm/azure-functions/activity.mjs
-// The run loop inside a Durable activity. Progress goes to the orchestrator as
-// external events (raiseEvent 'progress'); cancellation is read back from the
-// orchestrator's customStatus, polled from the task hub, because the activity
-// can run on a different instance from the one that received DELETE /jobs/:id.
+// The run loop inside a Durable activity. Progress events are pushed directly
+// to the jobs backend's SSE subscribers (bypassing the orchestrator) so the
+// chat UI can show tool execution in real time.
 import { executeHostedTask, settleWhenAborted } from '../../host/tasks.mjs';
 import { settleFromRunResult } from '../../host/jobs/record.mjs';
 
@@ -28,11 +27,11 @@ export function createRunTaskActivity({ getClient, pollMs = 2000, getContext = g
     const controller = new AbortController();
     const iso = () => new Date().toISOString();
 
-    const raise = async (event) => {
-      try { await client.raiseEvent(jobId, 'progress', event); }
-      catch (err) { context?.warn?.(`[activity] raiseEvent failed: ${err?.message ?? err}`); }
+    const emit = (event) => {
+      if (hostCtx.jobs?.emitEvent) {
+        hostCtx.jobs.emitEvent(jobId, event);
+      }
     };
-    await raise({ type: 'started', jobId, at: iso() });
 
     const cancelPoll = setInterval(async () => {
       try {
@@ -52,7 +51,7 @@ export function createRunTaskActivity({ getClient, pollMs = 2000, getContext = g
           budgetsConfig: hostCtx.budgetsConfig,
           guardrailsMod: hostCtx.guardrailsMod,
           signal: controller.signal,
-          onProgress: (progress) => raise({ type: 'progress', jobId, at: iso(), ...progress }),
+          onProgress: (progress) => emit({ type: 'progress', jobId, at: iso(), ...progress }),
         }),
         controller.signal,
       );
@@ -62,6 +61,7 @@ export function createRunTaskActivity({ getClient, pollMs = 2000, getContext = g
         settled.result = null;
         settled.error = null;
       }
+      emit({ type: 'settled', jobId, at: iso(), status: settled.status, result: settled.result ?? null, error: settled.error ?? null });
       if (hostCtx.notifier && callbackUrl) {
         await hostCtx.notifier.publish(
           { type: 'settled', jobId, at: iso(), status: settled.status, result: settled.result, error: settled.error },

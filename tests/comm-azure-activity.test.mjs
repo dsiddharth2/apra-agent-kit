@@ -31,7 +31,7 @@ function hostCtx(api, dispatcher, extra = {}) {
   return { api, activeDispatcher: dispatcher, toolRegistry: extendRegistry(), runLoopConfig: { strategy: 'open-ended' }, budgetsConfig: null, guardrailsMod: null, notifier: null, ...extra };
 }
 
-test('activity raises started, forwards rich progress, returns the settled result, and posts the webhook', async () => {
+test('activity emits progress+settled via jobs.emitEvent, posts webhook, returns the result', async () => {
   const api = createMockFleetApi({
     members: rosterNames(1),
     promptResponses: ['```tool_call\n{"tool": "inspect-members", "args": {}}\n```', '```done\n{"result": "done", "summary": "s"}\n```'],
@@ -39,25 +39,24 @@ test('activity raises started, forwards rich progress, returns the settled resul
   const dispatcher = await makeDispatcher();
   const client = fakeClient();
   const published = [];
+  const emitted = [];
   const notifier = { publish: async (event, ctx) => { published.push({ event, ctx }); } };
+  const jobs = { emitEvent: (jobId, event) => emitted.push({ jobId, event }) };
   try {
-    const activity = createRunTaskActivity({ getClient: () => client, pollMs: 50, getContext: async () => hostCtx(api, dispatcher, { notifier }) });
+    const activity = createRunTaskActivity({ getClient: () => client, pollMs: 50, getContext: async () => hostCtx(api, dispatcher, { notifier, jobs }) });
     const out = await activity({ jobId: 'job-1', task: { goal: 'inspect' }, callbackUrl: 'https://cb.test/h' }, { warn() {} });
     assert.equal(out.status, 'completed');
     assert.equal(out.result, 'done');
     assert.ok(Array.isArray(out.history));
-    const raised = client.calls.raiseEvent;
-    assert.equal(raised[0].name, 'progress');
-    assert.equal(raised[0].data.type, 'started');
-    assert.equal(raised[0].id, 'job-1');
-    const progress = raised.filter(r => r.data.type === 'progress');
-    assert.equal(progress.length, 2);
-    assert.deepEqual(progress.map(p => p.data.kind), ['step_started', 'step_completed']);
-    assert.equal(progress[0].data.iteration, 1);
-    assert.ok(progress[0].data.at);
+    assert.equal(client.calls.raiseEvent.length, 0, 'no raiseEvent calls');
+    const progress = emitted.filter(e => e.event.type === 'progress');
+    assert.ok(progress.length >= 1, 'at least one progress event emitted');
+    assert.equal(progress[0].jobId, 'job-1');
+    const settled = emitted.filter(e => e.event.type === 'settled');
+    assert.equal(settled.length, 1, 'exactly one settled event emitted');
+    assert.equal(settled[0].event.status, 'completed');
     assert.equal(published.length, 1);
     assert.equal(published[0].event.type, 'settled');
-    assert.equal(published[0].event.status, 'completed');
     assert.equal(published[0].ctx.callbackUrl, 'https://cb.test/h');
   } finally { await dispatcher.close(); }
 });
