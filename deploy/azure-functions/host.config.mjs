@@ -15,5 +15,6 @@ export default {
     guardrails: { enabled: true, defaultPolicy: 'allow', validateInputs: true, dryRunMode: false },
     dispatch: { enabled: true, backend: 'durable', maxQueueSize: 100 },
     notify: { sse: { enabled: true } },
+    chat: { enabled: true, title: 'Fleet Agent Kit — Azure Functions' },
   },
 };

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "comm/azure-functions/main.mjs",
   "engines": {
     "node": ">=22.16"
   },

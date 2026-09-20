@@ -7,11 +7,13 @@ import { Readable } from 'node:stream';
 import { runHandler, lowerHeaders } from '../router.mjs';
 
 const durableClientAls = new AsyncLocalStorage();
+let lastDurableClient = null;
 
 export function getHttpDurableClient() {
   const stored = durableClientAls.getStore();
-  if (!stored) throw new Error('Durable client is only available during an HTTP invocation');
-  return stored;
+  if (stored) { lastDurableClient = stored; return stored; }
+  if (lastDurableClient) return lastDurableClient;
+  throw new Error('Durable client is only available during an HTTP invocation');
 }
 
 export const toFunctionsRoute = (path) =>
@@ -39,6 +41,10 @@ export function toHttpResponse(response) {
   if (response.stream) {
     headers['content-type'] = headers['content-type'] ?? 'text/event-stream';
     return { status: response.status ?? 200, headers, body: Readable.from(response.stream) };
+  }
+  if (response.text != null) {
+    headers['content-type'] = headers['content-type'] ?? 'text/plain';
+    return { status: response.status ?? 200, headers, body: response.text };
   }
   return { status: response.status ?? 200, headers: { 'content-type': 'application/json', ...headers }, jsonBody: response.body ?? {} };
 }
