@@ -61,5 +61,6 @@ test('startHost uses the scripted fleet under NODE_ENV=test and refuses it other
     const body = await res.json();
     assert.equal(body.status, 'completed');
     assert.equal(body.result, '22C');
+    assert.ok(body.history.some((h) => h.tool === 'weather'), 'run loop should call weather');
   } finally { await close(); }
 });

@@ -18,7 +18,9 @@ export function createScriptedFleetApi(script, { members = rosterNames(4) } = {}
       return JSON.stringify(payload);
     },
     promptResponses: (options) => {
-      const key = keyFor(String(options.prompt ?? ''));
+      const prompt = String(options.prompt ?? '');
+      if (prompt.includes('task router')) return '{"path":"open-ended"}';
+      const key = keyFor(prompt);
       const list = key !== '__default__' ? script.goals[key] : (script.default ?? fallback);
       const i = cursors.get(key) ?? 0;
       cursors.set(key, i + 1);

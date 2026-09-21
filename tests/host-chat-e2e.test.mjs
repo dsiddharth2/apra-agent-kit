@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { WorkerDispatcher } from '../pool/worker-dispatcher.mjs';
 import { WorkerPool } from '../pool/worker-pool.mjs';
-import { createMockFleetApi, rosterNames } from './helpers/mock-fleet.mjs';
+import { createMockFleetApi, rosterNames, withRouterBypass } from './helpers/mock-fleet.mjs';
 import { readSse } from './helpers/sse.mjs';
 
 const { startHost, createHost } = await import('../host/index.mjs');
@@ -33,11 +33,11 @@ const WEATHER = JSON.stringify({
 const planFleet = () => createMockFleetApi({
   members: rosterNames(2),
   commandPayload: WEATHER,
-  promptResponses: [
+  promptResponses: withRouterBypass([
     '```plan\n{"steps": [{"type": "tool", "tool": "weather", "args": {"city": "London"}, "reason": "Get weather", "review": false}]}\n```',
     '```review\n{"approved": true}\n```',
     '```done\n{"result": "London is 15°C and cloudy", "summary": "Done"}\n```',
-  ],
+  ]),
 });
 
 const chatHost = (extra = {}) => startHost({
