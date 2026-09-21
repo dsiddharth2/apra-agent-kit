@@ -139,6 +139,38 @@ test('close tears down every active lease and refuses new ones', async () => {
   assert.equal(await factory.create(), null);
 });
 
+test('create with members: ["doer"] returns lease with reviewer: null', async () => {
+  const { factory } = await makeFactory();
+  const lease = await factory.create({ members: ['doer'] });
+  assert.ok(lease, 'should return lease');
+  assert.ok(lease.doer, 'should have doer');
+  assert.strictEqual(lease.reviewer, null, 'reviewer should be null');
+  assert.equal(typeof lease.upgradeToReviewer, 'function', 'should have upgradeToReviewer');
+  await lease.release();
+  await factory.close();
+});
+
+test('upgradeToReviewer registers the reviewer on an existing lease', async () => {
+  const { factory } = await makeFactory();
+  const lease = await factory.create({ members: ['doer'] });
+  assert.strictEqual(lease.reviewer, null);
+  await lease.upgradeToReviewer();
+  assert.ok(lease.reviewer, 'reviewer should now be set');
+  assert.ok(lease.reviewer.name.includes('REVIEWER'), 'reviewer name should contain REVIEWER');
+  await lease.release();
+  await factory.close();
+});
+
+test('create with no members option defaults to doer+reviewer (backward compat)', async () => {
+  const { factory } = await makeFactory();
+  const lease = await factory.create();
+  assert.ok(lease.doer, 'should have doer');
+  assert.ok(lease.reviewer, 'should have reviewer');
+  assert.strictEqual(lease.upgradeToReviewer, undefined, 'no upgrade needed when both present');
+  await lease.release();
+  await factory.close();
+});
+
 test('close waits for an in-flight create and does not return a live lease', async () => {
   let releaseRegister;
   const registerBlocked = new Promise((resolve) => {

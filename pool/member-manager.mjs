@@ -33,6 +33,31 @@ export class MemberManager {
     }
   }
 
+  async provisionDoer(prefix, workRoot) {
+    const doer = { name: `${prefix}-DOER`, folder: path.join(workRoot, 'doer') };
+    try {
+      await this.#ensureRegistered(doer);
+      await this.#provisionAuth(doer.name);
+      return { doer };
+    } catch (err) {
+      await fs.rm(workRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 }).catch(() => {});
+      await this.#tryRemove(doer.name);
+      throw err;
+    }
+  }
+
+  async provisionReviewer(prefix, workRoot) {
+    const reviewer = { name: `${prefix}-REVIEWER`, folder: path.join(workRoot, 'reviewer') };
+    try {
+      await this.#ensureRegistered(reviewer);
+      await this.#provisionAuth(reviewer.name);
+      return { reviewer };
+    } catch (err) {
+      await this.#tryRemove(reviewer.name);
+      throw err;
+    }
+  }
+
   async teardownPair(prefix, workRoot) {
     await this.#tryRemove(`${prefix}-DOER`);
     await this.#tryRemove(`${prefix}-REVIEWER`);
