@@ -37,7 +37,7 @@ const planFleet = () => createMockFleetApi({
     '```plan\n{"steps": [{"type": "tool", "tool": "weather", "args": {"city": "London"}, "reason": "Get weather", "review": false}]}\n```',
     '```review\n{"approved": true}\n```',
     '```done\n{"result": "London is 15°C and cloudy", "summary": "Done"}\n```',
-  ]),
+  ], 'plan-execute'),
 });
 
 const chatHost = (extra = {}) => startHost({
@@ -54,7 +54,7 @@ test('chat page, script, task, SSE, and reducer agree end to end', { timeout: 60
   const dispatcher = await makeDispatcher();
   const { host, close, config } = await chatHost({ fleetApi: planFleet(), dispatcher });
   try {
-    assert.deepEqual(config.modules.chat, { enabled: true, title: 'Chat e2e' });
+    assert.deepEqual(config.modules.chat, { enabled: true, title: 'Chat e2e', themes: ['apra'] });
 
     const page = await fetch(url(host, '/chat'));
     assert.equal(page.status, 200);
@@ -118,7 +118,7 @@ test('createHost().chat() flows through the builder', async () => {
     .build();
   const { host, close, config } = await agent.start({ port: 0 });
   try {
-    assert.deepEqual(config.modules.chat, { enabled: true, title: 'Builder chat' });
+    assert.deepEqual(config.modules.chat, { enabled: true, title: 'Builder chat', themes: ['apra'] });
     assert.equal((await fetch(url(host, '/chat'))).status, 200);
   } finally { await close(); }
 });

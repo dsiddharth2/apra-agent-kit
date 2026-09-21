@@ -86,16 +86,17 @@ export function rosterNames(size) {
 }
 
 /** Keep scripted run-loop replies when host.config.mjs has router.enabled. */
-export function withRouterBypass(responses) {
+export function withRouterBypass(responses, path = 'open-ended') {
+  const classifier = `{"path":"${path}"}`;
   if (typeof responses === 'function') {
     return (opts) => {
-      if (opts.prompt?.includes('task router')) return '{"path":"open-ended"}';
+      if (opts.prompt?.includes('task router')) return classifier;
       return responses(opts);
     };
   }
   let idx = 0;
   return (opts) => {
-    if (opts.prompt?.includes('task router')) return '{"path":"open-ended"}';
+    if (opts.prompt?.includes('task router')) return classifier;
     const text = responses[Math.min(idx, responses.length - 1)];
     idx++;
     return text;

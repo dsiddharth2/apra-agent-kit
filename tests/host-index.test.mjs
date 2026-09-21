@@ -501,7 +501,8 @@ test('POST /task returns 202 and the job completes; GET /jobs/:id matches SSE se
     assert.equal(rec.status, 200);
     assert.equal(rec.body.status, settled.data.status);
     assert.equal(rec.body.status, 'completed');
-    assert.ok(rec.body.history.length > 0);
+    assert.equal(rec.body.result, 'inspected');
+    assert.ok(rec.body.history.some((h) => h.tool === 'inspect-members'), 'run loop should call inspect-members');
   } finally { await close(); }
 });
 
@@ -514,6 +515,8 @@ test('POST /task?wait=true keeps the Phase 2 synchronous shape', async () => {
     const body = JSON.parse(res.body);
     assert.deepEqual(Object.keys(body).sort(), ['budget', 'history', 'result', 'routedTo', 'status', 'taskId', 'traceId']);
     assert.equal(body.status, 'completed');
+    assert.equal(body.result, 'inspected');
+    assert.ok(body.history.some((h) => h.tool === 'inspect-members'), 'run loop should call inspect-members');
   } finally { await close(); }
 });
 
