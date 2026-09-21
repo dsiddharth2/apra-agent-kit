@@ -40,10 +40,11 @@ services:
     image: mcr.microsoft.com/azure-storage/azurite
     command: azurite --silent --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 10000 && nc -z localhost 10001 && nc -z localhost 10002"]
+      test: ["CMD-SHELL", "node -e \"Promise.all([10000,10001,10002].map(p=>new Promise((y,n)=>{const s=require('net').connect(p,'localhost',()=>{s.end();y()});s.on('error',n)}))).then(()=>process.exit(0),()=>process.exit(1))\""]
       interval: 5s
-      timeout: 3s
-      retries: 20
+      timeout: 5s
+      retries: 24
+      start_period: 10s
 
   agent-durable:
     profiles: [durable]
