@@ -13,7 +13,8 @@ export async function loadConfig(configDir, env = process.env) {
   return validate(raw, env);
 }
 
-// modules.chat → { enabled, title }. CHAT_ENABLED=true|false|1|0 wins over the file.
+// modules.chat → { enabled, title, themes }. CHAT_ENABLED=true|false|1|0 wins over the file.
+const VALID_THEMES = new Set(['apra', 'blue']);
 export function resolveChatConfig(raw = {}, { env = process.env, name = '' } = {}) {
   const chat = { enabled: !!raw?.enabled, title: raw?.title === undefined ? name : raw.title };
   const flag = String(env.CHAT_ENABLED ?? '').toLowerCase();
@@ -22,6 +23,8 @@ export function resolveChatConfig(raw = {}, { env = process.env, name = '' } = {
   if (typeof chat.title !== 'string' || !chat.title.trim()) {
     throw new Error('chat.title must be a non-empty string');
   }
+  const rawThemes = Array.isArray(raw?.themes) ? raw.themes.filter(t => VALID_THEMES.has(t)) : [];
+  chat.themes = rawThemes.length > 0 ? rawThemes : ['apra'];
   return chat;
 }
 
@@ -123,7 +126,7 @@ function validate(raw, env) {
       console.warn('[host/config] in-process jobs on azure-functions — jobs are lost when the instance recycles; use backend "durable"');
     }
     if (typeof budgetsConfig?.timeoutMs === 'number' && budgetsConfig.timeoutMs > dispatch.durable.maxActivityMs) {
-      console.warn(`[host/config] budgets.timeoutMs ${budgetsConfig.timeoutMs} exceeds dispatch.durable.maxActivityMs ${dispatch.durable.maxActivityMs}; the platform may kill the activity before budgets fire`);
+      console.warn(`[host/config] budgets.timeoutMs ${budgetsConfig.timeoutMs} exceeds dispatch.durable.maxActivityMs ${dispatch.durable.maxActivityMs}; Durable does not enforce maxActivityMs — budgets.timeoutMs is the run-loop limit`);
     }
     if (dispatch.store.kind === 'memory' && env.NODE_ENV !== 'test') {
       console.warn('[host/config] dispatch.store.kind "memory" — jobs are lost on restart');

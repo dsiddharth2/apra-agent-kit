@@ -92,6 +92,38 @@ export function richEvent(event, { stepIndex } = {}) {
   }
 }
 
+export function settleWhenAborted(run, signal) {
+  if (!signal) return run;
+  if (signal.aborted) {
+    run.catch(() => {});
+    return Promise.resolve({ status: 'cancelled', result: null, history: [], budget: null });
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      run.catch(() => {});
+      resolve({ status: 'cancelled', result: null, history: [], budget: null });
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    run.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
 export function mergeBudgetConfig(baseConfig, task) {
   const merged = { ...baseConfig };
   const constraints = task.constraints ?? {};
@@ -129,6 +161,18 @@ export async function executeHostedTask(task, {
     };
   }
   try {
+    const combined = new AbortController();
+    const forwardAbort = (reason) => { if (!combined.signal.aborted) combined.abort(reason); };
+    if (signal) {
+      if (signal.aborted) combined.abort(signal.reason);
+      else signal.addEventListener('abort', () => forwardAbort(signal.reason), { once: true });
+    }
+    if (lease.signal) {
+      if (lease.signal.aborted) combined.abort(lease.signal.reason);
+      else lease.signal.addEventListener('abort', () => forwardAbort(lease.signal.reason), { once: true });
+    }
+
+    const workspace = { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer };
     const result = await runTask(fullTask, {
       strategy: runLoopConfig.strategy ?? 'open-ended',
       tools: toolRegistry,
@@ -138,7 +182,8 @@ export async function executeHostedTask(task, {
       ...runLoopConfig,
       jobs,
       traceId,
-      signal,
+      signal: combined.signal,
+      workspace,
       onIteration: onProgress,
     });
     return { taskId: fullTask.id, ...result };

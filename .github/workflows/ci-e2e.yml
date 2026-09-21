@@ -1,0 +1,40 @@
+name: CI — E2E (/task path)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-scripted:
+    name: e2e scripted (vm)
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE: docker compose -f docker-compose.e2e.yml
+      BASE_URL: http://agent-vm:3000
+      E2E_TARGET: vm
+      E2E_MODE: scripted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: $COMPOSE --profile vm build
+      - name: Start agent
+        run: $COMPOSE --profile vm up -d --wait agent-vm
+      - name: Run e2e suite
+        run: $COMPOSE run --rm e2e | tee e2e-vm.log
+      - name: Collect logs on failure
+        if: failure()
+        run: $COMPOSE --profile vm logs --no-color > agent-vm.log || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-logs-vm
+          path: |
+            e2e-vm.log
+            agent-vm.log
+      - name: Tear down
+        if: always()
+        run: $COMPOSE --profile vm down -v

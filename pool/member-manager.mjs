@@ -36,7 +36,7 @@ export class MemberManager {
   async teardownPair(prefix, workRoot) {
     await this.#tryRemove(`${prefix}-DOER`);
     await this.#tryRemove(`${prefix}-REVIEWER`);
-    await fs.rm(workRoot, { recursive: true, force: true });
+    await fs.rm(workRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
   }
 
   // Fails on the first problem. A pool that started with a missing member

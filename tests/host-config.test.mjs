@@ -265,7 +265,7 @@ test('azure-functions with in-process backend warns; budgets timeout above maxAc
   const { result, warnings } = await captureWarnings(() => loadConfig(dir));
   assert.equal(result.modules.dispatch.backend, 'in-process');
   assert.ok(warnings.some(w => /in-process.*azure-functions|lost when the instance recycles/i.test(w)));
-  assert.ok(warnings.some(w => /timeoutMs.*maxActivityMs/i.test(w)));
+  assert.ok(warnings.some(w => /timeoutMs.*maxActivityMs/i.test(w) && /does not enforce maxActivityMs/i.test(w)));
   assert.ok(warnings.some(w => /allowHttp/i.test(w)));
 });
 
@@ -302,14 +302,14 @@ test('chat absent resolves to disabled with title defaulting to name', async () 
   const dir = await tmpDir();
   await writeConfig(dir, 'host.config.mjs', `export default { name: 'plain-host', fleet: {}, comm: { adapter: 'express' } };`);
   const config = await loadConfig(dir, testEnv);
-  assert.deepEqual(config.modules.chat, { enabled: false, title: 'plain-host' });
+  assert.deepEqual(config.modules.chat, { enabled: false, title: 'plain-host', themes: ['apra'] });
 });
 
 test('chat enabled with dispatch and sse resolves; title falls back to name', async () => {
   const dir = await tmpDir();
   await writeConfig(dir, 'host.config.mjs', chatBase(`{ enabled: true }`));
   const config = await loadConfig(dir, testEnv);
-  assert.deepEqual(config.modules.chat, { enabled: true, title: 'chat-host' });
+  assert.deepEqual(config.modules.chat, { enabled: true, title: 'chat-host', themes: ['apra'] });
 });
 
 test('chat.title is kept when given', async () => {
@@ -355,7 +355,7 @@ test('chat.title must be a non-empty string', async () => {
 
 test('resolveChatConfig is exported for builder overrides', async () => {
   const { resolveChatConfig } = await import('../host/config.mjs');
-  assert.deepEqual(resolveChatConfig({ enabled: true }, { env: {}, name: 'n' }), { enabled: true, title: 'n' });
-  assert.deepEqual(resolveChatConfig(undefined, { env: {}, name: 'n' }), { enabled: false, title: 'n' });
-  assert.deepEqual(resolveChatConfig({ enabled: true }, { env: { CHAT_ENABLED: '0' }, name: 'n' }), { enabled: false, title: 'n' });
+  assert.deepEqual(resolveChatConfig({ enabled: true }, { env: {}, name: 'n' }), { enabled: true, title: 'n', themes: ['apra'] });
+  assert.deepEqual(resolveChatConfig(undefined, { env: {}, name: 'n' }), { enabled: false, title: 'n', themes: ['apra'] });
+  assert.deepEqual(resolveChatConfig({ enabled: true }, { env: { CHAT_ENABLED: '0' }, name: 'n' }), { enabled: false, title: 'n', themes: ['apra'] });
 });

@@ -1,0 +1,80 @@
+# docker-compose.e2e.yml
+# Profiles:  vm       → agent-vm (in-process jobs, SQLite)
+#            durable  → azurite + agent-durable (Azure Functions host + Durable)
+# Run:       docker compose -f docker-compose.e2e.yml --profile vm up -d --wait agent-vm
+#            docker compose -f docker-compose.e2e.yml run --rm e2e
+name: apra-agent-kit-e2e
+
+# ${VAR-default} (no colon) so an explicitly empty FLEET_MOCK_SCRIPT disables the mock (live mode).
+x-agent-env: &agent-env
+  NODE_ENV: ${E2E_NODE_ENV-test}
+  FLEET_MOCK_SCRIPT: ${FLEET_MOCK_SCRIPT-/workspace/tests/e2e/scripted-llm.json}
+  CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+  WEBHOOK_ALLOW_HTTP: "true"
+  WORKER_POOL_SIZE: ${WORKER_POOL_SIZE:-2}
+  WORKER_EPHEMERAL_MAX: ${WORKER_EPHEMERAL_MAX:-2}
+
+services:
+  agent-vm:
+    profiles: [vm]
+    build: .
+    command: ["node", "host/index.mjs"]
+    environment:
+      <<: *agent-env
+      MCP_BIND_HOST: "0.0.0.0"
+      PORT: "3000"
+      JOBS_MAX_QUEUE_SIZE: "1"
+      JOBS_CONCURRENCY: "1"
+      JOBS_DB_PATH: /workspace/workdir/jobs.db
+    volumes:
+      - vm-workdir:/workspace/workdir
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  azurite:
+    profiles: [durable]
+    image: mcr.microsoft.com/azure-storage/azurite
+    command: azurite --silent --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"Promise.all([10000,10001,10002].map(p=>new Promise((y,n)=>{const s=require('net').connect(p,'localhost',()=>{s.end();y()});s.on('error',n)}))).then(()=>process.exit(0),()=>process.exit(1))\""]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+
+  agent-durable:
+    profiles: [durable]
+    build:
+      context: .
+      dockerfile: deploy/azure-functions/Dockerfile
+    depends_on:
+      azurite: { condition: service_healthy }
+    environment:
+      <<: *agent-env
+      FLEET_MOCK_SCRIPT: ${FLEET_MOCK_SCRIPT-/home/site/wwwroot/tests/e2e/scripted-llm.json}
+      # Public, well-known Azurite development key — not a secret.
+      AzureWebJobsStorage: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
+      JOBS_BACKEND: durable
+      DURABLE_TASK_HUB: fleetjobs
+      # Durable counts Running + Pending: 2 lets a=Running, b=Pending, c=429 (same shape as vm).
+      JOBS_MAX_QUEUE_SIZE: "2"
+      DURABLE_POLL_MS: "500"
+      WORKER_POOL_SIZE: "0"
+    # healthcheck inherited from the Dockerfile (start_period 90s for the extension bundle)
+
+  e2e:
+    build: .
+    environment:
+      BASE_URL: ${BASE_URL:-http://agent-vm:3000}
+      E2E_MODE: ${E2E_MODE:-scripted}
+      E2E_TARGET: ${E2E_TARGET:-vm}
+      WEBHOOK_RECEIVER_HOST: e2e
+      WEBHOOK_RECEIVER_PORT: "9000"
+    command: ["node", "--test", "tests/e2e/task.e2e.test.mjs"]
+
+volumes:
+  vm-workdir:

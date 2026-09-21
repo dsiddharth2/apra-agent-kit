@@ -35,6 +35,7 @@ export function resolveDispatchConfig(raw = {}, { env = process.env, budgetsConf
   merged.retentionMs = intEnv(env, 'JOBS_RETENTION_MS', merged.retentionMs);
   merged.store.dbPath = env.JOBS_DB_PATH || merged.store.dbPath;
   merged.durable.taskHub = env.DURABLE_TASK_HUB || merged.durable.taskHub;
+  merged.durable.pollMs = intEnv(env, 'DURABLE_POLL_MS', merged.durable.pollMs);
   if (merged.leaseTimeoutMs === undefined) {
     merged.leaseTimeoutMs = typeof budgetsConfig?.timeoutMs === 'number' ? budgetsConfig.timeoutMs + 60_000 : 660_000;
   }

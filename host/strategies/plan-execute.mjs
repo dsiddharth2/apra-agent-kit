@@ -24,6 +24,7 @@ export function createPlanExecuteStrategy({
   fleetApi,
   guardrails,
   jobs,
+  workspace,
   maxReplanAttempts = 3,
   maxReviewAttempts = 2,
   maxStepReviewAttempts = 2,
@@ -57,10 +58,10 @@ export function createPlanExecuteStrategy({
       return { ok: false, error: `Tool "${name}" not found in registry.` };
     }
     if (guardrails) {
-      return guardrails.execute(tool, { fleetApi, args, jobs, traceId });
+      return guardrails.execute(tool, { fleetApi, args, jobs, traceId, workspace });
     }
     const { executeTool } = await import('../tools/executor.mjs');
-    return executeTool(tool, { fleetApi, args, jobs, traceId });
+    return executeTool(tool, { fleetApi, args, jobs, traceId, workspace });
   }
 
   async function* iterate() {
@@ -96,15 +97,18 @@ export function createPlanExecuteStrategy({
           task, plan: workingPlan, history: observations,
           failedStep: null, reviewerFeedback: feedback, systemPrompt,
         });
-        const replanText = await callPrompt('doer', replanPrompt);
-        yield { type: 'prompt_usage', text: replanText };
-        const replanParsed = parseResponse(replanText);
-
-        if (replanParsed.type !== 'plan') {
-          yield { type: 'error', reason: 'invalid_replan', message: 'Doer did not produce a revised plan block' };
-          return null;
+        let replanResult = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const replanText = await callPrompt('doer', attempt === 0 ? replanPrompt : replanPrompt + '\n\nIMPORTANT: You MUST respond with a ```plan code fence containing the revised JSON plan.');
+          yield { type: 'prompt_usage', text: replanText };
+          const replanParsed = parseResponse(replanText);
+          if (replanParsed.type === 'plan') { replanResult = replanParsed.payload; break; }
         }
-        workingPlan = replanParsed.payload;
+        if (!replanResult) {
+          yield { type: 'review', approved: true, feedback: 'Replan failed; proceeding with current plan' };
+          return workingPlan;
+        }
+        workingPlan = replanResult;
         yield { type: 'plan', plan: workingPlan, _replan: true };
       }
 
@@ -122,16 +126,18 @@ export function createPlanExecuteStrategy({
         task, plan: currentPlan, history: observations,
         failedStep, reviewerFeedback: feedback, systemPrompt,
       });
-      const rpText = await callPrompt('doer', replanPrompt);
-      yield { type: 'prompt_usage', text: rpText };
-      const rpParsed = parseResponse(rpText);
-
-      if (rpParsed.type !== 'plan') {
-        yield { type: 'error', reason: 'invalid_replan', message: 'Doer did not produce a revised plan block' };
-        return null;
+      let revisedPlan = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const rpText = await callPrompt('doer', attempt === 0 ? replanPrompt : replanPrompt + '\n\nIMPORTANT: You MUST respond with a ```plan code fence containing the revised JSON plan.');
+        yield { type: 'prompt_usage', text: rpText };
+        const rpParsed = parseResponse(rpText);
+        if (rpParsed.type === 'plan') { revisedPlan = rpParsed.payload; break; }
+      }
+      if (!revisedPlan) {
+        yield { type: 'review', approved: true, feedback: 'Replan failed; continuing with current plan' };
+        return currentPlan;
       }
 
-      const revisedPlan = rpParsed.payload;
       yield { type: 'plan', plan: revisedPlan, _replan: true };
 
       return yield* reviewPlan(revisedPlan);

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "comm/azure-functions/main.mjs",
   "engines": {
     "node": ">=22.16"
   },
@@ -15,10 +16,13 @@
     "host": "node host/index.mjs",
     "test:host": "node --test tests/host-config.test.mjs tests/host-registry.test.mjs tests/host-executor.test.mjs tests/comm-express.test.mjs tests/host-index.test.mjs tests/host-tasks.test.mjs tests/host-routes.test.mjs",
     "test:phase2": "node --test tests/host-response-parser.test.mjs tests/host-format-tools.test.mjs tests/host-budgets.test.mjs tests/host-guardrails.test.mjs tests/host-mock-fleet.test.mjs tests/host-prompts.test.mjs tests/host-strategy-open-ended.test.mjs tests/host-strategy-plan-execute.test.mjs tests/host-run-loop.test.mjs",
-    "test:phase4": "node --test tests/host-jobs-record.test.mjs tests/host-jobs-store.test.mjs tests/host-jobs-in-process.test.mjs tests/host-jobs-config.test.mjs tests/host-jobs-tools.test.mjs tests/host-notify.test.mjs tests/comm-contract.test.mjs tests/package-scripts.test.mjs",
+    "test:phase4": "node --test tests/host-jobs-record.test.mjs tests/host-jobs-store.test.mjs tests/host-jobs-in-process.test.mjs tests/host-jobs-config.test.mjs tests/host-jobs-tools.test.mjs tests/host-notify.test.mjs tests/comm-contract.test.mjs tests/package-scripts.test.mjs tests/host-jobs-durable.test.mjs tests/comm-azure-orchestrator.test.mjs tests/comm-azure-http.test.mjs tests/comm-azure-activity.test.mjs tests/host-scripted-fleet.test.mjs",
     "test:chat": "node --test tests/host-chat-routes.test.mjs tests/host-chat-transcript.test.mjs tests/host-chat-e2e.test.mjs",
     "test:concurrency": "node --test tests/acceptance/concurrency.acceptance.test.mjs",
-    "test:acceptance": "node --test tests/acceptance/"
+    "test:acceptance": "node --test tests/acceptance/sync-task.acceptance.test.mjs tests/acceptance/async-job.acceptance.test.mjs tests/acceptance/concurrency.acceptance.test.mjs tests/acceptance/tool-server.acceptance.test.mjs",
+    "test:e2e": "node --test tests/e2e/task.e2e.test.mjs",
+    "e2e:vm": "docker compose -f docker-compose.e2e.yml --profile vm up -d --wait agent-vm && docker compose -f docker-compose.e2e.yml run --rm e2e; docker compose -f docker-compose.e2e.yml --profile vm down -v",
+    "e2e:durable": "docker compose -f docker-compose.e2e.yml --profile durable up -d --wait agent-durable && BASE_URL=http://agent-durable/api E2E_TARGET=durable docker compose -f docker-compose.e2e.yml run --rm e2e; docker compose -f docker-compose.e2e.yml --profile durable down -v"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

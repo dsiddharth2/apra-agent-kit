@@ -45,6 +45,13 @@ export class WorkerDispatcher {
     return this.#waiters.length;
   }
 
+  async resetWorkers() {
+    let freed = 0;
+    if (this.#ephemeral?.reset) freed += await this.#ephemeral.reset();
+    if (this.#pool?.reset) freed += await this.#pool.reset();
+    return freed;
+  }
+
   async dispatch({ signal, reportPhase } = {}) {
     if (this.#closed) throw new Error('WorkerDispatcher is closed');
     signal?.throwIfAborted();

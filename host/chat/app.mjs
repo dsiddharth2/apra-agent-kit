@@ -5,6 +5,7 @@
 /* global initialTurn, accepted, submitFailed, cancelling, reduce, isLive */
 /* global marked, DOMPurify */
 (() => {
+  var apiBase = location.pathname.replace(/\/chat\/?$/, '');
   var $ = function(sel) { return document.querySelector(sel); };
   var transcriptEl = $('#transcript');
   var composerEl = $('#composer');
@@ -16,6 +17,33 @@
   var hdrSub = $('#hdr-sub');
   var composerStatus = $('#composer-status');
   var markSrc = (function() { var img = $('.hdr-left img'); return img ? img.src : ''; })();
+
+  // --- Theme toggle ---
+  var themeToggle = $('#theme-toggle');
+  var themeBtns = themeToggle ? themeToggle.querySelectorAll('button') : [];
+  if (themeBtns.length < 2 && themeToggle) themeToggle.style.display = 'none';
+  (function initTheme() {
+    if (themeBtns.length < 2) return;
+    var validThemes = [];
+    for (var i = 0; i < themeBtns.length; i++) validThemes.push(themeBtns[i].getAttribute('data-theme'));
+    var saved = null;
+    try { saved = localStorage.getItem('chat-theme'); } catch(e) {}
+    var theme = saved && validThemes.indexOf(saved) >= 0 ? saved : validThemes[0];
+    document.documentElement.setAttribute('data-theme', theme);
+    for (var j = 0; j < themeBtns.length; j++) {
+      themeBtns[j].className = themeBtns[j].getAttribute('data-theme') === theme ? 'active' : '';
+    }
+  })();
+  if (themeToggle) themeToggle.addEventListener('click', function(e) {
+    var btn = e.target.closest('button');
+    if (!btn || btn.classList.contains('active')) return;
+    var theme = btn.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', theme);
+    for (var i = 0; i < themeBtns.length; i++) {
+      themeBtns[i].className = themeBtns[i].getAttribute('data-theme') === theme ? 'active' : '';
+    }
+    try { localStorage.setItem('chat-theme', theme); } catch(e) {}
+  });
 
   var current = null; // { turn, card, source, grouped, planOpen, openStep }
 
@@ -86,12 +114,17 @@
   function stepColors(status) {
     var isDone = status === 'completed';
     var isRun = status === 'running';
+    var style = getComputedStyle(document.documentElement);
+    var accent = style.getPropertyValue('--accent-dark').trim() || '#6B9420';
+    var primary = style.getPropertyValue('--text-primary').trim() || '#14171A';
+    var accentText = style.getPropertyValue('--accent-text').trim() || '#5a7a1e';
+    var runBg = style.getPropertyValue('--step-running-bg').trim() || '#F7FAF0';
     return {
-      glyph: isDone || isRun ? '#6B9420' : 'rgba(0,0,0,.28)',
-      tool: isDone || isRun ? '#14171A' : 'rgba(0,0,0,.42)',
-      detail: isRun ? '#5a7a1e' : 'rgba(0,0,0,.45)',
+      glyph: isDone || isRun ? accent : 'rgba(0,0,0,.28)',
+      tool: isDone || isRun ? primary : 'rgba(0,0,0,.42)',
+      detail: isRun ? accentText : 'rgba(0,0,0,.45)',
       caret: 'rgba(0,0,0,.3)',
-      bg: isRun ? '#F7FAF0' : 'transparent'
+      bg: isRun ? runBg : 'transparent'
     };
   }
 
@@ -187,15 +220,8 @@
       }
       plan.append(steps);
     }
-    // Footer — reviews + stop
+    // Footer — stop only (reviews shown in pipeline)
     var footer = h('div', 'plan-footer');
-    for (var r = 0; r < turn.reviews.length; r++) {
-      var rev = turn.reviews[r];
-      var badge = h('span', 'review-badge' + (rev.approved ? '' : ' no'));
-      badge.textContent = rev.reviewType + ' review ' + (rev.approved ? '✓' : '✗');
-      if (rev.feedback) badge.title = rev.feedback;
-      footer.append(badge);
-    }
     if (isLive(turn) && turn.status !== 'submitting') {
       var stopBtn = h('span', 'plan-stop', 'STOP');
       stopBtn.addEventListener('click', function(e) { e.stopPropagation(); doStop(); });
@@ -219,6 +245,102 @@
     return div;
   }
 
+  // --- Status pipeline ---
+
+  function pipelinePhase(turn) {
+    // Determine which phase of the lifecycle we're in
+    var hasStepsRunning = false;
+    var hasStepsDone = false;
+    if (turn.plan) {
+      for (var i = 0; i < turn.plan.steps.length; i++) {
+        if (turn.plan.steps[i].status === 'running') hasStepsRunning = true;
+        if (turn.plan.steps[i].status === 'completed') hasStepsDone = true;
+      }
+    }
+    var lastReview = turn.reviews.length > 0 ? turn.reviews[turn.reviews.length - 1] : null;
+    var anyRejected = false;
+    for (var j = 0; j < turn.reviews.length; j++) {
+      if (!turn.reviews[j].approved) anyRejected = true;
+    }
+
+    if (turn.status === 'completed') return 'done';
+    if (turn.status === 'submitting' || turn.status === 'queued') return 'sending';
+    if (!turn.plan) return 'planning';
+    if (!lastReview && !hasStepsRunning && !hasStepsDone) return 'reviewing';
+    if (lastReview && !lastReview.approved && !hasStepsRunning && !hasStepsDone) return 'replanning';
+    if (hasStepsRunning || hasStepsDone) return 'executing';
+    if (lastReview && lastReview.approved && !hasStepsRunning) return 'executing';
+    return 'executing';
+  }
+
+  function renderPipelineStage(label, state) {
+    // state: 'pending' | 'active' | 'done' | 'rejected'
+    var stage = h('div', 'pipeline-stage ' + state);
+    var icon = h('span', 'stage-icon');
+    if (state === 'done') icon.textContent = '✓';
+    else if (state === 'rejected') icon.textContent = '!';
+    else if (state === 'active') icon.textContent = '●';
+    else icon.textContent = '○';
+    stage.append(icon);
+    stage.append(h('span', 'stage-label', label));
+    return stage;
+  }
+
+  function renderArrow(done) {
+    var arrow = h('span', 'pipeline-arrow' + (done ? ' done' : ''));
+    arrow.textContent = '→';
+    return arrow;
+  }
+
+  function renderStatusPipeline(turn) {
+    var phase = pipelinePhase(turn);
+    var frag = document.createDocumentFragment();
+
+    // Don't show pipeline when idle or terminal with no plan (simple answer)
+    if (!isLive(turn) && !turn.plan && turn.status !== 'completed') return frag;
+    if (turn.status === 'completed' && !turn.plan) return frag;
+
+    var pipeline = h('div', 'status-pipeline');
+
+    // Stage 1: Plan
+    var planState = 'pending';
+    if (phase === 'planning') planState = 'active';
+    else if (phase === 'replanning') planState = 'active';
+    else if (turn.plan) planState = 'done';
+    pipeline.append(renderPipelineStage(phase === 'sending' ? 'SENDING' : phase === 'planning' ? 'GENERATING PLAN' : phase === 'replanning' ? 'REVISING PLAN' : 'PLAN READY', planState === 'active' ? 'active' : planState));
+
+    pipeline.append(renderArrow(planState === 'done'));
+
+    // Stage 2: Review
+    var lastReview = turn.reviews.length > 0 ? turn.reviews[turn.reviews.length - 1] : null;
+    var reviewState = 'pending';
+    if (phase === 'reviewing') reviewState = 'active';
+    else if (lastReview && lastReview.approved) reviewState = 'done';
+    else if (lastReview && !lastReview.approved) reviewState = 'rejected';
+    var reviewLabel = reviewState === 'active' ? 'REVIEWING' : reviewState === 'done' ? 'APPROVED' : reviewState === 'rejected' ? 'NEEDS REVISION' : 'REVIEW';
+    pipeline.append(renderPipelineStage(reviewLabel, reviewState));
+
+    pipeline.append(renderArrow(reviewState === 'done'));
+
+    // Stage 3: Execute
+    var execState = 'pending';
+    if (phase === 'executing') execState = 'active';
+    else if (turn.status === 'completed' || turn.status === 'failed' || turn.status === 'cancelled') execState = 'done';
+    var execLabel = execState === 'active' ? 'RUNNING' : execState === 'done' ? 'COMPLETE' : 'EXECUTE';
+    pipeline.append(renderPipelineStage(execLabel, execState));
+
+    frag.append(pipeline);
+
+    // Show review feedback if rejected
+    if (lastReview && !lastReview.approved && lastReview.feedback) {
+      var fb = h('div', 'pipeline-feedback');
+      fb.textContent = lastReview.feedback;
+      frag.append(fb);
+    }
+
+    return frag;
+  }
+
   // --- Card rendering ---
 
   function renderCard(card, turn) {
@@ -231,12 +353,9 @@
 
     var body = h('div', 'bot-body');
 
-    // Status when not yet running
-    if (turn.status === 'submitting' || turn.status === 'queued') {
-      body.append(h('div', 'bot-status active', pillText(turn)));
-    }
+    // Status pipeline + plan
+    body.append(renderStatusPipeline(turn));
 
-    // Plan
     if (turn.plan) {
       body.append(renderPlan(turn));
     }
@@ -311,7 +430,7 @@
     renderCard(card, current.turn);
     updateComposer(true);
 
-    fetch('/task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: goal }) })
+    fetch(apiBase + '/task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ goal: goal }) })
       .then(function(res) {
         return res.json().catch(function() { return null; }).then(function(body) { return { res: res, body: body }; });
       })
@@ -329,7 +448,7 @@
         console.log('accepted', body);
         hdrSub.textContent = 'JOB ' + body.jobId.toUpperCase();
         apply(function(turn) { return accepted(turn, { jobId: body.jobId, position: body.position }); });
-        subscribe(body.links && body.links.events ? body.links.events : '/jobs/' + body.jobId + '/events');
+        subscribe(apiBase + (body.links && body.links.events ? body.links.events : '/jobs/' + body.jobId + '/events'));
       })
       .catch(function(err) {
         console.error('submit failed', err);
@@ -339,7 +458,7 @@
 
   function doStop() {
     if (!current || !current.turn.jobId || !isLive(current.turn)) return;
-    fetch('/jobs/' + current.turn.jobId, { method: 'DELETE' })
+    fetch(apiBase + '/jobs/' + current.turn.jobId, { method: 'DELETE' })
       .then(function(res) {
         return res.json().catch(function() { return null; }).then(function(body) { return { res: res, body: body }; });
       })

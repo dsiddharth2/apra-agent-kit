@@ -47,6 +47,37 @@ on PATH.
 | `forecast` | `city`, `days` | Multi-day forecast from Open-Meteo (1-16 days). Read-only. |
 | `wikipedia-summary` | `topic` | Wikipedia summary extract for any topic. Read-only. |
 | `public-holidays` | `country`, `year` | Public holidays from Nager.Date (~100 countries). Read-only. |
+| `submit-task` | `goal`, `inputs?`, `callbackUrl?` | Queues an async task via the jobs backend. Returns `{ jobId, status, position }`. Does not take a worker lease. |
+| `job-status` | `jobId` | Returns the current job record (status, progress, result). Does not take a worker lease. |
+
+## Job-control tools
+
+When `dispatch.enabled` is true in `host.config.mjs`, two tools expose the async jobs API to Claude Code. Neither acquires a worker lease — they talk to the jobs backend directly.
+
+Example `submit-task` call and response:
+
+```json
+// tools/call arguments
+{ "goal": "What is the weather in Tokyo?" }
+
+// tool result (structuredContent or text)
+{ "jobId": "job-a1b2c3d4e5f6", "status": "queued", "position": 1 }
+```
+
+Example `job-status` call and response:
+
+```json
+// tools/call arguments
+{ "jobId": "job-a1b2c3d4e5f6" }
+
+// tool result while running
+{ "id": "job-a1b2c3d4e5f6", "status": "processing", "progress": { "iteration": 2, "message": "starting step 1: weather", "at": "..." }, ... }
+
+// tool result when done
+{ "id": "job-a1b2c3d4e5f6", "status": "completed", "result": "...", "history": [...], "budget": {...} }
+```
+
+See [jobs.md](jobs.md) for polling, SSE, webhooks, and cancellation.
 
 ## Registry contract
 

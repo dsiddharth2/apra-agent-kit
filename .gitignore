@@ -11,3 +11,10 @@ workdir/*
 !workdir/.gitkeep
 jobs.db
 jobs.db-*
+local.settings.json
+host.json
+host.config.express-backup.mjs
+host.config.local-functions.mjs
+__azurite_db_*
+__blobstorage__/
+logs/
