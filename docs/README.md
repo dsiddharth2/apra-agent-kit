@@ -1,5 +1,13 @@
 # Documentation
 
+### Build an agent
+
+| Document | Read it when |
+|---|---|
+| [getting-started.md](getting-started.md) | **Start here.** You want to build your own agent — configure it, add tools, run it, deploy it. No kit internals required. |
+
+### Contribute to the kit
+
 | Document | Read it when |
 |---|---|
 | [architecture.md](architecture.md) | You want to understand what this repo is, how the layers fit together, and why the non-obvious decisions were made. Includes a primer on Fleet concepts. |

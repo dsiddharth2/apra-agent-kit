@@ -19,5 +19,7 @@ ${reviewerFeedback ? `## Reviewer feedback\n\n${reviewerFeedback}` : ''}
 
 ## Instructions
 
-The previous plan could not be completed. Create a revised plan for the remaining work, accounting for what has already been done and the feedback above. Respond with a \`plan\` block.`;
+The previous plan could not be completed. Create a revised plan for the remaining work, accounting for what has already been done and the feedback above. Respond with a \`plan\` block.
+
+IMPORTANT: A replan must preserve the user's original destination and dates. Replanning means adjusting the research approach or itinerary structure, never changing where or when the user is traveling.`;
 }

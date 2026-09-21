@@ -47,7 +47,8 @@ test('activity emits progress+settled via jobs.emitEvent, posts webhook, returns
     const out = await activity({ jobId: 'job-1', task: { goal: 'inspect' }, callbackUrl: 'https://cb.test/h' }, { warn() {} });
     assert.equal(out.status, 'completed');
     assert.equal(out.result, 'done');
-    assert.ok(Array.isArray(out.history));
+    assert.equal(out.history, undefined, 'history stripped from durable return');
+    assert.equal(out.budget, undefined, 'budget stripped from durable return');
     assert.equal(client.calls.raiseEvent.length, 0, 'no raiseEvent calls');
     const progress = emitted.filter(e => e.event.type === 'progress');
     assert.ok(progress.length >= 1, 'at least one progress event emitted');

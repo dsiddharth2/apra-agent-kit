@@ -107,7 +107,13 @@ export async function startHost({
   const resolved = resolveModules(config, {
     runLoop: runLoopOption, budgets: budgetsOption, guardrails: guardrailsOption, dispatch: dispatchOption, notify: notifyOption, chat: chatOption,
   });
-  const { runLoopEnabled, runLoopConfig, budgetsConfig, guardrailsMod } = createPhase2Modules(toolRegistry, resolved);
+  const phase2 = createPhase2Modules(toolRegistry, resolved);
+  const { runLoopEnabled, budgetsConfig, guardrailsMod } = phase2;
+  const runLoopConfig = {
+    ...phase2.runLoopConfig,
+    agentName: config.name,
+    agentDescription: config.agentDescription ?? '',
+  };
 
   // Phase 4 modules. Builder overrides arrive raw, config-file values arrive resolved; resolve again idempotently.
   const dispatchEnabled = runLoopEnabled && !!(resolved.dispatchConfig?.enabled ?? (dispatchOption ? true : false));

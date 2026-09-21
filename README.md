@@ -25,44 +25,81 @@ agent.
 <td align="center"><em>Final itinerary</em></td>
 </tr></table>
 
-## Quick start
+## Build your own agent
+
+**[Getting Started Guide](docs/getting-started.md)** — configure, add tools, run, and
+deploy your agent. No kit internals required.
+
+### Quick start
 
 ```bash
 git clone https://github.com/dsiddharth2/apra-agent-kit.git
 cd apra-agent-kit
-CLAUDE_CODE_OAUTH_TOKEN="your-token" docker compose up -d
-claude mcp add --transport http fleet http://127.0.0.1:3000/mcp
+npm install
 ```
 
-### Async tasks
+**Prerequisites:** Node.js 22.16+, Python 3, Apra Fleet (`npm install -g @apralabs/apra-fleet && apra-fleet install`)
 
-Submit a goal and get a job id immediately; stream progress or poll for the result.
+**1. Configure** your agent in `host.config.mjs` — name, description, strategy, tools, budget limits.
+
+**2. Add tools** — write a Python script in `tools/`, register it in `mcp/registry.mjs`.
+
+**3. Run it:**
 
 ```bash
-curl.exe -sX POST localhost:3000/task -H "content-type: application/json" -d "{\"goal\":\"What is the weather in Tokyo?\"}"
-curl.exe -N localhost:3000/jobs/<jobId>/events
-curl.exe -s localhost:3000/jobs/<jobId>
+export CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
+node host/index.mjs
+```
+
+Open `http://localhost:3000/chat` — your agent is live.
+
+Or with Docker:
+```bash
+CLAUDE_CODE_OAUTH_TOKEN="your-token" docker compose up -d
+```
+
+### Use it
+
+```bash
+# Chat UI
+open http://localhost:3000/chat
+
+# Submit a task via API
+curl -sX POST localhost:3000/task -H "content-type: application/json" \
+  -d '{"goal":"What is the weather in Tokyo?"}'
+
+# Stream progress
+curl -N localhost:3000/jobs/<jobId>/events
+
+# Connect via MCP
+claude mcp add --transport http my-agent http://127.0.0.1:3000/mcp
 ```
 
 See [docs/jobs.md](docs/jobs.md) for the full API. To deploy on Azure Functions with
 horizontal scale, see [docs/deploy-azure-functions.md](docs/deploy-azure-functions.md).
 
-## Without Docker
+---
 
-```bash
-npm install -g @apralabs/apra-fleet && apra-fleet install
-npm install
-export CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
-npm run mcp
-```
+## Contribute to the kit
 
-## Testing
+### Testing
 
 ```bash
 npm test    # mock tests — no Fleet binary, no tokens needed
 ```
 
-## Docs
+### Docs
+
+**For agent builders:**
+
+| Document | Covers |
+|---|---|
+| **[docs/getting-started.md](docs/getting-started.md)** | **Config, tools, run, deploy — start here** |
+| [docs/chat-ui.md](docs/chat-ui.md) | Chat page: theming, status pipeline, event stream |
+| [docs/jobs.md](docs/jobs.md) | Async jobs: submit, poll, SSE, webhooks, cancellation |
+| [docs/deploy-azure-functions.md](docs/deploy-azure-functions.md) | Azure Functions Premium deployment with Durable backend |
+
+**For kit contributors:**
 
 | Document | Covers |
 |---|---|
@@ -70,7 +107,4 @@ npm test    # mock tests — no Fleet binary, no tokens needed
 | [docs/development.md](docs/development.md) | Setup, testing, adding workflows, conventions |
 | [docs/mcp-interface.md](docs/mcp-interface.md) | MCP tool catalog, registry contract, timeouts, auth |
 | [docs/run-loop.md](docs/run-loop.md) | Autonomous agent: strategies, budgets, guardrails, `/task` API |
-| [docs/chat-ui.md](docs/chat-ui.md) | Built-in chat page: turn on `modules.chat`, open `/chat` |
 | [docs/concurrency.md](docs/concurrency.md) | Parallel task execution: worker pool, job queue, config, testing |
-| [docs/jobs.md](docs/jobs.md) | Async jobs: submit, poll, SSE, webhooks, cancellation |
-| [docs/deploy-azure-functions.md](docs/deploy-azure-functions.md) | Azure Functions Premium deployment with Durable backend |

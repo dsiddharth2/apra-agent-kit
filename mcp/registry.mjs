@@ -293,6 +293,49 @@ export const defaultRegistry = [
     },
   },
   {
+    name: 'places-of-interest',
+    description:
+      'Searches Wikipedia for tourist attractions, activities, and points of interest at a location. ' +
+      'Returns titles and summary extracts for the top results. Read-only, no LLM tokens.',
+    inputSchema: z.object({
+      location: z.string().describe('Location to search for (e.g. Manali, Shimla, Himachal Pradesh).'),
+      limit: z.number().optional().describe('Max results to return (1-20). Defaults to 8.'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    async run({ fleetApi, args }) {
+      const location = shellEscape(args.location);
+      const limit = args.limit ?? 8;
+      const script = path.join(toolsDir, 'places-of-interest', 'places_of_interest.py');
+      const raw = await fleetApi.executeCommand({
+        member_name: 'doer',
+        command: `python3 "${script}" "${location}" ${limit}`,
+      });
+      return parseToolOutput(raw);
+    },
+  },
+  {
+    name: 'route-distance',
+    description:
+      'Calculates driving distance and estimated travel time between two cities using ' +
+      'OpenStreetMap routing. Returns distance in km, duration in hours, and a human-readable ' +
+      'duration string. Read-only, no LLM tokens. Rate limited (1 req/sec for geocoding).',
+    inputSchema: z.object({
+      from: z.string().describe('Origin city name (e.g. Delhi, Shimla).'),
+      to: z.string().describe('Destination city name (e.g. Manali, Dharamshala).'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    async run({ fleetApi, args }) {
+      const from = shellEscape(args.from);
+      const to = shellEscape(args.to);
+      const script = path.join(toolsDir, 'route-distance', 'route_distance.py');
+      const raw = await fleetApi.executeCommand({
+        member_name: 'doer',
+        command: `python3 "${script}" "${from}" "${to}"`,
+      });
+      return parseToolOutput(raw);
+    },
+  },
+  {
     name: 'public-holidays',
     description:
       'Fetches public holidays for a country and year. Returns holiday names, dates, and types. ' +

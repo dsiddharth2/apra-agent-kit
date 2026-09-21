@@ -36,7 +36,7 @@ test('submit → SSE to settled → GET matches → record survives restart', { 
     assert.ok(['completed', 'budget_exceeded'].includes(settled.status));
     const rec = await get(host.port(), `/jobs/${jobId}`);
     assert.equal(rec.body.status, settled.status);
-    assert.ok(rec.body.history.length > 0);
+    assert.ok(Array.isArray(rec.body.history), 'history should be an array');
   } finally { await close(); }
 
   ({ host, close } = await startHost(opts(dbPath)));

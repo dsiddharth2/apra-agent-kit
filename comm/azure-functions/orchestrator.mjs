@@ -9,6 +9,23 @@
 import { ACTIVITY_NAME } from '../../host/jobs/durable.mjs';
 import { ringEvents } from '../../host/jobs/record.mjs';
 
+const DURABLE_PAYLOAD_MAX_CHARS = 12_000; // stay safely under the 16 KB UTF-16 limit
+
+function truncateOutput(output) {
+  const json = JSON.stringify(output);
+  if (json.length <= DURABLE_PAYLOAD_MAX_CHARS) return output;
+  const safe = { ...output };
+  if (typeof safe.result === 'string' && safe.result.length > 2000) {
+    safe.result = safe.result.slice(0, 2000) + '… [truncated]';
+  }
+  if (JSON.stringify(safe).length > DURABLE_PAYLOAD_MAX_CHARS) {
+    safe.result = typeof safe.result === 'string'
+      ? safe.result.slice(0, 500) + '… [truncated]'
+      : null;
+  }
+  return safe;
+}
+
 export function buildOrchestrator({ ringSize = 50 } = {}) {
   return function* runTaskOrchestrator(context) {
     const df = context.df;
@@ -43,7 +60,7 @@ export function buildOrchestrator({ ringSize = 50 } = {}) {
     state.finishedAt = at;
     push({ type: 'settled', jobId, at, status: output.status, result: output.result ?? null, error: output.error ?? null });
     publish();
-    return output;
+    return truncateOutput(output);
   };
 }
 

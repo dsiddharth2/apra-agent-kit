@@ -27,21 +27,46 @@ def _get_insecure(url):
 
 
 def fetch_advisory(country_code):
+    data = None
     try:
         data = _get(f"https://www.travel-advisory.info/api?countrycode={urllib.request.quote(country_code.upper())}")
     except (urllib.error.URLError, TimeoutError):
         try:
             data = _get_insecure(f"https://www.travel-advisory.info/api?countrycode={urllib.request.quote(country_code.upper())}")
-        except (urllib.error.URLError, TimeoutError) as exc:
-            return json.dumps({"ok": False, "error": f"advisory fetch failed: {exc}"})
+        except (urllib.error.URLError, TimeoutError):
+            pass
+
+    if data is None:
+        return json.dumps({
+            "ok": True,
+            "country_code": country_code.upper(),
+            "score": None,
+            "message": "Travel advisory data is temporarily unavailable. Check travel.state.gov (US), gov.uk/foreign-travel-advice (UK), or smartraveller.gov.au (AU) for current advisories.",
+            "source": "fallback",
+            "updated": None,
+        })
 
     api_status = data.get("api_status", {})
     if api_status.get("reply", {}).get("code") != 200:
-        return json.dumps({"ok": False, "error": f"API error for {country_code}"})
+        return json.dumps({
+            "ok": True,
+            "country_code": country_code.upper(),
+            "score": None,
+            "message": "Travel advisory data is temporarily unavailable. Check travel.state.gov (US), gov.uk/foreign-travel-advice (UK), or smartraveller.gov.au (AU) for current advisories.",
+            "source": "fallback",
+            "updated": None,
+        })
 
     entry = (data.get("data") or {}).get(country_code.upper())
     if not entry:
-        return json.dumps({"ok": False, "error": f"No data for country code: {country_code}"})
+        return json.dumps({
+            "ok": True,
+            "country_code": country_code.upper(),
+            "score": None,
+            "message": f"No specific advisory data for {country_code.upper()}. Check official government travel advisory sites for current information.",
+            "source": "fallback",
+            "updated": None,
+        })
 
     advisory = entry.get("advisory", {})
     return json.dumps({

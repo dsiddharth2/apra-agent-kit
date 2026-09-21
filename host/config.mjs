@@ -152,6 +152,7 @@ function validate(raw, env) {
   return Object.freeze({
     name: raw.name,
     description: raw.description ?? '',
+    agentDescription: raw.agentDescription ?? '',
     fleet: Object.freeze({ ...raw.fleet }),
     comm: Object.freeze({
       adapter: raw.comm.adapter,
