@@ -68,7 +68,15 @@ export function createRunTaskActivity({ getClient, pollMs = 2000, getContext = g
           { callbackUrl },
         );
       }
-      return settled;
+      // Durable Functions caps activity return values at 16 KB (UTF-16).
+      // The full result is already emitted via SSE (emit) and webhook
+      // (notifier) above, so the orchestrator only needs a slim payload.
+      const { history, budget, ...trimmed } = settled;
+      const json = JSON.stringify(trimmed);
+      if (json.length > 12_000 && typeof trimmed.result === 'string') {
+        trimmed.result = trimmed.result.slice(0, 2000) + '\n\n[Full result delivered via SSE]';
+      }
+      return trimmed;
     } finally {
       clearInterval(cancelPoll);
     }

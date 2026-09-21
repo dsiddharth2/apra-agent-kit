@@ -67,7 +67,11 @@ export async function runTask(task, {
       }
 
       if (event.type === 'done') {
-        result = event.result;
+        result = typeof event.result === 'string'
+          ? event.result
+              .replace(/~~(.*?)~~/g, '$1')
+              .replace(/([^\n])\*\*(Getting There|Morning|Afternoon|Evening|Stay|Meals|Day Cost Estimate)\*\*/g, '$1\n**$2**')
+          : event.result;
         status = 'completed';
         break;
       }

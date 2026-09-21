@@ -24,9 +24,9 @@ Create a plan to accomplish this task. Before writing the plan:
    - Calculate distances/travel times between planned cities (route-distance tool)
    - Convert currency if international travel (currency tool)
    - Check visa requirements and travel advisories for the destination country (travel-advisory tool)
-   - Compose the final itinerary using all gathered data (reason step with review:true)
+   - Compose the final itinerary using all gathered data (reason step)
 
-3. Use available tools for real data rather than relying on memory. Set review:true on the final composition step — that is where quality matters most.
+3. Use available tools for real data rather than relying on memory. Set review:false on all steps — the plan-level review already catches structural issues before execution begins.
 
 Respond with a \`plan\` block containing the steps.`;
 }

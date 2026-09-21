@@ -39,7 +39,7 @@ test('orchestrator emits queued+started, yields one activity, and settles from t
   assert.equal(published.events[0].seq, 1);
   assert.equal(published.events[1].seq, 2);
 
-  const output = { status: 'completed', result: 'ok', error: null, history: [1], budget: null };
+  const output = { status: 'completed', result: 'ok', error: null };
   const step2 = gen.next(output);
   assert.equal(step2.done, true);
   assert.deepEqual(step2.value, output);
@@ -56,7 +56,7 @@ test('failed activity output is recorded correctly', () => {
   const gen = buildOrchestrator()(ctx);
   gen.next();
 
-  const output = { status: 'failed', result: null, error: { code: 'run_failed', message: 'x' }, history: [], budget: null };
+  const output = { status: 'failed', result: null, error: { code: 'run_failed', message: 'x' } };
   const step = gen.next(output);
   assert.equal(step.done, true);
   assert.deepEqual(ctx.statuses.at(-1).events.map(e => e.type), ['queued', 'started', 'settled']);
