@@ -1,0 +1,5 @@
+{
+  "name": "route-check",
+  "entry": "route-check.js",
+  "description": "Driving distance and travel time between two cities"
+}
