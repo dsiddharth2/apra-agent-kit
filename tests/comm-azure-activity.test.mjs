@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { WorkerDispatcher } from '../pool/worker-dispatcher.mjs';
 import { WorkerPool } from '../pool/worker-pool.mjs';
-import { createMockFleetApi, rosterNames } from './helpers/mock-fleet.mjs';
+import { createMockFleetApi, rosterNames, withRouterBypass } from './helpers/mock-fleet.mjs';
 
 const { createRunTaskActivity, setHostContextFactory, getHostContext } = await import('../comm/azure-functions/activity.mjs');
 const { extendRegistry } = await import('../host/tools/registry.mjs');
@@ -92,6 +92,33 @@ test('activity returns failed / dispatch_failed as a value when no lease is avai
     const out = await activity({ jobId: 'job-3', task: { goal: 'x' }, callbackUrl: null }, { warn() {} });
     assert.equal(out.status, 'failed');
     assert.equal(out.error.code, 'dispatch_failed');
+  } finally { await dispatcher.close(); }
+});
+
+test('activity issues a classifier prompt when hostCtx.routerConfig is enabled', async () => {
+  const api = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: withRouterBypass([
+      '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
+      '```done\n{"result": "done", "summary": "s"}\n```',
+    ]),
+  });
+  const dispatcher = await makeDispatcher();
+  try {
+    const activity = createRunTaskActivity({
+      getClient: () => fakeClient(),
+      pollMs: 50,
+      getContext: async () => hostCtx(api, dispatcher, {
+        routerConfig: { enabled: true, fallbackStrategy: 'open-ended' },
+      }),
+    });
+    const out = await activity({ jobId: 'job-router', task: { goal: 'inspect' }, callbackUrl: null }, { warn() {} });
+    const classifierCalls = api.promptCalls.filter(c => c.prompt?.includes('task router'));
+    assert.ok(classifierCalls.length >= 1, 'classifier "task router" prompt should be issued when routerConfig is enabled');
+    assert.equal(out.status, 'completed');
+    if (out.routedTo !== undefined) {
+      assert.ok(typeof out.routedTo === 'string' && out.routedTo.length > 0, 'routedTo should be present on the settled result');
+    }
   } finally { await dispatcher.close(); }
 });
 

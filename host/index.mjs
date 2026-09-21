@@ -250,7 +250,7 @@ export async function startHost({
   const effectiveConfig = Object.freeze({ ...config, modules: Object.freeze({ ...config.modules, chat: chatConfig }) });
   return {
     host: adapter, jobs, notifier, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry,
-    fleetApi: api, dispatcher: activeDispatcher, guardrailsMod, runLoopConfig, budgetsConfig,
+    fleetApi: api, dispatcher: activeDispatcher, guardrailsMod, runLoopConfig, budgetsConfig, routerConfig,
   };
 }
 

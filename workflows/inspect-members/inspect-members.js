@@ -49,19 +49,22 @@ export async function main(context) {
     throw new Error('inspect-members.js requires args.fleetApi');
   }
   const workspace = args.workspace;
-  if (!workspace?.doer || !workspace?.reviewer) {
-    throw new Error('inspect-members.js requires args.workspace with doer and reviewer');
+  if (!workspace?.doer) {
+    throw new Error('inspect-members.js requires args.workspace with doer');
   }
   const signal = args.signal;
   const reportPhase = args.reportPhase ?? (() => {});
   const includeFiles = args.includeFiles === true;
   const requestedRoles = Array.isArray(args.roles) && args.roles.length > 0 ? args.roles : ROLES;
-  const targets = requestedRoles.map((role) => {
+  const targets = [];
+  for (const role of requestedRoles) {
     if (!ROLES.includes(role)) {
       throw new Error(`Unsupported role: ${String(role)}`);
     }
-    return { role, name: workspace[role].name, folder: workspace[role].folder };
-  });
+    const member = workspace[role];
+    if (!member) continue;
+    targets.push({ role, name: member.name, folder: member.folder });
+  }
 
   phase('members');
   await reportPhase('listing fleet members');

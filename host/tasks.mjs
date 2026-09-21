@@ -185,6 +185,7 @@ export async function executeHostedTask(task, {
         fleetApi: createPooledFleetApi(api, lease),
         registry: toolRegistry,
         fallbackStrategy: routerConfig.fallbackStrategy ?? 'open-ended',
+        signal: combined.signal,
       });
       if (route.path === 'workflow') {
         workflowName = route.workflow;
@@ -199,7 +200,19 @@ export async function executeHostedTask(task, {
     routedTo = workflowName ? `workflow:${workflowName}` : strategy;
 
     if (strategy === 'plan-execute' && lease.upgradeToReviewer && !lease.reviewer) {
-      await lease.upgradeToReviewer();
+      try {
+        await lease.upgradeToReviewer();
+      } catch (err) {
+        return {
+          taskId: fullTask.id,
+          traceId,
+          routedTo,
+          status: 'failed',
+          result: { error: 'upgrade_failed', message: String(err?.message ?? err) },
+          history: [],
+          budget: null,
+        };
+      }
     }
 
     const workspace = { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer };
@@ -210,6 +223,7 @@ export async function executeHostedTask(task, {
         toolRegistry,
         signal: combined.signal,
         onProgress,
+        workspace,
       });
       return { taskId: fullTask.id, traceId, routedTo, ...wfResult };
     }

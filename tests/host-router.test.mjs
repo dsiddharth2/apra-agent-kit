@@ -125,6 +125,34 @@ describe('classify', () => {
     });
     assert.deepEqual(result, { path: 'plan-execute' });
   });
+
+  test('returns fallback without prompting when signal is already aborted', async () => {
+    const fleetApi = createMockFleetApi({
+      promptResponses: () => '{"path":"plan-execute"}',
+    });
+    const ac = new AbortController();
+    ac.abort();
+    const result = await classify('weather in Tokyo', {
+      fleetApi, registry: [], fallbackStrategy: 'open-ended', signal: ac.signal,
+    });
+    assert.deepEqual(result, { path: 'open-ended' });
+    assert.equal(fleetApi.promptCalls.length, 0);
+  });
+
+  test('returns fallback when classify is aborted while prompting', async () => {
+    const ac = new AbortController();
+    const fleetApi = createMockFleetApi({
+      promptResponses: async () => {
+        await new Promise((r) => setTimeout(r, 5000));
+        return '{"path":"plan-execute"}';
+      },
+    });
+    setTimeout(() => ac.abort(), 20);
+    const result = await classify('weather in Tokyo', {
+      fleetApi, registry: [], fallbackStrategy: 'open-ended', signal: ac.signal,
+    });
+    assert.deepEqual(result, { path: 'open-ended' });
+  });
 });
 
 describe('executeWorkflow', () => {
@@ -158,9 +186,70 @@ describe('executeWorkflow', () => {
         async run() { const e = new Error('aborted'); e.name = 'AbortError'; throw e; },
       },
     ];
+    const ac = new AbortController();
+    ac.abort();
     const result = await executeWorkflow('abort-wf', {}, {
-      fleetApi: {}, toolRegistry: registry, signal: null, onProgress: null,
+      fleetApi: {}, toolRegistry: registry, signal: ac.signal, onProgress: null,
     });
     assert.equal(result.status, 'cancelled');
+  });
+
+  test('unwraps a registry-style completed wrap string to the inner answer', async () => {
+    const registry = [
+      {
+        name: 'wrapped-wf',
+        routing: { description: 'test', args: {} },
+        async run() {
+          return `quick weather completed: ${JSON.stringify({ city: 'Tokyo', answer: 'Sunny in Tokyo' })}`;
+        },
+      },
+    ];
+    const result = await executeWorkflow('wrapped-wf', {}, {
+      fleetApi: {}, toolRegistry: registry, signal: null, onProgress: null,
+    });
+    assert.equal(result.status, 'completed');
+    assert.equal(result.result, 'Sunny in Tokyo');
+    assert.ok(!result.result.includes('completed:'), 'must not surface the debug wrap');
+  });
+
+  test('fails when args do not match the workflow inputSchema', async () => {
+    const { z } = await import('zod/v4');
+    const registry = [
+      {
+        name: 'typed-wf',
+        routing: { description: 'test', args: {} },
+        inputSchema: z.object({ city: z.string() }),
+        async run() { return { answer: 'should not run' }; },
+      },
+    ];
+    const result = await executeWorkflow('typed-wf', { city: 123 }, {
+      fleetApi: {}, toolRegistry: registry, signal: null, onProgress: null,
+    });
+    assert.equal(result.status, 'failed');
+    assert.equal(result.result?.error, 'validation_failed');
+  });
+
+  test('adapts string reportPhase calls into { iteration, message }', async () => {
+    const progress = [];
+    const registry = [
+      {
+        name: 'phase-wf',
+        routing: { description: 'test', args: {} },
+        async run({ reportPhase }) {
+          await reportPhase('fetching weather');
+          return { answer: 'ok' };
+        },
+      },
+    ];
+    const result = await executeWorkflow('phase-wf', {}, {
+      fleetApi: {}, toolRegistry: registry, signal: null,
+      onProgress: (p) => progress.push(p),
+    });
+    assert.equal(result.status, 'completed');
+    assert.equal(result.result, 'ok');
+    assert.equal(progress.length, 1);
+    assert.equal(typeof progress[0], 'object');
+    assert.equal(progress[0].message, 'fetching weather');
+    assert.equal(typeof progress[0].iteration, 'number');
   });
 });

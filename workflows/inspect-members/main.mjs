@@ -24,8 +24,8 @@ export async function runInspectMembers({
       runInspectMembers({ ...ctx, roles, includeFiles, reportPhase }),
     );
   }
-  if (!workspace?.doer || !workspace?.reviewer) {
-    throw new Error('runInspectMembers requires a workspace with doer and reviewer');
+  if (!workspace?.doer) {
+    throw new Error('runInspectMembers requires a workspace with doer');
   }
   const { FleetWorkflow } = await import('@apralabs/apra-fleet-workflow');
   const { WorkflowEngine } = await import('@apralabs/apra-fleet-workflow/engine');

@@ -92,6 +92,18 @@ test('startHost boots and serves tools via MCP', async () => {
   }
 });
 
+test('startHost returns routerConfig on the host object', async () => {
+  const fleetApi = makeMockFleetApi();
+  const dispatcher = await makeDispatcher();
+  const started = await startHost({ fleetApi, dispatcher, port: 0 });
+  try {
+    assert.ok(started.routerConfig, 'startHost must return routerConfig');
+    assert.equal(typeof started.routerConfig.enabled, 'boolean');
+  } finally {
+    await started.close();
+  }
+});
+
 test('startHost health endpoint returns ok', async () => {
   const fleetApi = makeMockFleetApi();
   const dispatcher = await makeDispatcher();

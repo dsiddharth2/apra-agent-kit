@@ -1,4 +1,7 @@
+import { executeTool } from './tools/executor.mjs';
+
 const VALID_PATHS = new Set(['workflow', 'open-ended', 'plan-execute']);
+const CLASSIFY_TIMEOUT_MS = 30_000;
 
 export function buildClassifierPrompt(goal, registry) {
   const routable = registry.filter(t => t.routing);
@@ -57,36 +60,113 @@ function extractText(mcpResult) {
   return (mcpResult.content ?? []).map(p => p.text ?? '').join('\n');
 }
 
-export async function classify(goal, { fleetApi, registry, fallbackStrategy }) {
+function abortError(message = 'aborted') {
+  const err = new Error(message);
+  err.name = 'AbortError';
+  return err;
+}
+
+export async function classify(goal, { fleetApi, registry, fallbackStrategy, signal }) {
   const routableNames = new Set(registry.filter(t => t.routing).map(t => t.name));
+  const fallback = { path: fallbackStrategy };
+  if (signal?.aborted) return fallback;
+
   const prompt = buildClassifierPrompt(goal, registry);
 
   try {
-    const raw = await fleetApi.executePrompt({ member_name: 'doer', prompt });
+    const timeoutSignal = AbortSignal.timeout(CLASSIFY_TIMEOUT_MS);
+    const combined = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+    if (combined.aborted) return fallback;
+
+    const raw = await Promise.race([
+      fleetApi.executePrompt({ member_name: 'doer', prompt, signal: combined }),
+      new Promise((_, reject) => {
+        const onAbort = () => reject(abortError('classify aborted'));
+        if (combined.aborted) {
+          onAbort();
+          return;
+        }
+        combined.addEventListener('abort', onAbort, { once: true });
+      }),
+    ]);
     const text = extractText(raw);
     return parseClassifierResponse(text, { routableNames, fallbackStrategy });
   } catch {
-    return { path: fallbackStrategy };
+    return fallback;
   }
 }
 
-export async function executeWorkflow(name, args, { fleetApi, toolRegistry, signal, onProgress }) {
+function unwrapWorkflowResult(result) {
+  if (result && typeof result === 'object' && typeof result.answer === 'string') {
+    return result.answer;
+  }
+  if (typeof result === 'string') {
+    const marker = 'completed:';
+    const idx = result.lastIndexOf(marker);
+    if (idx !== -1) {
+      const jsonPart = result.slice(idx + marker.length).trim();
+      try {
+        const parsed = JSON.parse(jsonPart);
+        if (parsed && typeof parsed.answer === 'string') return parsed.answer;
+      } catch {
+        // keep original string
+      }
+    }
+    return result;
+  }
+  return JSON.stringify(result);
+}
+
+function adaptReportPhase(onProgress) {
+  if (!onProgress) return () => {};
+  let iteration = 0;
+  return (messageOrObj) => {
+    if (typeof messageOrObj === 'string') {
+      iteration += 1;
+      return onProgress({ iteration, message: messageOrObj });
+    }
+    return onProgress(messageOrObj);
+  };
+}
+
+export async function executeWorkflow(name, args, { fleetApi, toolRegistry, signal, onProgress, workspace }) {
   const entry = toolRegistry.find(t => t.name === name && t.routing);
   if (!entry) {
     return { status: 'failed', result: { error: 'workflow_not_found', message: `Workflow "${name}" not found` }, history: [], budget: null };
   }
-  try {
-    const result = await entry.run({ fleetApi, args: args ?? {}, signal, reportPhase: onProgress });
+
+  const executed = await executeTool(entry, {
+    fleetApi,
+    args: args ?? {},
+    signal,
+    reportPhase: adaptReportPhase(onProgress),
+    workspace,
+  });
+
+  if (!executed.ok) {
+    if (executed.error === 'timeout' && signal?.aborted) {
+      return { status: 'cancelled', result: null, history: [], budget: null };
+    }
+    const error = executed.error === 'validation_failed' ? 'validation_failed'
+      : executed.error === 'timeout' ? 'timeout'
+      : executed.error === 'tool_error' ? 'workflow_failed'
+      : executed.error ?? 'workflow_failed';
     return {
-      status: 'completed',
-      result: typeof result === 'string' ? result : JSON.stringify(result),
+      status: 'failed',
+      result: {
+        error,
+        message: executed.message ?? (error === 'validation_failed' ? 'invalid workflow args' : String(error)),
+        ...(executed.details ? { details: executed.details } : {}),
+      },
       history: [],
       budget: null,
     };
-  } catch (err) {
-    if (err?.name === 'AbortError') {
-      return { status: 'cancelled', result: null, history: [], budget: null };
-    }
-    return { status: 'failed', result: { error: 'workflow_failed', message: String(err?.message ?? err) }, history: [], budget: null };
   }
+
+  return {
+    status: 'completed',
+    result: unwrapWorkflowResult(executed.result),
+    history: [],
+    budget: null,
+  };
 }

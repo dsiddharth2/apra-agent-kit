@@ -86,4 +86,62 @@ describe('executeHostedTask routing', () => {
     );
     assert.equal(result.routedTo, 'open-ended');
   });
+
+  test('upgradeToReviewer throw becomes a structured failed result', async () => {
+    const { executeHostedTask } = await import('../host/tasks.mjs');
+    const fleetApi = createMockFleetApi({
+      promptResponses: (opts) => {
+        if (opts.prompt.includes('task router')) return '{"path":"plan-execute"}';
+        return '```done\nresult: should not run\n```';
+      },
+    });
+    const dispatcher = {
+      capacity: 1,
+      async dispatch() {
+        return {
+          workerId: 'test-worker',
+          doer: { name: 'TEST-DOER' },
+          reviewer: null,
+          signal: null,
+          release: async () => {},
+          upgradeToReviewer: async () => { throw new Error('no reviewer capacity'); },
+        };
+      },
+    };
+    const result = await executeHostedTask(
+      { goal: 'plan a complex multi-city itinerary' },
+      {
+        api: fleetApi, activeDispatcher: dispatcher,
+        toolRegistry: [],
+        runLoopConfig: { strategy: 'open-ended' },
+        routerConfig: { enabled: true, fallbackStrategy: 'open-ended' },
+        budgetsConfig: null, guardrailsMod: null, jobs: null,
+      },
+    );
+    assert.equal(result.status, 'failed');
+    assert.ok(result.result?.error, 'failed result should include an error code');
+  });
+
+  test('classify is not prompted when the task signal is already aborted', async () => {
+    const { executeHostedTask } = await import('../host/tasks.mjs');
+    const fleetApi = createMockFleetApi({
+      promptResponses: () => '{"path":"plan-execute"}',
+    });
+    const ac = new AbortController();
+    ac.abort();
+    const result = await executeHostedTask(
+      { goal: 'weather in Tokyo' },
+      {
+        api: fleetApi, activeDispatcher: makeMockDispatcher(fleetApi),
+        toolRegistry: [],
+        runLoopConfig: { strategy: 'open-ended' },
+        routerConfig: { enabled: true, fallbackStrategy: 'open-ended' },
+        budgetsConfig: null, guardrailsMod: null, jobs: null,
+        signal: ac.signal,
+      },
+    );
+    const classifierCalls = fleetApi.promptCalls.filter(c => c.prompt?.includes('task router'));
+    assert.equal(classifierCalls.length, 0, 'classifier must not prompt after abort');
+    assert.ok(result.status === 'cancelled' || result.routedTo === 'open-ended');
+  });
 });
