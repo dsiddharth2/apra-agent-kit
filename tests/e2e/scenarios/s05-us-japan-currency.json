@@ -1,3 +1,3 @@
 { "id": "s05", "title": "US to Japan currency and advisory (dynamic args)", "goal": "I am traveling from the US to Japan. What currency do I need, what is the exchange rate, and are there any travel advisories?",
   "strategy": "plan-execute", "constraints": { "maxIterations": 20 },
-  "expectedStatus": ["completed"], "expectedTools": ["country-info", "currency", "travel-advisory"] }
+  "expectedStatus": ["completed"], "expectedTools": ["country-info", "currency", "travel-advisory"], "expectedRoute": "workflow:travel-prep" }
