@@ -34,6 +34,24 @@ test('executePrompt walks the goal script, repeats the last response, falls back
   assert.match((await api.executePrompt({ member_name: 'doer', prompt: 'Task: something else' })).structuredContent.response, /default/);
 });
 
+test('classifier derives plan-execute from plan fence without consuming goal cursor', async () => {
+  const planScript = {
+    goals: {
+      'plan a trip': [
+        '```plan\n{"steps":[]}\n```',
+        '```done\n{"result":"done","summary":"s"}\n```',
+      ],
+    },
+    default: ['```done\n{"result":"default","summary":"s"}\n```'],
+  };
+  const api = createScriptedFleetApi(planScript);
+  const routerPrompt = `You are a task router for a travel assistant.\n\nUser's goal: "plan a trip to Japan"\n\nRespond with ONLY a JSON object`;
+  const classified = JSON.parse((await api.executePrompt({ member_name: 'doer', prompt: routerPrompt })).structuredContent.response);
+  assert.equal(classified.path, 'plan-execute');
+  const runLoop = await api.executePrompt({ member_name: 'doer', prompt: 'Task: plan a trip to Japan\ncontext' });
+  assert.match(runLoop.structuredContent.response, /```plan/);
+});
+
 test('loadScript reads JSON from disk', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scripted-'));
   const file = path.join(dir, 's.json');
