@@ -19,7 +19,7 @@
     "test:phase4": "node --test tests/host-jobs-record.test.mjs tests/host-jobs-store.test.mjs tests/host-jobs-in-process.test.mjs tests/host-jobs-config.test.mjs tests/host-jobs-tools.test.mjs tests/host-notify.test.mjs tests/comm-contract.test.mjs tests/package-scripts.test.mjs tests/host-jobs-durable.test.mjs tests/comm-azure-orchestrator.test.mjs tests/comm-azure-http.test.mjs tests/comm-azure-activity.test.mjs tests/host-scripted-fleet.test.mjs",
     "test:chat": "node --test tests/host-chat-routes.test.mjs tests/host-chat-transcript.test.mjs tests/host-chat-e2e.test.mjs",
     "test:concurrency": "node --test tests/acceptance/concurrency.acceptance.test.mjs",
-    "test:acceptance": "node --test tests/acceptance/",
+    "test:acceptance": "node --test tests/acceptance/sync-task.acceptance.test.mjs tests/acceptance/async-job.acceptance.test.mjs tests/acceptance/concurrency.acceptance.test.mjs tests/acceptance/tool-server.acceptance.test.mjs",
     "test:e2e": "node --test tests/e2e/task.e2e.test.mjs",
     "e2e:vm": "docker compose -f docker-compose.e2e.yml --profile vm up -d --wait agent-vm && docker compose -f docker-compose.e2e.yml run --rm e2e; docker compose -f docker-compose.e2e.yml --profile vm down -v",
     "e2e:durable": "docker compose -f docker-compose.e2e.yml --profile durable up -d --wait agent-durable && BASE_URL=http://agent-durable/api E2E_TARGET=durable docker compose -f docker-compose.e2e.yml run --rm e2e; docker compose -f docker-compose.e2e.yml --profile durable down -v"
