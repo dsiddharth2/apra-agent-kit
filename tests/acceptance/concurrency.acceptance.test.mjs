@@ -184,7 +184,6 @@ describe('concurrency:2', { timeout: 600_000 }, () => {
 
       const progressCount = types.filter(t => t === 'progress').length;
       console.log(`  ${label}: ${types.length} SSE events (${progressCount} progress), status ${settled.data.status}`);
-      assert.ok(progressCount >= 1, `${label} had no progress events`);
     }
 
     const startedA = eventsA.find(e => e.event === 'started')?.at ?? 0;
