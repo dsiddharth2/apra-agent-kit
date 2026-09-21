@@ -46,6 +46,7 @@ export default {
     chat: {
       enabled: true,
       title: 'Fleet Agent Kit — Azure Functions',
+      themes: ['blue'],
     },
   },
 };
