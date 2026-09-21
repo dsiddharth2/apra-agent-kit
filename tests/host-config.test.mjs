@@ -359,3 +359,56 @@ test('resolveChatConfig is exported for builder overrides', async () => {
   assert.deepEqual(resolveChatConfig(undefined, { env: {}, name: 'n' }), { enabled: false, title: 'n', themes: ['apra'] });
   assert.deepEqual(resolveChatConfig({ enabled: true }, { env: { CHAT_ENABLED: '0' }, name: 'n' }), { enabled: false, title: 'n', themes: ['apra'] });
 });
+
+test('router.enabled with runLoop disabled throws', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default {
+    name: 'x',
+    fleet: {},
+    comm: { adapter: 'express' },
+    modules: { router: { enabled: true }, runLoop: { enabled: false } },
+  };`);
+  await assert.rejects(
+    () => loadConfig(dir),
+    /runLoop/,
+  );
+});
+
+test('router.fallbackStrategy must be open-ended or plan-execute', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default {
+    name: 'x',
+    fleet: {},
+    comm: { adapter: 'express' },
+    modules: { router: { enabled: true, fallbackStrategy: 'invalid' }, runLoop: { enabled: true } },
+  };`);
+  await assert.rejects(
+    () => loadConfig(dir),
+    /fallbackStrategy/,
+  );
+});
+
+test('router.enabled: false is accepted without error', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default {
+    name: 'x',
+    fleet: {},
+    comm: { adapter: 'express' },
+    modules: { router: { enabled: false }, runLoop: { enabled: true } },
+  };`);
+  const config = await loadConfig(dir);
+  assert.ok(config);
+});
+
+test('router config resolves from env overrides', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default {
+    name: 'x',
+    fleet: {},
+    comm: { adapter: 'express' },
+    modules: { runLoop: { enabled: true } },
+  };`);
+  const config = await loadConfig(dir, { ...process.env, ROUTER_ENABLED: 'true', ROUTER_FALLBACK_STRATEGY: 'plan-execute' });
+  assert.equal(config.modules.router.enabled, true);
+  assert.equal(config.modules.router.fallbackStrategy, 'plan-execute');
+});

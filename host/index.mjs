@@ -114,6 +114,7 @@ export async function startHost({
     agentName: config.name,
     agentDescription: config.agentDescription ?? '',
   };
+  const routerConfig = config.modules?.router ?? { enabled: false };
 
   // Phase 4 modules. Builder overrides arrive raw, config-file values arrive resolved; resolve again idempotently.
   const dispatchEnabled = runLoopEnabled && !!(resolved.dispatchConfig?.enabled ?? (dispatchOption ? true : false));
@@ -139,13 +140,13 @@ export async function startHost({
 
   let jobs = null;
   const runSync = (task, { signal } = {}) => executeHostedTask(task, {
-    api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, jobs, signal,
+    api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal,
   });
   // The run loop only observes abort between iterations. A job blocked in
   // executePrompt would otherwise stay `processing` until FORCE_SETTLE (30s).
   const runJob = (task, { signal, onProgress }) => settleWhenAborted(
     executeHostedTask(task, {
-      api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress,
+      api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress,
     }),
     signal,
   );
@@ -284,7 +285,10 @@ export function createHost(options = {}) {
           const api = hostOptions.fleetApi;
           const activeDispatcher = hostOptions.dispatcher;
           if (!api || !activeDispatcher) throw new Error('fleetApi and dispatcher are required for agent.run()');
-          return executeHostedTask(task, { api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, signal: runOpts.signal });
+          const routerConfig = config.modules?.router ?? { enabled: false };
+          return executeHostedTask(task, {
+            api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, signal: runOpts.signal,
+          });
         },
       };
     },

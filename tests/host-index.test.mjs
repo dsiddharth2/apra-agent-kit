@@ -462,12 +462,28 @@ test('builder .runLoop().budget().guardrails() builds and starts', async () => {
   }
 });
 
+function withRouterBypass(responses) {
+  if (typeof responses === 'function') {
+    return (opts) => {
+      if (opts.prompt?.includes('task router')) return '{"path":"open-ended"}';
+      return responses(opts);
+    };
+  }
+  let idx = 0;
+  return (opts) => {
+    if (opts.prompt?.includes('task router')) return '{"path":"open-ended"}';
+    const text = responses[Math.min(idx, responses.length - 1)];
+    idx++;
+    return text;
+  };
+}
+
 const scripted = () => createMockFleetApi({
   members: rosterNames(2),
-  promptResponses: [
+  promptResponses: withRouterBypass([
     '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
     '```done\n{"result": "inspected", "summary": "ok"}\n```',
-  ],
+  ]),
 });
 const asyncHost = (extra = {}) => startHost({
   port: 0, dispatcher: undefined, env: { ...process.env, NODE_ENV: 'test' },
@@ -510,7 +526,7 @@ test('POST /task?wait=true keeps the Phase 2 synchronous shape', async () => {
     const res = await httpPost(host.port(), '/task?wait=true', { goal: 'Inspect members' });
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
-    assert.deepEqual(Object.keys(body).sort(), ['budget', 'history', 'result', 'status', 'taskId', 'traceId']);
+    assert.deepEqual(Object.keys(body).sort(), ['budget', 'history', 'result', 'routedTo', 'status', 'taskId', 'traceId']);
     assert.equal(body.status, 'completed');
   } finally { await close(); }
 });
@@ -590,12 +606,12 @@ test('hosted run loop submit-task receives jobs and does not tool_error', async 
   const dispatcher = await makeDispatcher();
   const fleetApi = createMockFleetApi({
     members: rosterNames(2),
-    promptResponses: [
+    promptResponses: withRouterBypass([
       '```tool_call\n{"tool": "submit-task", "args": {"goal": "Inspect members"}}\n```',
       '```done\n{"result": "delegated", "summary": "ok"}\n```',
       '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
       '```done\n{"result": "inspected", "summary": "ok"}\n```',
-    ],
+    ]),
   });
   const { host, close } = await asyncHost({
     fleetApi,

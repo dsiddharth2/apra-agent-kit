@@ -63,5 +63,9 @@ Always use the destination's local currency for costs; include INR equivalent wh
       title: 'Fleet Agent Kit — travel research agent',
       themes: ['blue', 'apra'],
     },
+    router: {
+      enabled: true,
+      fallbackStrategy: 'open-ended',
+    },
   },
 };
