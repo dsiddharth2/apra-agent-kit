@@ -10,11 +10,12 @@ ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
     DURABLE_TASK_HUB=fleetjobs
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 python3-pip ca-certificates git curl \
+  && apt-get install -y --no-install-recommends python3 python3-pip ca-certificates git curl make g++ \
   && update-ca-certificates \
   && pip install --no-cache-dir --break-system-packages certifi \
   && npm install -g @apralabs/apra-fleet @anthropic-ai/claude-code \
   && apra-fleet install --skill none \
+  && apt-get purge -y --auto-remove make g++ \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /home/site/wwwroot
