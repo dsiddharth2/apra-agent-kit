@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400" width="700" height="400" style="font-family:system-ui,-apple-system,sans-serif;background:#ffffff">
+  <defs>
+    <marker id="arw" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="9" markerHeight="7" orient="auto-start-reverse">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <!-- Agent boundary -->
+  <rect x="90" y="40" width="520" height="280" rx="14" fill="#f9fafb" stroke="#1f2937" stroke-width="2.5"/>
+  <text x="110" y="64" font-size="12" font-weight="700" fill="#1f2937" letter-spacing="0.1em">AGENT</text>
+
+  <!-- Task arrow in -->
+  <text x="14" y="176" font-size="12" font-weight="600" fill="#374151">Task</text>
+  <line x1="44" y1="182" x2="86" y2="182" stroke="#6b7280" stroke-width="2" marker-end="url(#arw)"/>
+
+  <!-- Result arrow out -->
+  <line x1="614" y1="182" x2="656" y2="182" stroke="#6b7280" stroke-width="2" marker-end="url(#arw)"/>
+  <text x="660" y="176" font-size="12" font-weight="600" fill="#374151">Result</text>
+
+  <!-- ROW 1 -->
+
+  <!-- 1 Run Loop — SHIPPED (teal) -->
+  <rect x="110" y="80" width="230" height="76" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="1.8"/>
+  <rect x="118" y="88" width="22" height="22" rx="11" fill="#059669"/>
+  <text x="129" y="104" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">1</text>
+  <text x="152" y="103" font-size="14" font-weight="700" fill="#059669">Run Loop</text>
+  <text x="120" y="124" font-size="10" fill="#374151">plan · act · observe · replan</text>
+  <text x="120" y="142" font-size="9" fill="#059669" font-weight="600">ReAct + Plan-Execute strategies</text>
+
+  <!-- 2 Memory — PARTIAL (top teal, bottom grey) -->
+  <rect x="356" y="80" width="236" height="76" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1.8"/>
+  <rect x="356" y="80" width="236" height="30" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="1.8"/>
+  <rect x="356.9" y="100" width="234.2" height="10" fill="#d1fae5"/>
+  <rect x="118" y="88" width="0" height="0"/>
+  <rect x="364" y="88" width="22" height="22" rx="11" fill="#6b7280"/>
+  <text x="375" y="104" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">2</text>
+  <text x="398" y="103" font-size="14" font-weight="700" fill="#374151">Memory</text>
+  <text x="366" y="122" font-size="10" fill="#059669" font-weight="500">context ✓</text>
+  <text x="434" y="122" font-size="10" fill="#9ca3af">run state · long-term</text>
+  <text x="366" y="142" font-size="9" fill="#9ca3af">Phase 3</text>
+
+  <!-- ROW 2 -->
+
+  <!-- 3 Workflows — SHIPPED (teal) -->
+  <rect x="110" y="172" width="146" height="66" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="1.8"/>
+  <rect x="118" y="180" width="22" height="22" rx="11" fill="#059669"/>
+  <text x="129" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">3</text>
+  <text x="152" y="195" font-size="14" font-weight="700" fill="#059669">Workflows</text>
+  <text x="120" y="215" font-size="10" fill="#374151">Known paths, as tools</text>
+
+  <!-- 4 Tools — SHIPPED (blue) -->
+  <rect x="272" y="172" width="146" height="66" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.8"/>
+  <rect x="280" y="180" width="22" height="22" rx="11" fill="#2563eb"/>
+  <text x="291" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">4</text>
+  <text x="314" y="195" font-size="14" font-weight="700" fill="#2563eb">Tools</text>
+  <text x="282" y="215" font-size="10" fill="#374151">Typed, described</text>
+  <text x="282" y="228" font-size="9" fill="#2563eb" font-weight="600">15 Python tools</text>
+
+  <!-- 5 Budgets — SHIPPED (amber) -->
+  <rect x="434" y="172" width="158" height="66" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.8"/>
+  <rect x="442" y="180" width="22" height="22" rx="11" fill="#d97706"/>
+  <text x="453" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">5</text>
+  <text x="476" y="195" font-size="13" font-weight="700" fill="#d97706">Budgets &amp; Stops</text>
+  <text x="444" y="215" font-size="10" fill="#374151">Caps, timeout, done</text>
+
+  <!-- 6 Guardrails — SHIPPED (rose) -->
+  <rect x="110" y="254" width="482" height="52" rx="8" fill="#ffe4e6" stroke="#e11d48" stroke-width="1.8"/>
+  <rect x="118" y="262" width="22" height="22" rx="11" fill="#e11d48"/>
+  <text x="129" y="278" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">6</text>
+  <text x="152" y="277" font-size="14" font-weight="700" fill="#e11d48">Guardrails</text>
+  <text x="250" y="277" font-size="10" fill="#374151">Permissions · reversibility checks · sandbox · input validation · dry-run</text>
+  <text x="152" y="296" font-size="9" fill="#e11d48" font-weight="600">Per-tool allow / deny / approve policies</text>
+
+  <!-- Evals — OUTSIDE boundary, PLANNED (grey dashed) -->
+  <rect x="90" y="336" width="520" height="44" rx="8" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="6 3"/>
+  <text x="350" y="356" text-anchor="middle" font-size="13" font-weight="700" fill="#9ca3af">Evals</text>
+  <text x="350" y="370" text-anchor="middle" font-size="9" fill="#9ca3af">Harness that calls the agent and grades results — Phase 3</text>
+
+  <!-- Legend -->
+  <rect x="170" y="392" width="12" height="12" rx="3" fill="#d1fae5" stroke="#059669" stroke-width="1.2"/>
+  <text x="188" y="402" font-size="10" fill="#374151">Shipped</text>
+  <rect x="270" y="392" width="12" height="12" rx="3" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1.2"/>
+  <text x="288" y="402" font-size="10" fill="#374151">Partial</text>
+  <rect x="370" y="392" width="12" height="12" rx="3" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1.2" stroke-dasharray="3 2"/>
+  <text x="388" y="402" font-size="10" fill="#9ca3af">Planned</text>
+</svg>
