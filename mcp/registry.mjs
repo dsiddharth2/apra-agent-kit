@@ -4,6 +4,10 @@ import * as z from 'zod/v4';
 import { runDemo } from '../workflows/demo/main.mjs';
 import { runInspectMembers } from '../workflows/inspect-members/main.mjs';
 import { runCityBriefing } from '../workflows/city-briefing/main.mjs';
+import { runQuickWeather } from '../workflows/quick-weather/main.mjs';
+import { runDestinationOverview } from '../workflows/destination-overview/main.mjs';
+import { runTravelPrep } from '../workflows/travel-prep/main.mjs';
+import { runRouteCheck } from '../workflows/route-check/main.mjs';
 
 const toolsDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -83,6 +87,10 @@ export const defaultRegistry = [
       'Fetches live weather, local time, and composes a short city briefing using an agent. ' +
       'Uses three internal tools (weather API, timezone API, text stats) and one agent prompt. ' +
       'Spends LLM tokens.',
+    routing: {
+      description: 'Weather + local time + short briefing for a city',
+      args: { city: { extract: 'city name from the goal' } },
+    },
     inputSchema: z.object({
       city: z
         .string()
@@ -99,6 +107,78 @@ export const defaultRegistry = [
         reportPhase,
       });
       return `city briefing completed: ${JSON.stringify(result)}`;
+    },
+  },
+  {
+    name: 'quick-weather',
+    description:
+      'Fetches current weather and 3-day forecast for a city. Uses weather and forecast tools plus one agent compose call.',
+    routing: {
+      description: 'Current weather + short forecast for a single city',
+      args: { city: { extract: 'city name from the goal' } },
+    },
+    inputSchema: z.object({
+      city: z.string().optional().describe('City name. Defaults to London.'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: false },
+    async run({ fleetApi, args, signal, reportPhase, workspace }) {
+      const result = await runQuickWeather({ fleetApi, workspace, city: args.city, signal, reportPhase });
+      return `quick weather completed: ${JSON.stringify(result)}`;
+    },
+  },
+  {
+    name: 'destination-overview',
+    description:
+      'Overview of a destination: background info + tourist attractions and activities. Uses wikipedia-summary and places-of-interest tools plus one agent compose call.',
+    routing: {
+      description: 'Overview of a destination: background info + tourist attractions and activities',
+      args: { destination: { extract: 'destination/city/region name from the goal' } },
+    },
+    inputSchema: z.object({
+      destination: z.string().optional().describe('Destination name. Defaults to London.'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: false },
+    async run({ fleetApi, args, signal, reportPhase, workspace }) {
+      const result = await runDestinationOverview({ fleetApi, workspace, destination: args.destination, signal, reportPhase });
+      return `destination overview completed: ${JSON.stringify(result)}`;
+    },
+  },
+  {
+    name: 'travel-prep',
+    description:
+      'Pre-trip preparation: country info + visa/advisory + currency + public holidays. Uses four tools plus one agent compose call.',
+    routing: {
+      description: 'Pre-trip preparation: country info + visa/advisory + currency + public holidays',
+      args: { country: { extract: 'country name from the goal' } },
+    },
+    inputSchema: z.object({
+      country: z.string().optional().describe('Country name. Defaults to Japan.'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: false },
+    async run({ fleetApi, args, signal, reportPhase, workspace }) {
+      const result = await runTravelPrep({ fleetApi, workspace, country: args.country, signal, reportPhase });
+      return `travel prep completed: ${JSON.stringify(result)}`;
+    },
+  },
+  {
+    name: 'route-check',
+    description:
+      'Driving distance and travel time between two cities. Uses route-distance tool plus one agent compose call.',
+    routing: {
+      description: 'Driving distance and travel time between two cities',
+      args: {
+        from: { extract: 'origin city from the goal' },
+        to: { extract: 'destination city from the goal' },
+      },
+    },
+    inputSchema: z.object({
+      from: z.string().optional().describe('Origin city. Defaults to Delhi.'),
+      to: z.string().optional().describe('Destination city. Defaults to Manali.'),
+    }),
+    annotations: { readOnlyHint: true, idempotentHint: false },
+    async run({ fleetApi, args, signal, reportPhase, workspace }) {
+      const result = await runRouteCheck({ fleetApi, workspace, from: args.from, to: args.to, signal, reportPhase });
+      return `route check completed: ${JSON.stringify(result)}`;
     },
   },
   {

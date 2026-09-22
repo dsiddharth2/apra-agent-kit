@@ -48,6 +48,7 @@ export function createRunTaskActivity({ getClient, pollMs = 2000, getContext = g
           activeDispatcher: hostCtx.activeDispatcher,
           toolRegistry: hostCtx.toolRegistry,
           runLoopConfig: hostCtx.runLoopConfig,
+          routerConfig: hostCtx.routerConfig,
           budgetsConfig: hostCtx.budgetsConfig,
           guardrailsMod: hostCtx.guardrailsMod,
           signal: controller.signal,
@@ -61,7 +62,7 @@ export function createRunTaskActivity({ getClient, pollMs = 2000, getContext = g
         settled.result = null;
         settled.error = null;
       }
-      emit({ type: 'settled', jobId, at: iso(), status: settled.status, result: settled.result ?? null, error: settled.error ?? null });
+      emit({ type: 'settled', jobId, at: iso(), status: settled.status, result: settled.result ?? null, error: settled.error ?? null, routedTo: run.routedTo ?? null });
       if (hostCtx.notifier && callbackUrl) {
         await hostCtx.notifier.publish(
           { type: 'settled', jobId, at: iso(), status: settled.status, result: settled.result, error: settled.error },
@@ -72,6 +73,7 @@ export function createRunTaskActivity({ getClient, pollMs = 2000, getContext = g
       // The full result is already emitted via SSE (emit) and webhook
       // (notifier) above, so the orchestrator only needs a slim payload.
       const { history, budget, ...trimmed } = settled;
+      if (run.routedTo) trimmed.routedTo = run.routedTo;
       const json = JSON.stringify(trimmed);
       if (json.length > 12_000 && typeof trimmed.result === 'string') {
         trimmed.result = trimmed.result.slice(0, 2000) + '\n\n[Full result delivered via SSE]';

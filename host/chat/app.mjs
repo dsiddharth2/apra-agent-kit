@@ -233,7 +233,48 @@
 
   // --- Answer rendering ---
 
-  function renderAnswer(text) {
+  function humanizeKey(key) {
+    return key.replace(/[_-]/g, ' ').replace(/\b[a-z]/g, function(c) { return c.toUpperCase(); });
+  }
+
+  function answerToMarkdown(obj) {
+    if (typeof obj === 'string') return obj;
+    if (obj == null) return '';
+    var text = obj.message || obj.error || obj.answer;
+    if (typeof text === 'string') return text;
+
+    var parts = [];
+    var keys = Object.keys(obj);
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i];
+      var val = obj[key];
+      var label = humanizeKey(key);
+
+      if (val == null) continue;
+      if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+        parts.push('**' + label + ':** ' + val);
+      } else if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object') {
+        var cols = Object.keys(val[0]);
+        var hdr = cols.map(humanizeKey);
+        var rows = ['| ' + hdr.join(' | ') + ' |', '| ' + cols.map(function() { return '---'; }).join(' | ') + ' |'];
+        for (var j = 0; j < val.length; j++) {
+          rows.push('| ' + cols.map(function(c) { return val[j][c] != null ? String(val[j][c]) : ''; }).join(' | ') + ' |');
+        }
+        parts.push('**' + label + '**\n\n' + rows.join('\n'));
+      } else if (typeof val === 'object' && !Array.isArray(val)) {
+        var items = Object.keys(val).map(function(k) {
+          return '- **' + humanizeKey(k) + ':** ' + val[k];
+        });
+        parts.push('**' + label + '**\n\n' + items.join('\n'));
+      } else {
+        parts.push('**' + label + ':** ' + JSON.stringify(val));
+      }
+    }
+    return parts.join('\n\n');
+  }
+
+  function renderAnswer(answer) {
+    var text = typeof answer === 'string' ? answer : answerToMarkdown(answer);
     var div = h('div', 'answer-block');
     var inner = h('div', 'answer-text');
     if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
@@ -292,14 +333,17 @@
     return arrow;
   }
 
-  function renderStatusPipeline(turn) {
+  function renderRouteIndicator(label) {
+    var indicator = h('div', 'route-indicator');
+    var dots = h('span', 'route-dots');
+    for (var i = 0; i < 3; i++) dots.append(h('span', 'dot'));
+    indicator.append(dots);
+    indicator.append(h('span', 'route-label', label));
+    return indicator;
+  }
+
+  function renderPlanExecutePipeline(turn, frag) {
     var phase = pipelinePhase(turn);
-    var frag = document.createDocumentFragment();
-
-    // Don't show pipeline when idle or terminal with no plan (simple answer)
-    if (!isLive(turn) && !turn.plan && turn.status !== 'completed') return frag;
-    if (turn.status === 'completed' && !turn.plan) return frag;
-
     var pipeline = h('div', 'status-pipeline');
 
     // Stage 1: Plan
@@ -341,6 +385,34 @@
     return frag;
   }
 
+  function renderStatusPipeline(turn) {
+    var frag = document.createDocumentFragment();
+    var route = turn.routedTo;
+
+    // Plan-execute or already has a plan: full 3-stage stepper
+    if (route === 'plan-execute' || turn.plan) {
+      return renderPlanExecutePipeline(turn, frag);
+    }
+
+    // Terminal turns without plan-execute: no indicator needed
+    if (!isLive(turn)) return frag;
+
+    // Pre-routing states: nothing (pill already shows SENDING/QUEUED)
+    if (turn.status === 'submitting' || turn.status === 'queued') return frag;
+
+    // Running — show route-specific indicator
+    if (!route) {
+      frag.append(renderRouteIndicator('ROUTING'));
+    } else if (route.indexOf('workflow:') === 0) {
+      var wfName = route.slice(9).toUpperCase().replace(/-/g, ' ');
+      frag.append(renderRouteIndicator('WORKFLOW · ' + wfName));
+    } else {
+      frag.append(renderRouteIndicator('THINKING'));
+    }
+
+    return frag;
+  }
+
   // --- Card rendering ---
 
   function renderCard(card, turn) {
@@ -362,11 +434,7 @@
 
     // Answer
     if (turn.status === 'completed' && turn.answer != null) {
-      if (typeof turn.answer === 'string') {
-        body.append(renderAnswer(turn.answer));
-      } else {
-        body.append(h('pre', 'answer-raw', JSON.stringify(turn.answer, null, 2)));
-      }
+      body.append(renderAnswer(turn.answer));
     } else if (turn.error) {
       body.append(h('div', 'error-card', turn.status.replace(/_/g, ' ') + ': ' + turn.error.message));
     }

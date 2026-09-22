@@ -65,5 +65,9 @@ Always use the destination's local currency for costs; include INR equivalent wh
       title: 'Fleet Agent Kit — Azure Functions',
       themes: ['blue'],
     },
+    router: {
+      enabled: true,
+      fallbackStrategy: 'open-ended',
+    },
   },
 };

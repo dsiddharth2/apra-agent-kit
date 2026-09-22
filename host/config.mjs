@@ -5,8 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config.mjs';
 
 const SUPPORTED_ADAPTERS = new Set(['express', 'raw-http', 'azure-functions']);
-const KNOWN_MODULES = new Set(['runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch', 'notify', 'chat']);
-const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails', 'dispatch', 'notify', 'chat']);
+const KNOWN_MODULES = new Set(['runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch', 'notify', 'chat', 'router']);
+const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails', 'dispatch', 'notify', 'chat', 'router']);
 
 export async function loadConfig(configDir, env = process.env) {
   const raw = await resolveConfig(configDir);
@@ -15,6 +15,17 @@ export async function loadConfig(configDir, env = process.env) {
 
 // modules.chat → { enabled, title, themes }. CHAT_ENABLED=true|false|1|0 wins over the file.
 const VALID_THEMES = new Set(['apra', 'blue']);
+export function resolveRouterConfig(raw = {}, { env = process.env } = {}) {
+  const router = {
+    enabled: !!raw?.enabled,
+    fallbackStrategy: env.ROUTER_FALLBACK_STRATEGY ?? raw?.fallbackStrategy ?? 'open-ended',
+  };
+  const flag = String(env.ROUTER_ENABLED ?? '').toLowerCase();
+  if (flag === '1' || flag === 'true') router.enabled = true;
+  else if (flag === '0' || flag === 'false') router.enabled = false;
+  return router;
+}
+
 export function resolveChatConfig(raw = {}, { env = process.env, name = '' } = {}) {
   const chat = { enabled: !!raw?.enabled, title: raw?.title === undefined ? name : raw.title };
   const flag = String(env.CHAT_ENABLED ?? '').toLowerCase();
@@ -132,6 +143,18 @@ function validate(raw, env) {
       console.warn('[host/config] dispatch.store.kind "memory" — jobs are lost on restart');
     }
     modules.dispatch = dispatch;
+  }
+
+  const router = resolveRouterConfig(modules.router, { env });
+  if (router.enabled && !runLoopEnabled) {
+    throw new Error('router enabled but runLoop disabled — the router needs the run loop as a fallback; enable runLoop or disable router');
+  }
+  if (router.enabled && !['open-ended', 'plan-execute'].includes(router.fallbackStrategy)) {
+    throw new Error(`router.fallbackStrategy must be "open-ended" or "plan-execute", got "${router.fallbackStrategy}"`);
+  }
+  modules.router = Object.freeze(router);
+  if (router.enabled) {
+    console.warn('[host/config] router enabled — tasks will be classified before execution');
   }
 
   const notify = resolveNotifyConfigWithEnv(modules.notify ?? {}, env);

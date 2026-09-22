@@ -1,6 +1,7 @@
 // host/tasks.mjs
 // The one function both the sync /task route and every jobs backend call.
 import { createPooledFleetApi } from '../pool/pooled-fleet-api.mjs';
+import { classify, executeWorkflow } from './router.mjs';
 import { runTask } from './run-loop.mjs';
 import { createBudgets } from './budgets.mjs';
 
@@ -140,16 +141,18 @@ export function mergeBudgetConfig(baseConfig, task) {
 }
 
 export async function executeHostedTask(task, {
-  api, activeDispatcher, toolRegistry, runLoopConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress,
+  api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig,
+  budgetsConfig, guardrailsMod, jobs, signal, onProgress,
 }) {
   const fullTask = { id: task.id ?? `t-${Date.now().toString(36)}`, ...task };
   // Accept a caller-supplied trace id so a run can be correlated with the
   // request that started it; generate one only when the caller has none.
   const traceId = task.traceId ?? `tr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const budgetsMod = budgetsConfig ? createBudgets(mergeBudgetConfig(budgetsConfig, fullTask)) : null;
+  const useRouter = routerConfig?.enabled && !task.strategy;
   let lease;
   try {
-    lease = await activeDispatcher.dispatch({ signal });
+    lease = await activeDispatcher.dispatch(useRouter ? { signal, members: ['doer'] } : { signal });
   } catch (err) {
     return {
       taskId: fullTask.id,
@@ -172,21 +175,79 @@ export async function executeHostedTask(task, {
       else lease.signal.addEventListener('abort', () => forwardAbort(lease.signal.reason), { once: true });
     }
 
+    let strategy = task.strategy ?? null;
+    let workflowName = null;
+    let workflowArgs = null;
+    let routedTo = null;
+
+    let routeDebug = null;
+    if (!strategy && routerConfig?.enabled) {
+      const route = await classify(task.goal ?? task.id, {
+        fleetApi: createPooledFleetApi(api, lease),
+        registry: toolRegistry,
+        fallbackStrategy: routerConfig.fallbackStrategy ?? 'open-ended',
+        signal: combined.signal,
+      });
+      routeDebug = route._debug ?? null;
+      if (route.path === 'workflow') {
+        workflowName = route.workflow;
+        workflowArgs = route.args;
+        strategy = 'workflow';
+      } else {
+        strategy = route.path;
+      }
+    }
+
+    strategy ??= runLoopConfig.strategy ?? 'open-ended';
+    routedTo = workflowName ? `workflow:${workflowName}` : strategy;
+
+    if (onProgress) {
+      try { await onProgress({ kind: 'routed', routedTo, ...(routeDebug ? { _debug: routeDebug } : {}) }); } catch { /* best-effort */ }
+    }
+
+    if (strategy === 'plan-execute' && lease.upgradeToReviewer && !lease.reviewer) {
+      try {
+        await lease.upgradeToReviewer();
+      } catch (err) {
+        return {
+          taskId: fullTask.id,
+          traceId,
+          routedTo,
+          status: 'failed',
+          result: { error: 'upgrade_failed', message: String(err?.message ?? err) },
+          history: [],
+          budget: null,
+        };
+      }
+    }
+
     const workspace = { workerId: lease.workerId, doer: lease.doer, reviewer: lease.reviewer };
+
+    if (strategy === 'workflow') {
+      const wfResult = await executeWorkflow(workflowName, workflowArgs, {
+        fleetApi: createPooledFleetApi(api, lease),
+        toolRegistry,
+        signal: combined.signal,
+        onProgress,
+        workspace,
+      });
+      return { taskId: fullTask.id, traceId, routedTo, ...wfResult };
+    }
+
     const result = await runTask(fullTask, {
-      strategy: runLoopConfig.strategy ?? 'open-ended',
       tools: toolRegistry,
       fleetApi: createPooledFleetApi(api, lease),
       budgets: budgetsMod,
       guardrails: guardrailsMod,
       ...runLoopConfig,
+      strategy,
       jobs,
       traceId,
       signal: combined.signal,
       workspace,
       onIteration: onProgress,
     });
-    return { taskId: fullTask.id, ...result };
+    return { taskId: fullTask.id, traceId, routedTo, ...result };
   } finally {
     await lease.release();
   }

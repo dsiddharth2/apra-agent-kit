@@ -4,7 +4,18 @@
 import { readFile } from 'node:fs/promises';
 import { createMockFleetApi, rosterNames } from './mock-fleet.mjs';
 
-export function createScriptedFleetApi(script, { members = rosterNames(4) } = {}) {
+function firstGoalReply(script, prompt, fallback) {
+  const key = Object.keys(script.goals ?? {}).find(k => prompt.includes(k)) ?? '__default__';
+  const list = key !== '__default__' ? script.goals[key] : (script.default ?? fallback);
+  return list[0] ?? '';
+}
+
+function classifierPathFromScript(script, prompt, fallback) {
+  const first = firstGoalReply(script, prompt, fallback);
+  return String(first).includes('```plan') ? 'plan-execute' : 'open-ended';
+}
+
+export function createScriptedFleetApi(script, { members = rosterNames(4), routerPath } = {}) {
   const cursors = new Map(); // goal key → next response index
   const toolFor = (command) => Object.keys(script.tools ?? {}).find(name => command.includes(`${name}.py`) || command.includes(`/${name}/`));
   const keyFor = (prompt) => Object.keys(script.goals ?? {}).find(k => prompt.includes(k)) ?? '__default__';
@@ -18,7 +29,12 @@ export function createScriptedFleetApi(script, { members = rosterNames(4) } = {}
       return JSON.stringify(payload);
     },
     promptResponses: (options) => {
-      const key = keyFor(String(options.prompt ?? ''));
+      const prompt = String(options.prompt ?? '');
+      if (prompt.includes('task router')) {
+        const path = routerPath ?? classifierPathFromScript(script, prompt, fallback);
+        return `{"path":"${path}"}`;
+      }
+      const key = keyFor(prompt);
       const list = key !== '__default__' ? script.goals[key] : (script.default ?? fallback);
       const i = cursors.get(key) ?? 0;
       cursors.set(key, i + 1);

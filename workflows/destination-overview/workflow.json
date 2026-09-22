@@ -1,0 +1,5 @@
+{
+  "name": "destination-overview",
+  "entry": "destination-overview.js",
+  "description": "Overview of a destination: background info + tourist attractions and activities"
+}

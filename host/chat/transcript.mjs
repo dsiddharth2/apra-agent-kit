@@ -7,7 +7,7 @@
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'budget_exceeded']);
 
 export function initialTurn(goal) {
-  return { goal, jobId: null, status: 'submitting', position: null, iteration: 0, plan: null, replans: 0, reviews: [], answer: null, error: null };
+  return { goal, jobId: null, status: 'submitting', position: null, iteration: 0, plan: null, replans: 0, reviews: [], answer: null, error: null, routedTo: null };
 }
 
 export function isLive(turn) {
@@ -94,6 +94,8 @@ function reduceProgress(turn, event) {
       return updateStep(next, event, { status: event.willRetry ? 'retrying' : 'failed', error: event.error ?? 'unknown error' }, { create: false });
     case 'review':
       return { ...next, reviews: [...turn.reviews, { reviewType: event.reviewType ?? 'plan', approved: !!event.approved, feedback: event.feedback ?? null }] };
+    case 'routed':
+      return { ...next, routedTo: event.routedTo ?? null };
     default:
       return next;
   }
@@ -119,8 +121,9 @@ export function reduce(turn, event) {
       return reduceProgress(next, event);
     case 'settled': {
       const status = TERMINAL.has(event.status) ? event.status : 'failed';
-      if (status === 'completed') return { ...next, status, answer: event.result ?? null, error: null };
-      return { ...next, status, answer: null, error: settledError(event, status) };
+      const routedTo = event.routedTo ?? next.routedTo;
+      if (status === 'completed') return { ...next, status, answer: event.result ?? null, error: null, routedTo };
+      return { ...next, status, answer: null, error: settledError(event, status), routedTo };
     }
     default:
       return next;

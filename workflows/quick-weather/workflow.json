@@ -1,0 +1,5 @@
+{
+  "name": "quick-weather",
+  "entry": "quick-weather.js",
+  "description": "Fetches current weather and 3-day forecast for a city"
+}

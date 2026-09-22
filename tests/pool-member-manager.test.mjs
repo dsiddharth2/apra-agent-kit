@@ -143,3 +143,39 @@ test('provisionRoster fails fast on the first member that cannot register', asyn
 test('constructor requires fleetApi', () => {
   assert.throws(() => new MemberManager(undefined, {}), /requires fleetApi/);
 });
+
+test('provisionDoer registers only the doer member', async () => {
+  const fleetApi = createMockFleetApi();
+  const manager = new MemberManager(fleetApi, { oauthToken: 'tok' });
+  const tmpDir = path.join(os.tmpdir(), `test-prov-doer-${Date.now()}`);
+  try {
+    const result = await manager.provisionDoer('TEST-DOER', tmpDir);
+    assert.ok(result.doer, 'should return doer');
+    assert.equal(result.doer.name, 'TEST-DOER-DOER');
+    assert.ok(!result.reviewer, 'should not return reviewer');
+    const registered = [...fleetApi.present];
+    assert.ok(registered.includes('TEST-DOER-DOER'), 'doer should be registered');
+    assert.ok(!registered.includes('TEST-DOER-REVIEWER'), 'reviewer should NOT be registered');
+    assert.ok(fleetApi.authCalls.some(c => c.member_name === 'TEST-DOER-DOER'), 'doer auth provisioned');
+    assert.ok(!fleetApi.authCalls.some(c => c.member_name === 'TEST-DOER-REVIEWER'), 'reviewer auth NOT provisioned');
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('provisionReviewer adds reviewer to existing doer prefix', async () => {
+  const fleetApi = createMockFleetApi();
+  const manager = new MemberManager(fleetApi, { oauthToken: 'tok' });
+  const tmpDir = path.join(os.tmpdir(), `test-prov-rev-${Date.now()}`);
+  try {
+    await manager.provisionDoer('TEST-REV', tmpDir);
+    const result = await manager.provisionReviewer('TEST-REV', tmpDir);
+    assert.ok(result.reviewer, 'should return reviewer');
+    assert.equal(result.reviewer.name, 'TEST-REV-REVIEWER');
+    const registered = [...fleetApi.present];
+    assert.ok(registered.includes('TEST-REV-DOER'));
+    assert.ok(registered.includes('TEST-REV-REVIEWER'));
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});

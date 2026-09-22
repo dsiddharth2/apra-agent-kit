@@ -1,0 +1,5 @@
+{
+  "name": "travel-prep",
+  "entry": "travel-prep.js",
+  "description": "Pre-trip preparation: country info + visa/advisory + currency + public holidays"
+}

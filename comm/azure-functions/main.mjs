@@ -24,6 +24,7 @@ await registerDurableFunctions({
     activeDispatcher: started.dispatcher,
     toolRegistry: started.registry,
     runLoopConfig: started.runLoopConfig,
+    routerConfig: started.routerConfig,
     budgetsConfig: started.budgetsConfig,
     guardrailsMod: started.guardrailsMod,
     notifier: started.notifier,

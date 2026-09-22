@@ -26,7 +26,7 @@ export class EphemeralWorkerFactory {
     return () => this.#releaseListeners.delete(listener);
   }
 
-  async create({ signal } = {}) {
+  async create({ signal, members } = {}) {
     if (this.#closed) return null;
     if (this.#active.size >= this.#config.maxConcurrent) return null;
     signal?.throwIfAborted();
@@ -35,13 +35,14 @@ export class EphemeralWorkerFactory {
     const shortId = id.slice(0, 8);
     const prefix = `EPHEMERAL-${shortId.toUpperCase()}`;
     const workRoot = path.join(this.#config.workRoot, id);
+    const doerOnly = Array.isArray(members) && members.length === 1 && members[0] === 'doer';
 
     // Reserve the slot before the slow registration so concurrent creates
     // cannot overshoot maxConcurrent.
     const entry = { release: null };
     this.#active.add(entry);
 
-    const pending = this.#finishCreate({ signal, shortId, prefix, workRoot, entry });
+    const pending = this.#finishCreate({ signal, shortId, prefix, workRoot, entry, doerOnly });
     this.#inflight.add(pending);
     try {
       return await pending;
@@ -50,10 +51,15 @@ export class EphemeralWorkerFactory {
     }
   }
 
-  async #finishCreate({ signal, shortId, prefix, workRoot, entry }) {
+  async #finishCreate({ signal, shortId, prefix, workRoot, entry, doerOnly }) {
     let pair;
     try {
-      pair = await this.#manager.provisionPair(prefix, workRoot);
+      if (doerOnly) {
+        pair = await this.#manager.provisionDoer(prefix, workRoot);
+        pair.reviewer = null;
+      } else {
+        pair = await this.#manager.provisionPair(prefix, workRoot);
+      }
     } catch (err) {
       this.#active.delete(entry);
       try {
@@ -108,13 +114,22 @@ export class EphemeralWorkerFactory {
     }, this.#config.ttlMs);
     ttl.unref?.();
 
-    return {
+    const lease = {
       workerId: `ephemeral-${shortId}`,
       doer: pair.doer,
       reviewer: pair.reviewer,
       signal: controller.signal,
       release,
     };
+
+    if (doerOnly) {
+      lease.upgradeToReviewer = async () => {
+        const { reviewer } = await this.#manager.provisionReviewer(prefix, workRoot);
+        lease.reviewer = reviewer;
+      };
+    }
+
+    return lease;
   }
 
   async reset() {

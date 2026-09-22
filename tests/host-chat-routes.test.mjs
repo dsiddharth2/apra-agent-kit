@@ -28,7 +28,7 @@ test('chat page route serves HTML with the escaped title and the script tag', as
   assert.match(res.text, /<title>&lt;Travel&gt; &amp; &quot;Co&quot;<\/title>/);
   assert.doesNotMatch(res.text, /\{\{title\}\}/);
   assert.doesNotMatch(res.text, /<Travel>/);
-  assert.match(res.text, /<script type="module" src="\/chat\/app\.mjs"><\/script>/);
+  assert.match(res.text, /<script type="module" src="chat\/app\.mjs"><\/script>/);
   for (const id of ['status-pill', 'transcript', 'composer', 'goal', 'send', 'thread-title']) assert.match(res.text, new RegExp(`id="${id}"`), `missing #${id}`);
 });
 
@@ -42,7 +42,7 @@ test('chat script route serves reducer plus app as one import-free module', asyn
   assert.doesNotMatch(res.text, /^\s*(import|export)\b/m);
   for (const fn of ['function initialTurn', 'function accepted', 'function submitFailed', 'function cancelling', 'function reduce', 'function isLive']) assert.ok(res.text.includes(fn), `missing ${fn}`);
   assert.ok(res.text.indexOf('function reduce') < res.text.indexOf('new EventSource'), 'reducer must precede app code');
-  assert.ok(res.text.includes("fetch('/task'"));
+  assert.ok(res.text.includes("apiBase + '/task'"));
   assert.ok(res.text.includes('console.group'));
   // innerHTML is allowed only when wrapped in DOMPurify.sanitize — verify no raw innerHTML usage
   var innerHtmlUses = res.text.match(/\.innerHTML\s*=/g) || [];

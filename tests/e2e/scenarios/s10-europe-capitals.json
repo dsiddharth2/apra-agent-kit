@@ -1,3 +1,3 @@
 { "id": "s10", "title": "Europe capitals survey (budget exceeded)", "goal": "Research every capital city in Europe - weather and country info for each.",
   "strategy": "plan-execute", "constraints": { "maxIterations": 2 }, "liveConstraints": { "maxIterations": 6 },
-  "expectedStatus": ["budget_exceeded"], "expectedTools": [] }
+  "expectedStatus": ["budget_exceeded"], "expectedTools": [], "expectedRoute": "plan-execute" }

@@ -9,7 +9,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { WorkerDispatcher } from '../pool/worker-dispatcher.mjs';
 import { WorkerPool } from '../pool/worker-pool.mjs';
-import { createMockFleetApi, rosterNames } from './helpers/mock-fleet.mjs';
+import { createMockFleetApi, rosterNames, withRouterBypass } from './helpers/mock-fleet.mjs';
 import { readSse } from './helpers/sse.mjs';
 
 const { startHost, createHost } = await import('../host/index.mjs');
@@ -89,6 +89,18 @@ test('startHost boots and serves tools via MCP', async () => {
     assert.equal(result.isError, undefined, `tool call failed: ${result.content?.[0]?.text}`);
   } finally {
     try { await client.close(); } finally { await close(); }
+  }
+});
+
+test('startHost returns routerConfig on the host object', async () => {
+  const fleetApi = makeMockFleetApi();
+  const dispatcher = await makeDispatcher();
+  const started = await startHost({ fleetApi, dispatcher, port: 0 });
+  try {
+    assert.ok(started.routerConfig, 'startHost must return routerConfig');
+    assert.equal(typeof started.routerConfig.enabled, 'boolean');
+  } finally {
+    await started.close();
   }
 });
 
@@ -329,10 +341,10 @@ test('listen failure stops the adapter', async () => {
 test('POST /task executes a task through the run loop', async () => {
   const fleetApi = createMockFleetApi({
     members: rosterNames(2),
-    promptResponses: [
+    promptResponses: withRouterBypass([
       '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
       '```done\n{"result": "inspected", "summary": "ok"}\n```',
-    ],
+    ]),
   });
   const dispatcher = await makeDispatcher();
   const { host, close } = await startHost({
@@ -345,7 +357,8 @@ test('POST /task executes a task through the run loop', async () => {
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.status, 'completed');
-    assert.ok(body.result);
+    assert.equal(body.result, 'inspected');
+    assert.ok(body.history.some((h) => h.tool === 'inspect-members'), 'run loop should call inspect-members');
   } finally {
     await close();
   }
@@ -393,11 +406,11 @@ test('MCP callTool is denied when guardrails policy denies weather', async () =>
 test('POST /task merges caller constraints and returns budget_exceeded', async () => {
   const fleetApi = createMockFleetApi({
     members: rosterNames(2),
-    promptResponses: [
+    promptResponses: withRouterBypass([
       '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
       '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
       '```done\n{"result": "done", "summary": "ok"}\n```',
-    ],
+    ]),
   });
   const dispatcher = await makeDispatcher();
   const { host, close } = await startHost({
@@ -417,6 +430,7 @@ test('POST /task merges caller constraints and returns budget_exceeded', async (
     const body = JSON.parse(res.body);
     assert.equal(body.status, 'budget_exceeded');
     assert.equal(body.budget.iterations, 1);
+    assert.ok(fleetApi.promptCalls.some((c) => c.prompt.includes('task router')), 'classifier should run before run loop');
   } finally {
     await close();
   }
@@ -464,10 +478,10 @@ test('builder .runLoop().budget().guardrails() builds and starts', async () => {
 
 const scripted = () => createMockFleetApi({
   members: rosterNames(2),
-  promptResponses: [
+  promptResponses: withRouterBypass([
     '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
     '```done\n{"result": "inspected", "summary": "ok"}\n```',
-  ],
+  ]),
 });
 const asyncHost = (extra = {}) => startHost({
   port: 0, dispatcher: undefined, env: { ...process.env, NODE_ENV: 'test' },
@@ -499,7 +513,8 @@ test('POST /task returns 202 and the job completes; GET /jobs/:id matches SSE se
     assert.equal(rec.status, 200);
     assert.equal(rec.body.status, settled.data.status);
     assert.equal(rec.body.status, 'completed');
-    assert.ok(rec.body.history.length > 0);
+    assert.equal(rec.body.result, 'inspected');
+    assert.ok(rec.body.history.some((h) => h.tool === 'inspect-members'), 'run loop should call inspect-members');
   } finally { await close(); }
 });
 
@@ -510,8 +525,10 @@ test('POST /task?wait=true keeps the Phase 2 synchronous shape', async () => {
     const res = await httpPost(host.port(), '/task?wait=true', { goal: 'Inspect members' });
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
-    assert.deepEqual(Object.keys(body).sort(), ['budget', 'history', 'result', 'status', 'taskId', 'traceId']);
+    assert.deepEqual(Object.keys(body).sort(), ['budget', 'history', 'result', 'routedTo', 'status', 'taskId', 'traceId']);
     assert.equal(body.status, 'completed');
+    assert.equal(body.result, 'inspected');
+    assert.ok(body.history.some((h) => h.tool === 'inspect-members'), 'run loop should call inspect-members');
   } finally { await close(); }
 });
 
@@ -590,12 +607,12 @@ test('hosted run loop submit-task receives jobs and does not tool_error', async 
   const dispatcher = await makeDispatcher();
   const fleetApi = createMockFleetApi({
     members: rosterNames(2),
-    promptResponses: [
+    promptResponses: withRouterBypass([
       '```tool_call\n{"tool": "submit-task", "args": {"goal": "Inspect members"}}\n```',
       '```done\n{"result": "delegated", "summary": "ok"}\n```',
       '```tool_call\n{"tool": "inspect-members", "args": {}}\n```',
       '```done\n{"result": "inspected", "summary": "ok"}\n```',
-    ],
+    ]),
   });
   const { host, close } = await asyncHost({
     fleetApi,

@@ -52,14 +52,14 @@ export class WorkerDispatcher {
     return freed;
   }
 
-  async dispatch({ signal, reportPhase } = {}) {
+  async dispatch({ signal, reportPhase, members } = {}) {
     if (this.#closed) throw new Error('WorkerDispatcher is closed');
     signal?.throwIfAborted();
 
     // Waiters already in line are the only consumers of freed capacity. A
     // newcomer that #tryTiers here would steal a just-released worker.
     if (this.#waiters.length === 0) {
-      const lease = await this.#tryTiers(signal);
+      const lease = await this.#tryTiers(signal, members);
       if (signal?.aborted) {
         if (lease) await lease.release();
         signal.throwIfAborted();
@@ -78,20 +78,20 @@ export class WorkerDispatcher {
       );
     }
     if (this.#closed) throw new Error('WorkerDispatcher is closed');
-    return this.#enqueue({ signal, reportPhase });
+    return this.#enqueue({ signal, reportPhase, members });
   }
 
   // Pool first: zero registration cost. Ephemeral second: pays registration
   // but still serves. A failing ephemeral tier is treated as "no capacity",
   // never surfaced to the caller as a registration error.
-  async #tryTiers(signal) {
+  async #tryTiers(signal, members) {
     if (this.#pool) {
       const lease = await this.#pool.tryAcquireNow(signal);
       if (lease) return lease;
     }
     if (this.#ephemeral) {
       try {
-        const lease = await this.#ephemeral.create({ signal });
+        const lease = await this.#ephemeral.create({ signal, members });
         if (lease) return lease;
       } catch (err) {
         console.warn(`[dispatcher] ephemeral worker creation failed: ${err?.message ?? err}`);
@@ -100,7 +100,7 @@ export class WorkerDispatcher {
     return null;
   }
 
-  #enqueue({ signal, reportPhase }) {
+  #enqueue({ signal, reportPhase, members }) {
     if (this.#closed) {
       return Promise.reject(new Error('WorkerDispatcher is closed'));
     }
@@ -108,7 +108,7 @@ export class WorkerDispatcher {
       return Promise.reject(signal.reason ?? new Error('dispatch aborted'));
     }
     return new Promise((resolve, reject) => {
-      const waiter = { signal, settled: false };
+      const waiter = { signal, members, settled: false };
       this.#waiters.push(waiter);
 
       const settle = (done, value) => {
@@ -169,7 +169,7 @@ export class WorkerDispatcher {
             this.#waiters.shift();
             continue;
           }
-          const lease = await this.#tryTiers(waiter.signal);
+          const lease = await this.#tryTiers(waiter.signal, waiter.members);
           if (!lease) break;
           if (waiter.settled) {
             await lease.release();

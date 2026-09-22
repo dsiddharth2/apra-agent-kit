@@ -66,6 +66,27 @@ test('requires a workspace', async () => {
   await assert.rejects(() => runInspectMembers({ fleetApi: createMockFleetApi() }), /workspace/);
 });
 
+test('skips reviewer when the lease has only a doer', async () => {
+  const fleetApi = createMockFleetApi({ present: ['WORKER-1-DOER'] });
+  const doerOnly = {
+    workerId: 'pool-1',
+    doer: workspace.doer,
+  };
+  const result = await runInspectMembers({ fleetApi, workspace: doerOnly });
+  assert.deepEqual(result.members.map((entry) => entry.role), ['doer']);
+  assert.equal(fleetApi.commandCalls.length, 1);
+  assert.equal(fleetApi.commandCalls[0].member_name, 'doer');
+});
+
+test('still requires a doer on the workspace', async () => {
+  const fleetApi = createMockFleetApi();
+  await assert.rejects(
+    () => runInspectMembers({ fleetApi, workspace: { workerId: 'pool-1', reviewer: workspace.reviewer } }),
+    /doer/i,
+  );
+  assert.equal(fleetApi.commandCalls.length, 0);
+});
+
 test('reports an unregistered member as absent without running a command', async () => {
   const fleetApi = createMockFleetApi({ present: ['WORKER-1-DOER'] });
   const result = await runInspectMembers({ fleetApi, workspace });

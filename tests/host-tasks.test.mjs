@@ -58,7 +58,9 @@ test('executeHostedTask runs a task and forwards progress', async () => {
     });
     assert.equal(out.status, 'completed');
     assert.match(out.taskId, /^t-/);
-    assert.equal(progress.length, 2);
+    assert.equal(progress[0].kind, 'routed');
+    assert.equal(progress[0].routedTo, 'open-ended');
+    assert.equal(progress.length, 3);
   } finally { await dispatcher.close(); }
 });
 
