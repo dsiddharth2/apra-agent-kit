@@ -45,19 +45,21 @@ One container runs one agent. Scaling is horizontal: more containers, each with 
 
 ## What an agent is made of
 
-Six parts inside the boundary. The kit ships all of them.
+A task goes in, a result comes out. Six parts inside the boundary make that happen.
 
-| # | Part | What it does |
-|---|------|-------------|
-| 1 | **Run Loop** | The core. Decides the next step and calls tools until done. Two strategies: **ReAct** (decide each turn) and **Plan-Execute** (plan upfront, replan on failure). |
-| 2 | **Memory** | Three kinds: working context (what's in the window), run state (crash recovery), long-term (cross-run facts). *(Run state and long-term: coming in Phase 3)* |
-| 3 | **Workflows** | Known sequences written as plain code and exposed as tools. If you already know the steps, don't make the agent figure them out. |
-| 4 | **Tools** | Typed schemas, model-facing descriptions. Errors are returned, not thrown. 15 Python tools ship out of the box. |
-| 5 | **Budgets & Stop Conditions** | Iteration cap (25), cost ceiling ($5), token limit (500K), wall-clock timeout (10 min), explicit definition of done. |
-| 6 | **Guardrails** | Per-tool allow/deny policies, reversibility classification, filesystem sandboxing, input validation, dry-run mode. |
+<p align="center">
+  <img src="docs/agent-anatomy.svg" alt="Agent anatomy — 6 parts inside the boundary" />
+</p>
 
-**Evals** sit around this boundary, not inside it — a harness that calls the whole box and
-grades what comes out. *(Coming in Phase 3)*
+| # | Part | What it does | Status |
+|---|------|-------------|--------|
+| 1 | **Run Loop** | The core. Decides the next step and calls tools until done. Two strategies: **ReAct** (decide each turn) and **Plan-Execute** (plan upfront, replan on failure). | Shipped |
+| 2 | **Memory** | Three kinds: working context (what's in the LLM window), run state (crash recovery), long-term (cross-run facts). | Working context shipped. Run state + long-term in Phase 3. |
+| 3 | **Workflows** | Known sequences written as plain code and exposed as tools. If you already know the steps, don't make the agent figure them out. | Shipped |
+| 4 | **Tools** | Typed schemas, model-facing descriptions. Errors are returned, not thrown. 15 Python tools ship out of the box. | Shipped |
+| 5 | **Budgets & Stops** | Iteration cap (25), cost ceiling ($5), token limit (500K), wall-clock timeout (10 min), explicit definition of done. | Shipped |
+| 6 | **Guardrails** | Per-tool allow/deny policies, reversibility classification, filesystem sandboxing, input validation, dry-run mode. | Shipped |
+| — | **Evals** | Sits outside the boundary — a harness that calls the whole box and grades what comes out. 20-50 real tasks with graded outcomes. | Phase 3 |
 
 ---
 
