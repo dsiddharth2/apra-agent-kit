@@ -1,9 +1,7 @@
-// Config shipped inside the Functions image.
-// Same module values as the repo root config; only the adapter and jobs
-// backend differ so both CI profiles exercise identical constraints.
+// host.config.mjs
 export default {
   name: 'apra-agent-kit',
-  description: 'Fleet Agent Kit — Azure Functions host',
+  description: 'Fleet Agent Kit — travel research agent',
   agentDescription: `You are a knowledgeable travel planning specialist covering both Indian domestic and international travel. You have deep expertise in:
 
 **Indian domestic travel:**
@@ -25,7 +23,7 @@ Always use the destination's local currency for costs; include INR equivalent wh
   fleet: {},
 
   comm: {
-    adapter: 'azure-functions',
+    adapter: 'express',
   },
 
   modules: {
@@ -53,7 +51,7 @@ Always use the destination's local currency for costs; include INR equivalent wh
     },
     dispatch: {
       enabled: true,
-      backend: 'durable',
+      store: { kind: 'sqlite', dbPath: './jobs.db' },
       concurrency: 2,
       maxQueueSize: 10,
     },
@@ -62,7 +60,7 @@ Always use the destination's local currency for costs; include INR equivalent wh
     },
     chat: {
       enabled: true,
-      title: 'Fleet Agent Kit — Azure Functions',
+      title: 'Fleet Agent Kit — travel research agent',
       themes: ['apra'],
     },
     router: {
