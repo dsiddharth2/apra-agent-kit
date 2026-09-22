@@ -37,21 +37,4 @@ Design documents for features that have been implemented or proposed.
 | [chat-ui-spec](specs/chat-ui-spec.md) | Implemented | Built-in chat page over the job SSE stream. |
 | [travel-agent-quality-spec](specs/travel-agent-quality-spec.md) | Implemented | Prompt overhaul + new tools for travel agent quality. |
 
-### Plans
-
-Implementation plans for each spec (step-by-step breakdowns used during development).
-
-| Plan | Spec |
-|---|---|
-| [stdio-transport-plan](plans/stdio-transport-plan.md) | stdio-transport-spec |
-| [concurrency-plan](plans/concurrency-plan.md) | concurrency-spec |
-| [tiered-worker-dispatch-plan](plans/tiered-worker-dispatch-plan.md) | tiered-worker-dispatch-spec |
-| [phase1-host-layer-plan](plans/phase1-host-layer-plan.md) | phase1-host-layer-spec |
-| [phase2-run-loop-plan](plans/phase2-run-loop-plan.md) | phase2-run-loop-spec |
-| [phase4-jobs-durable-plan](plans/phase4-jobs-durable-plan.md) | phase4-jobs-durable-spec |
-| [phase4a-dispatch-plan](plans/phase4a-dispatch-plan.md) | phase4-jobs-durable-spec |
-| [phase4b-azure-plan](plans/phase4b-azure-plan.md) | phase4-jobs-durable-spec |
-| [chat-ui-plan](plans/chat-ui-plan.md) | chat-ui-spec |
-| [travel-agent-quality-plan](plans/travel-agent-quality-plan.md) | travel-agent-quality-spec |
-
 The [root README](../README.md) is the homepage: what the kit is, how to build an agent, and how to contribute.

@@ -107,10 +107,16 @@ If you already know the steps, write it as plain code and expose it to the agent
 
 ### Observability
 
+- End-to-end correlation ID threaded from request through run loop, tool calls, and results
 - Structured logging for run loop iterations
-- Cost tracking dashboard
+- Cost tracking dashboard (per-run budgets exist; trend/alert across runs does not)
 - Latency breakdowns per tool call
 - Error rate monitoring
+
+### Safety and provenance
+
+- **Provenance convention for agent-written data** — mark records created by the agent so they're distinguishable from human-created ones. Cannot be retrofitted after records are written.
+- **Kill switch** — a way to disable all writes across a deployment without a redeploy
 
 ## Future / Exploration
 

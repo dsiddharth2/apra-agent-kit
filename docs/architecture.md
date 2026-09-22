@@ -107,16 +107,7 @@ External AI → picks tool from catalog → dispatch (acquire pair)
 
 ## HTTP endpoints
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/health` | Liveness probe |
-| `GET` | `/kit` | Agent identity + operational state |
-| `POST` | `/mcp` | MCP tool server for external AI |
-| `POST` | `/task` | Submit a task (sync with `?wait=true`, or async) |
-| `GET` | `/jobs/:id` | Poll job status |
-| `GET` | `/jobs/:id/events` | SSE event stream (replay + live) |
-| `DELETE` | `/jobs/:id` | Cancel a running job |
-| `GET` | `/chat` | Chat UI |
+See [jobs.md](jobs.md) for the full API reference with request/response details.
 
 ## Tool catalog
 
@@ -161,46 +152,8 @@ External AI → picks tool from catalog → dispatch (acquire pair)
 
 ## Configuration
 
-All settings live in `host.config.mjs`:
-
-```js
-export default {
-  name: 'apra-agent-kit',
-  comm: { adapter: 'express' },        // or 'raw-http', 'azure-functions'
-  modules: {
-    runLoop: {
-      strategy: 'plan-execute',         // or 'open-ended'
-    },
-    budgets: {
-      maxIterations: 25,
-      maxCostUsd: 5.00,
-      maxTokens: 500_000,
-      timeoutMs: 600_000,
-    },
-    guardrails: {
-      defaultPolicy: 'allow',
-      policies: {},                     // per-tool: 'allow', 'deny', or 'approve'
-    },
-    dispatch: {
-      backend: 'in-process',            // or 'durable' (requires azure-functions adapter)
-      concurrency: 2,
-    },
-    notify: { sse: { enabled: true } },
-    chat: { enabled: true },
-  },
-};
-```
-
-Key environment variables:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` | — | OAuth token for Fleet workers |
-| `WORKER_POOL_SIZE` | `4` | Pre-provisioned doer/reviewer pairs |
-| `WORKER_EPHEMERAL_MAX` | `10` | On-demand overflow pairs |
-| `JOBS_CONCURRENCY` | `1` | Parallel worker loops |
-| `JOBS_DB_PATH` | `./workdir/jobs.db` | SQLite database location |
-| `PORT` | `3000` | Server listen port |
+All settings live in `host.config.mjs`. See [getting-started.md](getting-started.md) for
+the full annotated config reference with environment variables.
 
 ## Design decisions
 
@@ -227,16 +180,3 @@ instance.
 
 **Backend pairing is enforced.** `in-process` (SQLite) pairs with `express` or `raw-http`.
 `durable` requires `azure-functions`. Cross-pairing throws at startup.
-
-## Further reading
-
-| Document | Covers |
-|---|---|
-| [getting-started.md](getting-started.md) | Config, tools, run, deploy |
-| [run-loop.md](run-loop.md) | Strategies, budgets, guardrails, `/task` API in detail |
-| [jobs.md](jobs.md) | Async jobs: submit, poll, SSE, webhooks, cancellation |
-| [concurrency.md](concurrency.md) | Worker pool, job queue, dispatch config |
-| [mcp-interface.md](mcp-interface.md) | MCP tool catalog, registry contract |
-| [chat-ui.md](chat-ui.md) | Chat page: theming, events, status pipeline |
-| [deploy-azure-functions.md](deploy-azure-functions.md) | Azure Functions deployment |
-| [development.md](development.md) | Setup, testing, adding workflows |

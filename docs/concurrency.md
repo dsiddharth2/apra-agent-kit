@@ -106,18 +106,7 @@ it higher when you have the worker capacity and want more parallel tasks.
 
 ## Testing
 
-### Test suites
-
-| Command | What it tests | Needs Fleet? | Needs LLM? | Duration |
-|---|---|---|---|---|
-| `npm run test:unit` | Pool, dispatcher, roster, config | no | no | ~1s |
-| `npm run test:phase4` | Job queue, store, notifications | no | no | ~2s |
-| `npm run test:host` | Host routes, executor, index | no | no | ~1s |
-| `npm run test:concurrency` | Real concurrent task execution | yes | yes | ~3–6 min |
-
-The first three use mock Fleet APIs and run everywhere. The concurrency
-acceptance test (`tests/acceptance/concurrency.acceptance.test.mjs`) uses a
-real Fleet server, real LLM (Claude Sonnet), and real tool calls.
+For the full test suites table, see [development.md](development.md).
 
 ### Concurrency acceptance tests
 

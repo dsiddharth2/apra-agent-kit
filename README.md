@@ -252,15 +252,6 @@ We welcome contributions. Here's how:
 - **Tests** — more mock tests for strategies, guardrails, budgets
 - **New strategies** — implement a different planning/execution approach
 
-### Development setup
-
-```bash
-git clone https://github.com/dsiddharth2/apra-agent-kit.git
-cd apra-agent-kit
-npm install
-npm test    # verify everything works — no Fleet needed
-```
-
 See [docs/development.md](docs/development.md) for the full setup, testing guide, and conventions.
 
 ---

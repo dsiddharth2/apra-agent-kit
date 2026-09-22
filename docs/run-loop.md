@@ -240,20 +240,8 @@ Text before the block is captured as reasoning.
 
 ## Tools
 
-Python scripts in `tools/`, callable both as MCP tools and from the run loop:
-
-| Tool | API | Notes |
-|---|---|---|
-| `weather` | wttr.in | Current conditions for a city |
-| `forecast` | Open-Meteo | Multi-day forecast (1-16 days) |
-| `currency` | ECB via frankfurter.app | Live exchange rates |
-| `country-info` | Wikipedia + Nominatim | Accepts ISO codes or full names |
-| `travel-advisory` | travel-advisory.info | Safety scores by country |
-| `geocode` | Nominatim | City → lat/lon or reverse |
-| `wikipedia-summary` | Wikipedia REST API | Summary extract for any topic |
-| `public-holidays` | Nager.Date | Public holidays by country/year |
-
-All are read-only and spend no LLM tokens.
+See [mcp-interface.md](mcp-interface.md) for the full tool catalog, registry contract, and
+how to add new tools.
 
 ## Host Configuration
 
@@ -369,61 +357,7 @@ Status values: `completed`, `failed`, `cancelled`, `budget_exceeded`.
 The plan-execute strategy with ~9 tools typically needs 90-120 seconds. Set `timeoutMs`
 to at least 300000 (5 minutes) for plan-execute tasks.
 
-## Docker
+## Docker and testing
 
-### MCP server only (no run loop)
-
-```bash
-docker compose up --build
-```
-
-### Host with run loop
-
-```bash
-docker compose run --rm -p 3000:3000 fleet node host/index.mjs
-```
-
-Then POST to `/task?wait=true` (or `POST /task` and poll — see [jobs.md](jobs.md)):
-
-```bash
-curl -X POST "http://localhost:3000/task?wait=true" \
-  -H "Content-Type: application/json" \
-  -d '{"goal":"Plan a trip to Jaipur","constraints":{"timeoutMs":300000}}'
-```
-
-### Environment variables
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` | (none) | Required for LLM calls |
-| `MCP_PORT` | 3000 | Host port mapping |
-| `WORKER_POOL_SIZE` | 4 | Pre-provisioned worker pairs |
-| `WORKER_EPHEMERAL_MAX` | 10 | Max ephemeral workers on overflow |
-| `MCP_BIND_HOST` | 0.0.0.0 | Bind address inside container |
-
-## Tests
-
-| Script | What it covers |
-|---|---|
-| `npm run test:host` | Host config, registry, executor, express, index |
-| `npm run test:phase2` | Run loop, strategies, budgets, guardrails, response parser, prompts |
-| `npm run test:acceptance` | End-to-end with real Fleet + LLM (spends tokens) |
-
-Tests use a mock Fleet with scripted `promptResponses` — deterministic multi-turn agent
-loops without hitting a real LLM.
-
-## Module map
-
-| File | Responsibility |
-|---|---|
-| `host/run-loop.mjs` | `runTask()` — selects strategy, wires budgets/guardrails, iterates events |
-| `host/strategies/open-ended.mjs` | ReAct loop: act → observe → repeat |
-| `host/strategies/plan-execute.mjs` | Plan → review → execute → step-review → replan → done |
-| `host/budgets.mjs` | `createBudgets()` — iteration/token/cost/time caps |
-| `host/guardrails.mjs` | `createGuardrails()` — policy gate, sandbox, validation, dry-run |
-| `host/response-parser.mjs` | Extracts fenced JSON blocks from LLM responses |
-| `host/prompts/*.mjs` | Prompt builders for each LLM interaction |
-| `host/tools/registry.mjs` | Extends the MCP registry with reversibility, timeout, retry metadata |
-| `host/tools/executor.mjs` | Runs a tool with validation, timeout, and error handling |
-| `host/config.mjs` | Loads and validates `host.config.mjs` |
-| `host/index.mjs` | `startHost()` and `createHost()` — wires everything together |
+See [development.md](development.md) for Docker setup, test suites, and running
+the acceptance tests.
