@@ -5,8 +5,9 @@
 | Document | Read it when |
 |---|---|
 | [getting-started.md](getting-started.md) | **Start here.** You want to build your own agent — configure it, add tools, run it, deploy it. No kit internals required. |
+| [roadmap.md](roadmap.md) | You want to see what's shipped, in progress, and planned. |
 
-### Contribute to the kit
+### Understand the system
 
 | Document | Read it when |
 |---|---|
@@ -33,5 +34,7 @@ Design documents for features that have been implemented or proposed.
 | [specs/2026-09-16-fleet-agent-kit-phase2-spec.md](specs/2026-09-16-fleet-agent-kit-phase2-spec.md) | Implemented | Run loop, strategies, budgets, guardrails. |
 | [specs/2026-09-17-fleet-agent-kit-phase4-spec.md](specs/2026-09-17-fleet-agent-kit-phase4-spec.md) | Implemented | Async jobs API, notifier, Durable backend, Azure Functions adapter. |
 | [specs/2026-09-18-fleet-agent-kit-chat-ui-spec.md](specs/2026-09-18-fleet-agent-kit-chat-ui-spec.md) | Implemented | Built-in chat page over the job SSE stream. |
+| [specs/2026-09-18-fleet-agent-kit-phase3-memory-eval-spec.md](specs/2026-09-18-fleet-agent-kit-phase3-memory-eval-spec.md) | Approved | Memory (3 kinds) + eval harness. |
+| [specs/2026-09-21-travel-agent-output-quality-spec.md](specs/2026-09-21-travel-agent-output-quality-spec.md) | Implemented | Prompt overhaul + new tools for travel agent quality. |
 
-The [root README](../README.md) is the quickstart: prerequisites, provisioning, and the commands to run things.
+The [root README](../README.md) is the homepage: what the kit is, how to build an agent, and how to contribute.
