@@ -12,17 +12,17 @@ These are live in the kit today.
 |---------|--------|------|
 | Stdio transport (Fleet over MCP) | Done | [stdio-transport-spec](specs/stdio-transport-spec.md) |
 | MCP tool server (`/mcp` endpoint) | Done | [mcp-interface](mcp-interface.md) |
-| Host layer + config system | Done | [phase1-spec](specs/2026-09-11-fleet-agent-kit-phase1-spec.md) |
-| Run loop + strategies (ReAct, Plan-Execute) | Done | [phase2-spec](specs/2026-09-16-fleet-agent-kit-phase2-spec.md) |
+| Host layer + config system | Done | [phase1-host-layer-spec](specs/phase1-host-layer-spec.md) |
+| Run loop + strategies (ReAct, Plan-Execute) | Done | [phase2-run-loop-spec](specs/phase2-run-loop-spec.md) |
 | Budgets (iteration, cost, token, time caps) | Done | [run-loop](run-loop.md) |
 | Guardrails (per-tool policies, sandbox, dry-run) | Done | [run-loop](run-loop.md) |
-| Tiered worker dispatch (pool + ephemeral + queue) | Done | [tiered-dispatch](specs/2026-09-10-tiered-worker-dispatch-design.md) |
-| Async jobs API (SQLite queue, SSE, webhooks) | Done | [phase4-spec](specs/2026-09-17-fleet-agent-kit-phase4-spec.md) |
+| Tiered worker dispatch (pool + ephemeral + queue) | Done | [tiered-worker-dispatch-spec](specs/tiered-worker-dispatch-spec.md) |
+| Async jobs API (SQLite queue, SSE, webhooks) | Done | [phase4-jobs-durable-spec](specs/phase4-jobs-durable-spec.md) |
 | Azure Durable Functions backend | Done | [deploy-azure](deploy-azure-functions.md) |
-| Chat UI | Done | [chat-ui-spec](specs/2026-09-18-fleet-agent-kit-chat-ui-spec.md) |
+| Chat UI | Done | [chat-ui-spec](specs/chat-ui-spec.md) |
 | 15 Python tools (weather, geocode, currency, etc.) | Done | — |
 | Communication adapters (Express, raw-http, Azure Functions) | Done | — |
-| Travel agent output quality (prompts + 2 new tools) | Done | [output-quality-spec](specs/2026-09-21-travel-agent-output-quality-spec.md) |
+| Travel agent output quality (prompts + 2 new tools) | Done | [travel-agent-quality-spec](specs/travel-agent-quality-spec.md) |
 
 ## In Progress
 
@@ -32,11 +32,11 @@ These are live in the kit today.
 
 ## Next Up — Phase 3: Memory + Eval
 
-Specced and approved, not yet implemented. See [phase3-spec](specs/2026-09-18-fleet-agent-kit-phase3-memory-eval-spec.md).
+Specced and approved, not yet implemented. See [phase3-memory-eval-spec](specs/phase3-memory-eval-spec.md).
 
 ### Memory (three kinds)
 
-The PPT calls out that conflating these is the most common agent design mistake:
+Conflating these is the most common agent design mistake:
 
 | Kind | What it is | Priority |
 |------|-----------|----------|
@@ -55,11 +55,27 @@ The piece teams regret skipping. The agent is the thing under test, unchanged.
 
 ## Planned
 
-Features identified from the PPT vision and codebase gaps. Not yet specced.
+Features identified from the vision and codebase gaps. Not yet specced.
+
+### Connectors (LLM Providers)
+
+The kit currently provisions Claude Code instances via Fleet. To support more providers:
+
+| Connector | What it does | Priority |
+|-----------|-------------|----------|
+| **OpenAI** | Register members backed by GPT-4o / o3. Route cheaper reasoning steps to OpenAI, keep complex planning on Claude. | High |
+| **Azure OpenAI** | Same as OpenAI but through Azure endpoints — needed for enterprise deployments with data residency. | High |
+| **Gemini** | Google's models as an alternative provider. Register members backed by Gemini. | Medium |
+| **Ollama / Local models** | Self-hosted models for air-gapped environments or cost-sensitive workloads. | Medium |
+| **Cursor** | The PPT notes Fleet can register Cursor as a member type. | Low |
+
+This requires abstracting the LLM interface so `fleetApi.executePrompt()` routes to the right provider based on the member's type. The dispatcher already manages doer/reviewer pairs — each pair could use a different provider.
+
+Cost optimization: route simpler reasoning steps to cheaper models (e.g. GPT-4o-mini for argument resolution) and reserve expensive models (Claude Opus) for complex planning.
 
 ### Communication layer improvements
 
-The PPT describes "four doors, one room" — none of them should live inside the agent:
+Four doors, one room — none of them should live inside the agent:
 
 | Door | Status | What's needed |
 |------|--------|---------------|
@@ -76,24 +92,18 @@ The PPT describes "four doors, one room" — none of them should live inside the
 
 ### Task triage
 
-The PPT distinguishes questions from tasks:
+A triage layer at the chat/input boundary should classify: question vs task vs too vague:
 - "What is our leave policy?" → one model call, no agent needed
 - "Find the mismatched invoices" → many steps, several tools, agent needed
 
-A triage layer at the chat/input boundary should classify: question vs task vs too vague, and route accordingly.
+Route accordingly instead of sending everything through the full run loop.
 
 ### Workflow-as-tool pattern
 
-The PPT's key insight: if you already know the steps, write it as plain code and expose it to the agent as a tool. The kit already supports this pattern but needs:
+If you already know the steps, write it as plain code and expose it to the agent as a tool. The kit supports this but needs:
 - More examples of deterministic workflows exposed as tools
 - Documentation on when to use workflows vs agent reasoning
 - Templates for common workflow patterns
-
-### Multi-provider support
-
-The PPT notes: "We can use Claude or OpenAI or Cursor in the same workflow because we can register members that way."
-- Abstract the LLM interface so workers can be backed by different providers
-- Cost optimization by routing simpler steps to cheaper models
 
 ### Observability
 
@@ -113,4 +123,4 @@ These are longer-term ideas, not committed.
 | Agent-to-agent communication | One agent calling another agent's `/task` endpoint as a tool |
 | Horizontal scaling patterns | Documentation and examples for multi-container deployments |
 | Plugin system | Third-party tool packages that register into the MCP catalog |
-| API-only agents (no Fleet) | For tasks that are pure API calls with no filesystem — the PPT notes Fleet binding is vestigial for these |
+| API-only agents (no Fleet) | For tasks that are pure API calls with no filesystem — Fleet binding is vestigial for these |

@@ -26,15 +26,32 @@ Design documents for features that have been implemented or proposed.
 
 | Spec | Status | Covers |
 |---|---|---|
-| [specs/stdio-transport-spec.md](specs/stdio-transport-spec.md) | Implemented | Spawning Fleet over stdio (the current downstream transport). |
-| [specs/concurrency-spec.md](specs/concurrency-spec.md) | Implemented | Original shared worker pool design (superseded by tiered dispatch). |
-| [specs/2026-09-10-tiered-worker-dispatch-design.md](specs/2026-09-10-tiered-worker-dispatch-design.md) | Implemented | Tiered worker dispatch: pool + ephemeral + queue. |
-| [specs/2026-09-09-fleet-agent-kit-spec.md](specs/2026-09-09-fleet-agent-kit-spec.md) | Implemented | Vision spec for the modular agent kit. |
-| [specs/2026-09-11-fleet-agent-kit-phase1-spec.md](specs/2026-09-11-fleet-agent-kit-phase1-spec.md) | Implemented | Host layer: config, tools, communication adapter. |
-| [specs/2026-09-16-fleet-agent-kit-phase2-spec.md](specs/2026-09-16-fleet-agent-kit-phase2-spec.md) | Implemented | Run loop, strategies, budgets, guardrails. |
-| [specs/2026-09-17-fleet-agent-kit-phase4-spec.md](specs/2026-09-17-fleet-agent-kit-phase4-spec.md) | Implemented | Async jobs API, notifier, Durable backend, Azure Functions adapter. |
-| [specs/2026-09-18-fleet-agent-kit-chat-ui-spec.md](specs/2026-09-18-fleet-agent-kit-chat-ui-spec.md) | Implemented | Built-in chat page over the job SSE stream. |
-| [specs/2026-09-18-fleet-agent-kit-phase3-memory-eval-spec.md](specs/2026-09-18-fleet-agent-kit-phase3-memory-eval-spec.md) | Approved | Memory (3 kinds) + eval harness. |
-| [specs/2026-09-21-travel-agent-output-quality-spec.md](specs/2026-09-21-travel-agent-output-quality-spec.md) | Implemented | Prompt overhaul + new tools for travel agent quality. |
+| [agent-kit-vision-spec](specs/agent-kit-vision-spec.md) | Implemented | Vision spec for the modular agent kit. |
+| [stdio-transport-spec](specs/stdio-transport-spec.md) | Implemented | Spawning Fleet over stdio (the current downstream transport). |
+| [concurrency-spec](specs/concurrency-spec.md) | Implemented | Original shared worker pool design (superseded by tiered dispatch). |
+| [tiered-worker-dispatch-spec](specs/tiered-worker-dispatch-spec.md) | Implemented | Tiered worker dispatch: pool + ephemeral + queue. |
+| [phase1-host-layer-spec](specs/phase1-host-layer-spec.md) | Implemented | Host layer: config, tools, communication adapter. |
+| [phase2-run-loop-spec](specs/phase2-run-loop-spec.md) | Implemented | Run loop, strategies, budgets, guardrails. |
+| [phase3-memory-eval-spec](specs/phase3-memory-eval-spec.md) | Approved | Memory (3 kinds) + eval harness. |
+| [phase4-jobs-durable-spec](specs/phase4-jobs-durable-spec.md) | Implemented | Async jobs API, notifier, Durable backend, Azure Functions adapter. |
+| [chat-ui-spec](specs/chat-ui-spec.md) | Implemented | Built-in chat page over the job SSE stream. |
+| [travel-agent-quality-spec](specs/travel-agent-quality-spec.md) | Implemented | Prompt overhaul + new tools for travel agent quality. |
+
+### Plans
+
+Implementation plans for each spec (step-by-step breakdowns used during development).
+
+| Plan | Spec |
+|---|---|
+| [stdio-transport-plan](plans/stdio-transport-plan.md) | stdio-transport-spec |
+| [concurrency-plan](plans/concurrency-plan.md) | concurrency-spec |
+| [tiered-worker-dispatch-plan](plans/tiered-worker-dispatch-plan.md) | tiered-worker-dispatch-spec |
+| [phase1-host-layer-plan](plans/phase1-host-layer-plan.md) | phase1-host-layer-spec |
+| [phase2-run-loop-plan](plans/phase2-run-loop-plan.md) | phase2-run-loop-spec |
+| [phase4-jobs-durable-plan](plans/phase4-jobs-durable-plan.md) | phase4-jobs-durable-spec |
+| [phase4a-dispatch-plan](plans/phase4a-dispatch-plan.md) | phase4-jobs-durable-spec |
+| [phase4b-azure-plan](plans/phase4b-azure-plan.md) | phase4-jobs-durable-spec |
+| [chat-ui-plan](plans/chat-ui-plan.md) | chat-ui-spec |
+| [travel-agent-quality-plan](plans/travel-agent-quality-plan.md) | travel-agent-quality-spec |
 
 The [root README](../README.md) is the homepage: what the kit is, how to build an agent, and how to contribute.
