@@ -68,6 +68,8 @@ Boilerplate that imports `withStandaloneLease` and `ensureApralabs`, exports `ru
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { withStandaloneLease } from '../standalone.mjs';
+// Prefer transport/ once that file exists (PR #29). On today's Kit (before PR #29),
+// workflows import ../demo/ensure-apralabs.mjs instead.
 import { ensureApralabs } from '../../transport/ensure-apralabs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -142,6 +144,8 @@ if __name__ == "__main__":
 
 Add to `mcp/registry.mjs`. Import the workflow's `run<Name>` function, then append an entry to `defaultRegistry`.
 
+Host registry and guardrails (`docs/CONTRACT.md`): the host default is `reversible: true`. Mark writes `reversible: false` or they skip approval.
+
 ### Workflow tool (calls a workflow):
 ```javascript
 import { run<Name> } from '../workflows/<name>/main.mjs';
@@ -154,6 +158,7 @@ import { run<Name> } from '../workflows/<name>/main.mjs';
     input: z.string().optional().describe('Description of the input.'),
   }),
   annotations: { readOnlyHint: true, idempotentHint: false },
+  reversible: true,
   async run({ fleetApi, args, signal, reportPhase, workspace }) {
     const result = await run<Name>({ fleetApi, workspace, input: args.input, signal, reportPhase });
     return `<name> completed: ${JSON.stringify(result)}`;
@@ -171,6 +176,7 @@ import { run<Name> } from '../workflows/<name>/main.mjs';
     arg: z.string().describe('Description.'),
   }),
   annotations: { readOnlyHint: true, idempotentHint: true },
+  reversible: true,
   async run({ fleetApi, args }) {
     const escaped = shellEscape(args.arg);
     const script = path.join(toolsDir, '<tool-name>', '<tool-name>.py');
@@ -185,7 +191,12 @@ import { run<Name> } from '../workflows/<name>/main.mjs';
 
 ## Unit Tests
 
-Use `node:test` and `node:assert/strict`. Import `createMockFleetApi` from `tests/helpers/mock-fleet.mjs`.
+Use `node:test` and `node:assert/strict`.
+
+- `createMockFleetApi` from `tests/helpers/mock-fleet.mjs` — launcher-level tests; available in the Kit repo.
+- `fakeContext` — for workflow-body tests; this is what scaffolded `npm create` projects currently ship (`template/tests/hello.test.mjs` after PR #29). Use it when `tests/helpers/mock-fleet.mjs` is not present.
+
+The example below keeps `createMockFleetApi` for Kit-repo launcher tests.
 
 ```javascript
 import './setup-fleet-modules.mjs';

@@ -60,6 +60,7 @@
   })
   ```
 - **Annotations**: `{ readOnlyHint: {{bool}}, idempotentHint: {{bool}} }`
+- **reversible** (boolean): writes must set `reversible: false` (host default is reversible and skips approval)
 
 ## Error Handling & Edge Cases
 
@@ -83,7 +84,8 @@
 - ...
 
 ### Mock strategy
-- Use `createMockFleetApi()` from `tests/helpers/mock-fleet.mjs`
+- `createMockFleetApi` from `tests/helpers/mock-fleet.mjs` — launcher-level tests; available in the Kit repo.
+- `fakeContext` — for workflow-body tests; this is what scaffolded `npm create` projects currently ship (`template/tests/hello.test.mjs` after PR #29). Use it when `tests/helpers/mock-fleet.mjs` is not present.
 - Mock `executeCommand` to return expected tool JSON
 - Mock `executePrompt` to return expected agent text
 

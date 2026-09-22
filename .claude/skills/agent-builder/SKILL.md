@@ -44,8 +44,15 @@ Check if `brainstorming` and `writing-plans` appear in the available-skills list
 - **If missing**: tell the user "I need the superpowers skills (brainstorming and
   writing-plans) for the design and planning phases. Let me install them." Run:
   ```
-  npx @anthropic-ai/superpowers
+  /plugin install superpowers@claude-plugins-official
   ```
+  If that marketplace is unavailable:
+  ```
+  /plugin marketplace add obra/superpowers-marketplace
+  /plugin install superpowers@superpowers-marketplace
+  ```
+  If install still fails, tell the user and continue — Phases 1–2 are
+  self-contained; only Phase 3 needs `writing-plans`.
   Explain: "These skills handle the brainstorming and planning process — the
   agent-builder orchestrates them for Fleet agents specifically."
 
@@ -102,11 +109,16 @@ Store the agent name — you'll use it throughout the remaining phases.
 Ask these questions one at a time using AskUserQuestion. Each question includes a
 brief explanation of why it matters (the developer may be new to Fleet).
 
-Skip question 1 if the agent name was already collected in Phase 0.5.
+Skip question 1 if the agent name was already collected in Phase 0.5. If skipped,
+still ask the one-liner only. Store the name for Phases 2–4 file paths
+(`docs/specs/`, `docs/plans/`).
 
 **Question 1: Agent name & one-liner**
-> "What does this agent do in one sentence?"
-> Freeform. This seeds the spec's Purpose section and the project README.
+> Ask for both: (1) a package-style agent name using the same npm name rules as
+> Phase 0.5 (lowercase, hyphens ok — e.g. `my-weather-agent`), and (2) a
+> one-sentence description: "What does this agent do in one sentence?"
+> Freeform for the one-liner. The name is used in spec/plan paths; the one-liner
+> seeds the spec's Purpose section and the project README.
 
 **Question 2: Domain**
 > "What domain is this agent working in?"
