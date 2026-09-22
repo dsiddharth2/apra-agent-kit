@@ -103,7 +103,7 @@ npm test    # mock tests — no Fleet binary, no tokens needed
 
 | Document | Covers |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | Layers, module map, data flow, design decisions |
+| [docs/architecture.md](docs/architecture.md) | Component diagram, layers, data flow, design decisions |
 | [docs/development.md](docs/development.md) | Setup, testing, adding workflows, conventions |
 | [docs/mcp-interface.md](docs/mcp-interface.md) | MCP tool catalog, registry contract, timeouts, auth |
 | [docs/run-loop.md](docs/run-loop.md) | Autonomous agent: strategies, budgets, guardrails, `/task` API |

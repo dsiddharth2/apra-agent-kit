@@ -1,0 +1,357 @@
+<title>Workflow Kit Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #ffffff;
+    --surface: #f9fafb;
+    --surface-alt: #f0f4f8;
+    --border: #c7d2e0;
+    --border-light: #dde4ee;
+    --text: #111827;
+    --text-muted: #374151;
+    --text-subtle: #6b7280;
+    --blue: #2563eb;
+    --blue-bg: #dbeafe;
+    --teal: #059669;
+    --teal-bg: #d1fae5;
+    --amber: #d97706;
+    --amber-bg: #fef3c7;
+    --purple: #7c3aed;
+    --purple-bg: #ede9fe;
+    --rose: #e11d48;
+    --rose-bg: #ffe4e6;
+    --slate: #334155;
+    --slate-bg: #e2e8f0;
+    --svg-fg: #111827;
+    --svg-muted: #374151;
+    --arrow: #6b7280;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c1020;
+      --surface: #151b2e;
+      --surface-alt: #1c2438;
+      --border: #2a3552;
+      --border-light: #222d46;
+      --text: #f0f2f8;
+      --text-muted: #b0b8cc;
+      --text-subtle: #7a84a0;
+      --blue: #60a5fa;
+      --blue-bg: #1e3a6e;
+      --teal: #34d399;
+      --teal-bg: #0f3d30;
+      --amber: #fbbf24;
+      --amber-bg: #3d3010;
+      --purple: #a78bfa;
+      --purple-bg: #2a1f5e;
+      --rose: #fb7185;
+      --rose-bg: #3d1520;
+      --slate: #94a3b8;
+      --slate-bg: #1e2a3a;
+      --svg-fg: #f0f2f8;
+      --svg-muted: #b0b8cc;
+      --arrow: #5a6580;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0c1020;
+    --surface: #151b2e;
+    --surface-alt: #1c2438;
+    --border: #2a3552;
+    --border-light: #222d46;
+    --text: #f0f2f8;
+    --text-muted: #b0b8cc;
+    --text-subtle: #7a84a0;
+    --blue: #60a5fa;
+    --blue-bg: #1e3a6e;
+    --teal: #34d399;
+    --teal-bg: #0f3d30;
+    --amber: #fbbf24;
+    --amber-bg: #3d3010;
+    --purple: #a78bfa;
+    --purple-bg: #2a1f5e;
+    --rose: #fb7185;
+    --rose-bg: #3d1520;
+    --slate: #94a3b8;
+    --slate-bg: #1e2a3a;
+    --svg-fg: #f0f2f8;
+    --svg-muted: #b0b8cc;
+    --arrow: #5a6580;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding-inline: 24px;
+    padding-block: 32px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin: 0 0 32px;
+  }
+
+  figure {
+    margin: 0 0 40px;
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 24px 16px;
+    overflow-x: auto;
+  }
+
+  figcaption {
+    font-size: 0.8rem;
+    color: var(--text-subtle);
+    text-align: center;
+    margin-top: 16px;
+  }
+
+  svg text {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  svg .label-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .components {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .comp {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 12px;
+    align-items: baseline;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+  }
+
+  .comp-name {
+    font-weight: 600;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .comp-name .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .comp-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .section-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-subtle);
+    margin: 32px 0 12px;
+  }
+
+  .section-label:first-of-type {
+    margin-top: 0;
+  }
+
+  @media (max-width: 600px) {
+    .comp {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+    body { padding-inline: 16px; }
+    figure { padding: 16px 8px; }
+  }
+</style>
+
+<h1>Workflow Kit Architecture</h1>
+<p class="subtitle">apra-agent-kit — autonomous AI agent server built on Apra Fleet</p>
+
+<figure>
+  <svg viewBox="0 0 780 630" role="img" aria-label="Component diagram showing how a client request flows through HTTP layer, job queue, strategy engine, worker pool, Fleet, and tools, with SSE/webhook callback to client" style="max-width:100%;height:auto;display:block;margin:0 auto">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+        <polygon points="0 0, 10 3.5, 0 7" fill="var(--arrow)"/>
+      </marker>
+      <marker id="arrow-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+        <polygon points="0 0, 10 3.5, 0 7" fill="var(--blue)"/>
+      </marker>
+    </defs>
+
+    <!-- Client -->
+    <rect x="310" y="10" width="160" height="40" rx="20" fill="var(--surface-alt)" stroke="var(--border)" stroke-width="1.5"/>
+    <text x="390" y="35" text-anchor="middle" font-size="13" font-weight="600" fill="var(--svg-fg)">Client</text>
+
+    <!-- Arrow: Client → HTTP -->
+    <line x1="390" y1="50" x2="390" y2="80" stroke="var(--arrow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="396" y="70" font-size="10" fill="var(--svg-muted)" class="label-mono">POST /task</text>
+
+    <!-- HTTP Layer -->
+    <rect x="240" y="84" width="300" height="46" rx="8" fill="var(--blue-bg)" stroke="var(--blue)" stroke-width="1.5"/>
+    <text x="390" y="103" text-anchor="middle" font-size="13" font-weight="600" fill="var(--blue)">HTTP Layer</text>
+    <text x="390" y="120" text-anchor="middle" font-size="10" fill="var(--svg-muted)">Express · Raw HTTP · Azure Functions</text>
+
+    <!-- Branch arrows from HTTP -->
+    <!-- Left: to Job Queue -->
+    <line x1="330" y1="130" x2="200" y2="175" stroke="var(--arrow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="240" y="152" font-size="10" fill="var(--svg-muted)">async</text>
+
+    <!-- Right: to MCP -->
+    <line x1="450" y1="130" x2="600" y2="175" stroke="var(--arrow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="538" y="152" font-size="10" fill="var(--svg-muted)" class="label-mono">/mcp</text>
+
+    <!-- Center: sync -->
+    <line x1="390" y1="130" x2="390" y2="270" stroke="var(--blue)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow-blue)"/>
+    <text x="396" y="200" font-size="10" fill="var(--blue)">sync (wait=true)</text>
+
+    <!-- Job Queue -->
+    <rect x="80" y="178" width="240" height="70" rx="8" fill="var(--amber-bg)" stroke="var(--amber)" stroke-width="1.5"/>
+    <text x="200" y="200" text-anchor="middle" font-size="13" font-weight="600" fill="var(--amber)">Job Queue</text>
+    <text x="200" y="218" text-anchor="middle" font-size="10" fill="var(--svg-muted)">SQLite FIFO (VM/Docker)</text>
+    <text x="200" y="232" text-anchor="middle" font-size="10" fill="var(--svg-muted)">Azure Durable Functions (Cloud)</text>
+
+    <!-- Arrow: Job Queue → Strategy -->
+    <line x1="200" y1="248" x2="200" y2="270" stroke="var(--arrow)" stroke-width="1.5"/>
+    <line x1="200" y1="270" x2="345" y2="270" stroke="var(--arrow)" stroke-width="1.5"/>
+
+    <!-- MCP Server -->
+    <rect x="530" y="178" width="200" height="50" rx="8" fill="var(--purple-bg)" stroke="var(--purple)" stroke-width="1.5"/>
+    <text x="630" y="200" text-anchor="middle" font-size="13" font-weight="600" fill="var(--purple)">MCP Server</text>
+    <text x="630" y="217" text-anchor="middle" font-size="10" fill="var(--svg-muted)">15-tool catalog for external AI</text>
+
+    <!-- Arrow: MCP → Worker Pool (skips strategy) -->
+    <line x1="630" y1="228" x2="630" y2="390" stroke="var(--arrow)" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <line x1="630" y1="390" x2="535" y2="390" stroke="var(--arrow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="636" y="320" font-size="10" fill="var(--svg-muted)">tool call</text>
+
+    <!-- Strategy Engine -->
+    <rect x="260" y="274" width="260" height="70" rx="8" fill="var(--teal-bg)" stroke="var(--teal)" stroke-width="1.5"/>
+    <text x="390" y="296" text-anchor="middle" font-size="13" font-weight="600" fill="var(--teal)">Strategy Engine</text>
+    <text x="330" y="316" text-anchor="middle" font-size="11" fill="var(--svg-muted)">ReAct</text>
+    <text x="390" y="316" text-anchor="middle" font-size="11" fill="var(--svg-muted)">·</text>
+    <text x="450" y="316" text-anchor="middle" font-size="11" fill="var(--svg-muted)">Plan-Execute</text>
+    <text x="390" y="334" text-anchor="middle" font-size="10" fill="var(--svg-muted)">LLM picks tools, observes, replans</text>
+
+    <!-- Budgets & Guardrails (side box) -->
+    <rect x="48" y="282" width="170" height="50" rx="8" fill="var(--rose-bg)" stroke="var(--rose)" stroke-width="1.5"/>
+    <text x="133" y="303" text-anchor="middle" font-size="12" font-weight="600" fill="var(--rose)">Budgets & Guardrails</text>
+    <text x="133" y="319" text-anchor="middle" font-size="10" fill="var(--svg-muted)">cost · tokens · time · policies</text>
+    <!-- Arrow: Guardrails → Strategy -->
+    <line x1="218" y1="307" x2="256" y2="307" stroke="var(--rose)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+
+    <!-- Notifications (side box) -->
+    <rect x="48" y="360" width="170" height="50" rx="8" fill="var(--slate-bg)" stroke="var(--slate)" stroke-width="1.5"/>
+    <text x="133" y="381" text-anchor="middle" font-size="12" font-weight="600" fill="var(--slate)">Notifications</text>
+    <text x="133" y="397" text-anchor="middle" font-size="10" fill="var(--svg-muted)">SSE stream · Webhook POST</text>
+
+    <!-- Arrow: Job Queue → Notifications (events flow down) -->
+    <line x1="133" y1="360" x2="133" y2="248" stroke="var(--arrow)" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <text x="110" y="330" font-size="9" fill="var(--svg-muted)">events</text>
+
+    <!-- Arrow: Notifications → Client (SSE/Webhook callback) -->
+    <polyline points="48,385  24,385  24,30  310,30" fill="none" stroke="var(--slate)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+    <text x="28" y="200" font-size="10" fill="var(--slate)" transform="rotate(-90 28,200)">SSE · Webhook callback</text>
+
+    <!-- Arrow: Strategy → Worker Pool -->
+    <line x1="390" y1="344" x2="390" y2="372" stroke="var(--arrow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="396" y="362" font-size="10" fill="var(--svg-muted)">dispatch</text>
+
+    <!-- Worker Pool -->
+    <rect x="280" y="376" width="260" height="60" rx="8" fill="var(--blue-bg)" stroke="var(--blue)" stroke-width="1.5"/>
+    <text x="410" y="398" text-anchor="middle" font-size="13" font-weight="600" fill="var(--blue)">Worker Pool</text>
+    <text x="410" y="416" text-anchor="middle" font-size="10" fill="var(--svg-muted)">Pool (4 pairs) → Ephemeral (10) → Wait Queue (20)</text>
+    <text x="410" y="430" text-anchor="middle" font-size="10" fill="var(--svg-muted)">each pair = doer + reviewer</text>
+
+    <!-- Arrow: Worker Pool → Fleet -->
+    <line x1="390" y1="436" x2="390" y2="468" stroke="var(--arrow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="396" y="456" font-size="10" fill="var(--svg-muted)">lease</text>
+
+    <!-- Apra Fleet -->
+    <rect x="260" y="472" width="260" height="50" rx="8" fill="var(--surface-alt)" stroke="var(--border)" stroke-width="1.5"/>
+    <text x="390" y="494" text-anchor="middle" font-size="13" font-weight="600" fill="var(--svg-fg)">Apra Fleet</text>
+    <text x="390" y="510" text-anchor="middle" font-size="10" fill="var(--svg-muted)">stdio MCP · member registry · OAuth</text>
+
+    <!-- Arrow: Fleet → Claude + Tools -->
+    <line x1="340" y1="522" x2="240" y2="558" stroke="var(--arrow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <line x1="440" y1="522" x2="540" y2="558" stroke="var(--arrow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="270" y="542" font-size="10" fill="var(--svg-muted)">spawns</text>
+    <text x="505" y="542" font-size="10" fill="var(--svg-muted)">executes</text>
+
+    <!-- Claude Code -->
+    <rect x="140" y="562" width="200" height="42" rx="8" fill="var(--purple-bg)" stroke="var(--purple)" stroke-width="1.5"/>
+    <text x="240" y="584" text-anchor="middle" font-size="13" font-weight="600" fill="var(--purple)">Claude Code</text>
+    <text x="240" y="598" text-anchor="middle" font-size="10" fill="var(--svg-muted)">LLM reasoning instances</text>
+
+    <!-- Tools -->
+    <rect x="440" y="562" width="200" height="42" rx="8" fill="var(--teal-bg)" stroke="var(--teal)" stroke-width="1.5"/>
+    <text x="540" y="584" text-anchor="middle" font-size="13" font-weight="600" fill="var(--teal)">Python Tools</text>
+    <text x="540" y="598" text-anchor="middle" font-size="10" fill="var(--svg-muted)">weather · currency · geo · ...</text>
+  </svg>
+  <figcaption>Request flows top-to-bottom. Dashed lines show alternate paths (sync skip, MCP direct tool call).</figcaption>
+</figure>
+
+<p class="section-label">Core Components</p>
+<div class="components">
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--blue)"></span>HTTP Layer</span>
+    <span class="comp-desc">The front door. Accepts task requests, serves the MCP tool endpoint, and hosts the chat UI. Swappable between Express (local/Docker), raw HTTP, or Azure Functions.</span>
+  </div>
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--amber)"></span>Job Queue</span>
+    <span class="comp-desc">Handles async tasks. When you fire-and-forget a task, it gets queued here and a worker picks it up. SQLite-backed locally, Azure Durable Functions in the cloud. Jobs go through: queued → processing → completed/failed.</span>
+  </div>
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--purple)"></span>MCP Server</span>
+    <span class="comp-desc">Exposes 15 tools as an MCP catalog so an external AI (like Claude Code) can call them directly, without the agent doing its own planning.</span>
+  </div>
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--teal)"></span>Strategy Engine</span>
+    <span class="comp-desc">The brain. Two modes: <strong>ReAct</strong> (simple loop — ask LLM what to do, do it, repeat) and <strong>Plan-Execute</strong> (doer makes a plan, reviewer approves, steps run one by one, replan on failure).</span>
+  </div>
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--rose)"></span>Budgets & Guardrails</span>
+    <span class="comp-desc">Safety rails around the strategy loop. Caps on iterations (25), cost ($5), tokens (500K), and time (10 min). Per-tool allow/deny policies and filesystem sandboxing.</span>
+  </div>
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--blue)"></span>Worker Pool</span>
+    <span class="comp-desc">Manages Claude Code instances. Three tiers: 4 pre-provisioned pairs grabbed instantly, up to 10 ephemeral overflow pairs, then a wait queue (max 20). Each pair has a doer and a reviewer.</span>
+  </div>
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--text-subtle)"></span>Apra Fleet</span>
+    <span class="comp-desc">The foundation. Runs as a child process over stdio. Manages member workspaces, OAuth credentials, and spawns Claude Code CLI instances for each worker.</span>
+  </div>
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--slate)"></span>Notifications</span>
+    <span class="comp-desc">Pushes job progress out in real time. SSE stream for browser clients, webhook POST with retry for server-to-server callbacks.</span>
+  </div>
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--teal)"></span>Python Tools</span>
+    <span class="comp-desc">15 tools (weather, currency, geocode, Wikipedia, etc.) — all plain Python using only stdlib, executed on Fleet member machines via <code>executeCommand</code>.</span>
+  </div>
+</div>

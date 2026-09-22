@@ -10,7 +10,8 @@
 
 | Document | Read it when |
 |---|---|
-| [architecture.md](architecture.md) | You want to understand what this repo is, how the layers fit together, and why the non-obvious decisions were made. Includes a primer on Fleet concepts. |
+| [architecture.md](architecture.md) | You want the big picture: component diagram, how the layers fit, data flow, and design decisions. |
+| [architecture-diagram.html](architecture-diagram.html) | Visual component diagram — open in a browser for the color-coded interactive version. |
 | [development.md](development.md) | You are setting up, running tests, adding a workflow, or debugging a failure. |
 | [mcp-interface.md](mcp-interface.md) | You are setting up or extending the MCP server — tool catalog, registry contract, timeouts, auth, and hosting. |
 | [run-loop.md](run-loop.md) | You want the detailed reference for the autonomous run loop: strategies, budgets, guardrails, prompt templates, and the `/task` API. |
