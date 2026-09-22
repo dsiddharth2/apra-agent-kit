@@ -5,6 +5,14 @@
 <h3 align="center">A modular toolkit for building autonomous AI agents on <a href="https://github.com/Apra-Labs/apra-fleet">Apra Fleet</a></h3>
 
 <p align="center">
+  <a href="https://github.com/dsiddharth2/apra-agent-kit/actions/workflows/ci.yml"><img src="https://github.com/dsiddharth2/apra-agent-kit/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/node-%3E%3D22.16-brightgreen" alt="Node.js >= 22.16" />
+  <img src="https://img.shields.io/badge/platform-Fleet-blue" alt="Platform: Apra Fleet" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" />
+  <img src="https://img.shields.io/badge/PRs-welcome-orange" alt="PRs welcome" />
+</p>
+
+<p align="center">
   <a href="docs/getting-started.md"><strong>Getting Started</strong></a> · 
   <a href="docs/architecture.md"><strong>Architecture</strong></a> · 
   <a href="docs/roadmap.md"><strong>Roadmap</strong></a>
