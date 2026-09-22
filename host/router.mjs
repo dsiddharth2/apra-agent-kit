@@ -9,23 +9,29 @@ export function buildClassifierPrompt(goal, registry) {
     const argDesc = Object.entries(t.routing.args ?? {})
       .map(([k, v]) => `${k}: ${v.extract}`)
       .join(', ');
-    return `- ${t.name}: ${t.routing.description}${argDesc ? ` (extract: ${argDesc})` : ''}`;
+    return `- ${t.name}: ${t.routing.description} (extract: ${argDesc || 'none'})`;
   }).join('\n');
 
   const workflowSection = routable.length > 0
-    ? `Available workflows (predefined, fastest — pick one if the goal is a direct match):\n${workflowLines}\n\n`
+    ? `WORKFLOWS (fastest — always prefer these when the goal can be served by one):\n${workflowLines}\n\n`
     : '';
 
-  return `You are a task router for a travel assistant. Given the user's goal, decide the best execution path.
+  return `You are a task router. Your job is to pick the fastest execution path for the user's goal.
 
-${workflowSection}Available strategies (flexible, for goals that don't match a workflow):
-- open-ended: Good for simple questions needing 1-2 tool calls or conversational replies.
-- plan-execute: For complex multi-step tasks that need planning, multiple tools in a dynamic order, and review. Use only when the task genuinely requires it.
+RULES:
+1. ALWAYS pick a workflow if the goal can be served by one, even loosely. Workflows are faster and cheaper.
+2. Pick open-ended ONLY when no workflow fits at all (e.g. general chat, opinions, or questions needing tools not listed above).
+3. Pick plan-execute ONLY for complex multi-step tasks requiring planning across many tools (e.g. "plan a full 5-day trip").
+4. When extracting args, use the most specific place name from the goal. If the user says a region/state, use its most well-known city.
+
+${workflowSection}FALLBACK STRATEGIES (only when no workflow fits):
+- open-ended: General questions, opinions, or tasks needing unlisted tools.
+- plan-execute: Complex multi-step tasks needing a plan with many tools in dynamic order.
 
 User's goal: "${goal}"
 
-Respond with ONLY a JSON object, no other text:
-{"path":"workflow|open-ended|plan-execute","workflow":"name-if-workflow","args":{extracted args if workflow}}`;
+Respond with ONLY a JSON object:
+{"path":"workflow|open-ended|plan-execute","workflow":"name-if-workflow","args":{extracted args}}`;
 }
 
 export function parseClassifierResponse(text, { routableNames, fallbackStrategy }) {
@@ -40,7 +46,12 @@ export function parseClassifierResponse(text, { routableNames, fallbackStrategy 
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    return fallback;
+    const braceStart = cleaned.indexOf('{');
+    const braceEnd = cleaned.lastIndexOf('}');
+    if (braceStart >= 0 && braceEnd > braceStart) {
+      try { parsed = JSON.parse(cleaned.slice(braceStart, braceEnd + 1)); } catch { /* fall through */ }
+    }
+    if (!parsed) return fallback;
   }
 
   if (!parsed || typeof parsed !== 'object') return fallback;
@@ -90,9 +101,13 @@ export async function classify(goal, { fleetApi, registry, fallbackStrategy, sig
       }),
     ]);
     const text = extractText(raw);
-    return parseClassifierResponse(text, { routableNames, fallbackStrategy });
-  } catch {
-    return fallback;
+    const result = parseClassifierResponse(text, { routableNames, fallbackStrategy });
+    Object.defineProperty(result, '_debug', { value: { raw: text?.slice(0, 300), routable: [...routableNames] }, enumerable: false });
+    return result;
+  } catch (err) {
+    const fb = { ...fallback };
+    Object.defineProperty(fb, '_debug', { value: { error: String(err?.message ?? err) }, enumerable: false });
+    return fb;
   }
 }
 

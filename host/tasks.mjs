@@ -180,6 +180,7 @@ export async function executeHostedTask(task, {
     let workflowArgs = null;
     let routedTo = null;
 
+    let routeDebug = null;
     if (!strategy && routerConfig?.enabled) {
       const route = await classify(task.goal ?? task.id, {
         fleetApi: createPooledFleetApi(api, lease),
@@ -187,6 +188,7 @@ export async function executeHostedTask(task, {
         fallbackStrategy: routerConfig.fallbackStrategy ?? 'open-ended',
         signal: combined.signal,
       });
+      routeDebug = route._debug ?? null;
       if (route.path === 'workflow') {
         workflowName = route.workflow;
         workflowArgs = route.args;
@@ -198,6 +200,10 @@ export async function executeHostedTask(task, {
 
     strategy ??= runLoopConfig.strategy ?? 'open-ended';
     routedTo = workflowName ? `workflow:${workflowName}` : strategy;
+
+    if (onProgress) {
+      try { await onProgress({ kind: 'routed', routedTo, ...(routeDebug ? { _debug: routeDebug } : {}) }); } catch { /* best-effort */ }
+    }
 
     if (strategy === 'plan-execute' && lease.upgradeToReviewer && !lease.reviewer) {
       try {

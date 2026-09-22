@@ -62,7 +62,7 @@ export function createRunTaskActivity({ getClient, pollMs = 2000, getContext = g
         settled.result = null;
         settled.error = null;
       }
-      emit({ type: 'settled', jobId, at: iso(), status: settled.status, result: settled.result ?? null, error: settled.error ?? null });
+      emit({ type: 'settled', jobId, at: iso(), status: settled.status, result: settled.result ?? null, error: settled.error ?? null, routedTo: run.routedTo ?? null });
       if (hostCtx.notifier && callbackUrl) {
         await hostCtx.notifier.publish(
           { type: 'settled', jobId, at: iso(), status: settled.status, result: settled.result, error: settled.error },
