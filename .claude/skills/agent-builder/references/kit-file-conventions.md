@@ -68,8 +68,6 @@ Boilerplate that imports `withStandaloneLease` and `ensureApralabs`, exports `ru
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { withStandaloneLease } from '../standalone.mjs';
-// Prefer transport/ once that file exists (PR #29). On today's Kit (before PR #29),
-// workflows import ../demo/ensure-apralabs.mjs instead.
 import { ensureApralabs } from '../../transport/ensure-apralabs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -191,35 +189,48 @@ import { run<Name> } from '../workflows/<name>/main.mjs';
 
 ## Unit Tests
 
-Use `node:test` and `node:assert/strict`.
-
-- `createMockFleetApi` from `tests/helpers/mock-fleet.mjs` — launcher-level tests; available in the Kit repo.
-- `fakeContext` — for workflow-body tests; this is what scaffolded `npm create` projects currently ship (`template/tests/hello.test.mjs` after PR #29). Use it when `tests/helpers/mock-fleet.mjs` is not present.
-
-The example below keeps `createMockFleetApi` for Kit-repo launcher tests.
+Use `node:test` and `node:assert/strict`. Test the **workflow body** (`<name>.js`),
+not the launcher (`main.mjs`). The body receives a context with Fleet primitives, so
+a fake context is all you need — no Fleet binary, no token, no network.
 
 ```javascript
-import './setup-fleet-modules.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createMockFleetApi } from './helpers/mock-fleet.mjs';
+import { main } from '../workflows/<name>/<name>.js';
 
-const { run<Name> } = await import('../workflows/<name>/main.mjs');
-
-const workspace = {
-  workerId: 'pool-1',
-  doer: { name: 'WORKER-1-DOER', folder: '/tmp/worker-1/doer' },
-  reviewer: { name: 'WORKER-1-REVIEWER', folder: '/tmp/worker-1/reviewer' },
-};
+function fakeContext(args = {}) {
+  const calls = { commands: [], prompts: [] };
+  const context = {
+    log: () => {},
+    phase: () => {},
+    args,
+    async command(cmd, options) {
+      calls.commands.push({ cmd, ...options });
+      // Return whatever the workflow body expects from the command.
+      return JSON.stringify({ ok: true, result: 'mock-data' });
+    },
+    async agent(prompt, options) {
+      calls.prompts.push({ prompt, ...options });
+      return 'Mock LLM response for: ' + prompt.slice(0, 50);
+    },
+  };
+  return { context, calls };
+}
 
 test('<name> returns expected result', async () => {
-  const fleetApi = createMockFleetApi({
-    commandPayload: JSON.stringify({ ok: true, result: 'test-data' }),
-  });
-  const result = await run<Name>({ fleetApi, workspace });
-  assert.ok(result.data.ok);
-  assert.ok(fleetApi.commandCalls.length >= 1);
-  assert.equal(fleetApi.commandCalls[0].member_name, 'doer');
+  const { context, calls } = fakeContext({ input: 'test-input' });
+  const result = await main(context);
+  assert.ok(result);
+  assert.equal(calls.commands[0].member_name, 'doer');
+  assert.equal(calls.prompts[0].member_name, 'doer');
+});
+
+test('<name> addresses roles, not member names', async () => {
+  const { context, calls } = fakeContext({ input: 'test-input' });
+  await main(context);
+  for (const call of [...calls.commands, ...calls.prompts]) {
+    assert.equal(call.member_name, 'doer');
+  }
 });
 ```
 

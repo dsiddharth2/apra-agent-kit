@@ -81,7 +81,7 @@ test('the template package.json carries the name placeholder and the four script
   const pkg = JSON.parse(fs.readFileSync(path.join(templateDir, 'package.json'), 'utf8'));
   assert.equal(pkg.name, '{{PROJECT_NAME}}');
   assert.equal(pkg.type, 'module');
-  for (const script of ['test', 'doctor', 'hello', 'mcp']) {
+  for (const script of ['test', 'doctor', 'hello', 'mcp', 'host']) {
     assert.ok(pkg.scripts[script], `missing script: ${script}`);
   }
   assert.equal(pkg.scripts.test, 'node --test tests/*.test.mjs');
