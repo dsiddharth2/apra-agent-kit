@@ -13,6 +13,7 @@ function project() {
     JSON.stringify({ name: '{{PROJECT_NAME}}', version: '0.1.0', type: 'module' }, null, 2),
   );
   fs.writeFileSync(path.join(dir, 'README.md'), '# {{PROJECT_NAME}}\n\nRun {{PROJECT_NAME}} with docker.\n');
+  fs.writeFileSync(path.join(dir, 'host.config.mjs'), "export default { name: '{{PROJECT_NAME}}' };\n");
   return dir;
 }
 
@@ -46,6 +47,14 @@ test('substitute replaces every README placeholder', () => {
   const readme = fs.readFileSync(path.join(dir, 'README.md'), 'utf8');
   assert.equal(readme, '# my-agent\n\nRun my-agent with docker.\n');
   assert.ok(!readme.includes('{{PROJECT_NAME}}'));
+});
+
+test('substitute replaces the host config placeholder', () => {
+  const dir = project();
+  substitute(dir, 'my-agent', '1.0.0');
+  const config = fs.readFileSync(path.join(dir, 'host.config.mjs'), 'utf8');
+  assert.match(config, /name: 'my-agent'/);
+  assert.ok(!config.includes('{{PROJECT_NAME}}'));
 });
 
 test('substitute writes .kit-version verbatim', () => {

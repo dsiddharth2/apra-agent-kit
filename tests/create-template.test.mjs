@@ -62,6 +62,7 @@ test('the template holds exactly the agreed files', () => {
     'README.md',
     'docker-compose.yml',
     'gitignore',
+    'host.config.mjs',
     'mcp/registry.mjs',
     'package.json',
     'tests/hello.test.mjs',
@@ -101,6 +102,12 @@ test('the starter test is self-contained so npm test runs before npm install', (
   const body = fs.readFileSync(path.join(templateDir, 'tests/hello.test.mjs'), 'utf8');
   assert.ok(!body.includes('helpers/mock-fleet'), 'the kit test helper is not shipped');
   assert.ok(!body.includes('setup-fleet-modules'), 'no Fleet packages may be required');
+});
+
+test('the host config uses the project name placeholder and express adapter', () => {
+  const config = fs.readFileSync(path.join(templateDir, 'host.config.mjs'), 'utf8');
+  assert.match(config, /\{\{PROJECT_NAME\}\}/);
+  assert.match(config, /adapter:\s*'express'/);
 });
 
 test('the README uses the project name placeholder', () => {

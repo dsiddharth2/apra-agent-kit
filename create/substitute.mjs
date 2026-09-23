@@ -31,10 +31,12 @@ export function substitute(destDir, projectName, kitVersion) {
   pkg.name = projectName;
   fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
-  const readmePath = path.join(destDir, 'README.md');
-  if (fs.existsSync(readmePath)) {
-    const readme = fs.readFileSync(readmePath, 'utf8');
-    fs.writeFileSync(readmePath, readme.replace(PLACEHOLDER, projectName));
+  for (const rel of ['README.md', 'host.config.mjs']) {
+    const filePath = path.join(destDir, rel);
+    if (fs.existsSync(filePath)) {
+      const text = fs.readFileSync(filePath, 'utf8');
+      fs.writeFileSync(filePath, text.replace(PLACEHOLDER, projectName));
+    }
   }
 
   fs.writeFileSync(path.join(destDir, '.kit-version'), `${kitVersion}\n`);

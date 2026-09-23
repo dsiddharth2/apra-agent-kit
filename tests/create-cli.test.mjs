@@ -55,6 +55,7 @@ test('generate emits the framework, the overlay, and the doctor', async () => {
     'docker-compose.yml',
     '.gitignore',
     '.kit-version',
+    'host.config.mjs',
     'package.json',
     'README.md',
   ]) {
@@ -101,6 +102,9 @@ test('the project name reaches package.json and README', async () => {
   const readme = fs.readFileSync(path.join(dir, 'README.md'), 'utf8');
   assert.match(readme, /# weather-bot/);
   assert.ok(!readme.includes('{{PROJECT_NAME}}'));
+  const config = fs.readFileSync(path.join(dir, 'host.config.mjs'), 'utf8');
+  assert.match(config, /name: 'weather-bot'/);
+  assert.ok(!config.includes('{{PROJECT_NAME}}'));
 });
 
 test('a non-empty target aborts before writing anything', async () => {
