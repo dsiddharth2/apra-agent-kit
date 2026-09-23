@@ -219,9 +219,12 @@ and do not hardcode member names.
 
 ## Local state and git
 
-`node_modules/`, `.claude/`, `.env`, `.cursor/` and leftover `.fleet/` / `.fleet-src/`
-directories are all gitignored. The `.claude/settings.local.json` files that appear under
-`workdir/` after registering members are machine state — leave them out of commits.
+`node_modules/`, `.env`, `.cursor/` and leftover `.fleet/` / `.fleet-src/`
+directories are all gitignored. Claude local settings (`.claude/settings.local.json` and
+other machine state under `.claude/`) are ignored; tracked project skills under
+`.claude/skills/` are part of the repo. The `.claude/settings.local.json` files that
+appear under `workdir/` after registering members are also machine state — leave them
+out of commits.
 
 ## Docker
 

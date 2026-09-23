@@ -4,7 +4,8 @@
 .fleet-src/
 node_modules/
 .env
-.claude/
+.claude/*
+!.claude/skills/
 .cursor/
 .superpowers/
 workdir/*
