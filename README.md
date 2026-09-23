@@ -13,10 +13,196 @@
 </p>
 
 <p align="center">
-  <a href="docs/getting-started.md"><strong>Getting Started</strong></a> · 
+  <a href="#write-your-own-agent"><strong>Write Your Own Agent</strong></a> · 
+  <a href="#contributing"><strong>Contribute</strong></a> · 
   <a href="docs/architecture.md"><strong>Architecture</strong></a> · 
   <a href="docs/roadmap.md"><strong>Roadmap</strong></a>
 </p>
+
+---
+
+## Write Your Own Agent
+
+### Quick Start
+
+Scaffold a new agent project from this repository:
+
+```bash
+npx --yes github:dsiddharth2/workflow-kit my-agent
+cd my-agent
+```
+
+> **Note:** The package is not yet published to npm. The command above installs
+> directly from the GitHub repository.
+
+The command copies the kit, writes a starter workflow, and offers to install
+Fleet and the Claude CLI. It explains each step before it asks.
+
+Then set the token and start the server:
+
+**Bash / macOS / Linux:**
+```bash
+export CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
+node host/index.mjs
+```
+
+**PowerShell (Windows):**
+```powershell
+$env:CLAUDE_CODE_OAUTH_TOKEN = "your-token"
+node host/index.mjs
+```
+
+Open [http://localhost:3000/chat](http://localhost:3000/chat) — your agent is live.
+
+Or with Docker:
+```bash
+CLAUDE_CODE_OAUTH_TOKEN="your-token" docker compose up -d
+```
+
+The MCP server listens on `http://localhost:3000/mcp`. Register it with Claude Code:
+
+```bash
+claude mcp add --transport http my-agent http://127.0.0.1:3000/mcp
+```
+
+Run `npm run doctor` in your project at any time to see what is missing.
+
+---
+
+### The Agent Builder Skill
+
+The fastest way to go from an idea to a running agent. Instead of manually
+writing config, tools, and registry entries, the **agent-builder** skill walks
+you through the entire process interactively.
+
+In Claude Code, type:
+
+```
+/agent-builder
+```
+
+The skill runs four phases:
+
+| Phase | What happens |
+|-------|-------------|
+| **Interview** | 4 rounds of structured questions about what your agent does, its domain, tools, workflow shape, and Fleet members. Then a Socratic grilling phase probes edge cases and failure modes. |
+| **Spec** | A complete agent specification is written to `docs/specs/`. Every section is filled — no TODOs or blanks. |
+| **Plan** | A task-by-task implementation plan is written to `docs/plans/`, covering tools, workflows, registry, host config, system prompt, tests, and deployment — in the correct build order. |
+| **Build** | Choose how to execute: subagent-driven development (current session), Fleet Sprint (parallel agents), or build it yourself from the plan. |
+
+The guided path handles things that are easy to forget when building manually:
+
+- **Host configuration** — sets up `host.config.mjs` with the right strategy,
+  modules, and an `agentDescription` that steers the LLM to use your tools
+- **API key propagation** — `executeCommand` doesn't inherit env vars from the
+  parent shell; the plan shows how to pass keys through
+- **Session cleanup** — clears stale Fleet worker sessions before integration
+  testing so the agent starts fresh
+
+After the build completes, your agent is ready to run.
+
+---
+
+### Configuration
+
+Your agent's identity and behavior are defined in a single file: `host.config.mjs`.
+
+```js
+export default {
+  name: 'my-agent',
+  description: 'Short label for logs and the chat header.',
+  agentDescription: `You are a helpful assistant that...
+This is the system prompt the LLM sees. Be specific about what the agent
+knows, what tools to use, and any domain-specific rules.`,
+
+  fleet: {},
+
+  comm: {
+    adapter: 'express',       // 'express' for local/VM, 'azure-functions' for Azure
+  },
+
+  modules: {
+    runLoop: {
+      enabled: true,
+      strategy: 'plan-execute',   // or 'open-ended'
+      maxReplanAttempts: 3,
+      maxReviewAttempts: 2,
+      maxStepReviewAttempts: 2,
+      minReviewPolicy: 'irreversible',
+      maxNoActionTurns: 3,
+    },
+    budgets: {
+      enabled: true,
+      maxIterations: 25,
+      maxCostUsd: 5.00,
+      maxTokens: 500_000,
+      timeoutMs: 600_000,         // 10 minutes
+    },
+    guardrails: {
+      enabled: true,
+      defaultPolicy: 'allow',
+      validateInputs: true,
+      dryRunMode: false,          // set true to test without executing
+    },
+    dispatch: {
+      enabled: true,
+      store: { kind: 'sqlite', dbPath: './jobs.db' },
+      concurrency: 2,
+      maxQueueSize: 10,
+    },
+    notify: {
+      sse: { enabled: true },
+    },
+    chat: {
+      enabled: true,
+      title: 'My Agent',
+      themes: ['blue'],           // 'apra', 'blue', or both for a toggle
+    },
+  },
+};
+```
+
+#### Key configuration fields
+
+| Field | What it does |
+|---|---|
+| `name` | Agent identity — shown in logs, chat header, and system prompt |
+| `description` | Short label for the chat UI title and log output |
+| `agentDescription` | **The agent's personality and domain knowledge.** Injected into the system prompt. Multi-line template literal. |
+| `comm.adapter` | `'express'` (local/Docker) or `'azure-functions'` |
+| `modules.runLoop.strategy` | `'plan-execute'` (multi-step, reviewed) or `'open-ended'` (simple lookup agents) |
+| `modules.budgets.*` | Cost and safety limits per task |
+| `modules.guardrails.defaultPolicy` | `'allow'`, `'deny'`, or `'approve'` (human-in-the-loop) |
+| `modules.dispatch.concurrency` | Max parallel tasks |
+| `modules.chat.themes` | `['blue']`, `['apra']`, or `['blue', 'apra']` for a toggle |
+
+#### Choosing a strategy
+
+| Strategy | When to use |
+|---|---|
+| `plan-execute` | Most agents. The LLM creates a plan, a reviewer approves it, then steps execute one at a time. Replans on failure. Safer and auditable. |
+| `open-ended` | Simple lookup agents. Act → observe → repeat with no upfront plan. Faster for single-tool tasks, less control. |
+
+#### Adding tools
+
+A tool is a script (Python, Node, or any executable) plus a registry entry:
+
+1. Write the implementation in `tools/your-tool/your_tool.py`
+2. Register it in `mcp/registry.mjs` with a name, description, input schema, and `run()` function
+3. Restart the host
+
+See the full **[Getting Started guide](docs/getting-started.md)** for tool patterns,
+authentication, MCP integration, Azure Functions deployment, and environment variables.
+
+#### Environment variables
+
+| Variable | Default | What it does |
+|---|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | (required) | Fleet worker authentication |
+| `PORT` | `3000` | HTTP listen port |
+| `WORKER_POOL_SIZE` | `4` | Persistent worker count |
+| `WORKER_EPHEMERAL_MAX` | `10` | Max ephemeral workers for burst |
+| `CHAT_ENABLED` | from config | Override chat on/off (`true`/`false`) |
 
 ---
 
@@ -71,132 +257,6 @@ A task goes in, a result comes out. Six parts inside the boundary make that happ
 
 ---
 
-## Getting Started — Build Your Own Agent
-
-### Prerequisites
-
-- Node.js 22.16+
-- Python 3
-- Apra Fleet: `npm install -g @apralabs/apra-fleet && apra-fleet install`
-
-### 1. Clone and install
-
-```bash
-git clone https://github.com/dsiddharth2/apra-agent-kit.git
-cd apra-agent-kit
-npm install
-```
-
-### 2. Configure your agent
-
-Edit `host.config.mjs` — this is the single file that defines your agent:
-
-```js
-export default {
-  name: 'my-agent',
-  description: 'What your agent does — the LLM reads this',
-  agentDescription: 'You are a helpful assistant that...',
-
-  modules: {
-    runLoop: {
-      strategy: 'plan-execute',     // or 'open-ended'
-    },
-    budgets: {
-      maxIterations: 25,
-      maxCostUsd: 5.00,
-      maxTokens: 500_000,
-      timeoutMs: 600_000,           // 10 minutes
-    },
-    guardrails: {
-      defaultPolicy: 'allow',
-      policies: {
-        // 'dangerous-tool': 'deny',
-        // 'sensitive-tool': 'approve',
-      },
-    },
-    dispatch: { enabled: true },
-    notify: { sse: { enabled: true } },
-    chat: { enabled: true, title: 'My Agent' },
-  },
-};
-```
-
-### 3. Add a tool
-
-Write a Python script in `tools/your-tool/your_tool.py`:
-
-```python
-import sys, json
-
-def main():
-    args = json.loads(sys.argv[1])
-    # ... your logic here ...
-    print(json.dumps({"result": "your output"}))
-
-if __name__ == "__main__":
-    main()
-```
-
-Register it in `mcp/registry.mjs`:
-
-```js
-{
-  name: 'your-tool',
-  description: 'What this tool does — the LLM reads this to decide when to use it',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      param1: { type: 'string', description: 'What this parameter is' },
-    },
-    required: ['param1'],
-  },
-  run: async ({ fleetApi, args }) => {
-    const result = await fleetApi.executeCommand(
-      'doer',
-      `python3 tools/your-tool/your_tool.py '${JSON.stringify(args)}'`
-    );
-    return extractText(result);
-  },
-}
-```
-
-### 4. Run it
-
-```bash
-export CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
-node host/index.mjs
-```
-
-Open [http://localhost:3000/chat](http://localhost:3000/chat) — your agent is live.
-
-Or with Docker:
-```bash
-CLAUDE_CODE_OAUTH_TOKEN="your-token" docker compose up -d
-```
-
-### 5. Use it
-
-```bash
-# Chat UI
-open http://localhost:3000/chat
-
-# Submit a task via API
-curl -sX POST localhost:3000/task \
-  -H "content-type: application/json" \
-  -d '{"goal":"What is the weather in Tokyo?"}'
-
-# Stream progress in real time
-curl -N localhost:3000/jobs/<jobId>/events
-
-# Connect another AI via MCP
-claude mcp add --transport http my-agent http://127.0.0.1:3000/mcp
-```
-
-For the full Getting Started guide including deployment:
-**[docs/getting-started.md](docs/getting-started.md)**
-
----
-
 ## How the System Works
 
 A task enters through one of four doors (the communication layer), hits the agent's run
@@ -227,25 +287,23 @@ Two backends: SQLite (local/Docker) or Azure Durable Functions (cloud).
 
 ---
 
-## Roadmap
-
-See the full **[Roadmap](docs/roadmap.md)** for what's shipped, in progress, and planned.
-
-**Next up — Phase 3: Memory + Eval**
-- Three kinds of memory: working context, run state, long-term
-- Eval harness: 20-50 real tasks with graded outcomes, runs on every prompt/model change
-- Strategy auto-router: classifies tasks and picks the best strategy automatically
-
----
-
 ## Contributing
 
 We welcome contributions. Here's how:
 
+### Working on the kit itself
+
+Clone this repository instead of scaffolding:
+
+```bash
+git clone https://github.com/dsiddharth2/workflow-kit.git
+cd workflow-kit && npm install
+```
+
 ### Fork and PR workflow
 
 1. **Fork** the repo on GitHub
-2. **Clone** your fork: `git clone https://github.com/<you>/apra-agent-kit.git`
+2. **Clone** your fork: `git clone https://github.com/<you>/workflow-kit.git`
 3. **Create a branch**: `git checkout -b feature/your-feature`
 4. **Make your changes** — follow the conventions in [docs/development.md](docs/development.md)
 5. **Run tests**: `npm test` (mock tests — no Fleet binary or tokens needed)
@@ -261,6 +319,22 @@ We welcome contributions. Here's how:
 - **New strategies** — implement a different planning/execution approach
 
 See [docs/development.md](docs/development.md) for the full setup, testing guide, and conventions.
+
+---
+
+## Roadmap
+
+See the full **[Roadmap](docs/roadmap.md)** for what's shipped, in progress, and planned.
+
+**Recently shipped:**
+- Strategy auto-router — classifies tasks and routes to the right strategy automatically
+- `npm create` scaffolding CLI — scaffold a new agent project in one command
+- Agent-builder skill (`/agent-builder`) — interview → spec → plan → build
+- Trace IDs and kill switch — end-to-end correlation and emergency write disable
+
+**Next up — Phase 3: Memory + Eval**
+- Three kinds of memory: working context, run state, long-term
+- Eval harness: 20-50 real tasks with graded outcomes, runs on every prompt/model change
 
 ---
 

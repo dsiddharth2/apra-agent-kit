@@ -2,7 +2,7 @@
 
 What's built, what's next, and what's on the horizon.
 
-Last updated: 2026-09-22
+Last updated: 2026-09-23
 
 ## Shipped
 
@@ -20,15 +20,21 @@ These are live in the kit today.
 | Async jobs API (SQLite queue, SSE, webhooks) | Done | [phase4-jobs-durable-spec](specs/phase4-jobs-durable-spec.md) |
 | Azure Durable Functions backend | Done | [deploy-azure](deploy-azure-functions.md) |
 | Chat UI | Done | [chat-ui-spec](specs/chat-ui-spec.md) |
-| 15 Python tools (weather, geocode, currency, etc.) | Done | — |
+| 12 Python tools (weather, geocode, currency, forecast, etc.) | Done | — |
 | Communication adapters (Express, raw-http, Azure Functions) | Done | — |
 | Travel agent output quality (prompts + 2 new tools) | Done | [travel-agent-quality-spec](specs/travel-agent-quality-spec.md) |
+| Strategy auto-router | Done | [strategy-router-spec](specs/2026-09-21-strategy-router-spec.md) |
+| `npm create` scaffolding CLI | Done | [create-command-spec](specs/create-command-spec.md) |
+| Agent-builder skill (`/agent-builder`) | Done | [agent-builder-spec](specs/2026-09-22-agent-builder-skill-spec.md) |
+| Trace IDs (end-to-end correlation) | Done | [CONTRACT](CONTRACT.md) |
+| Kill switch (disable all writes without redeploy) | Done | [CONTRACT](CONTRACT.md) |
+| Concurrency acceptance tests | Done | [concurrency](concurrency.md) |
 
 ## In Progress
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Strategy auto-router | Design | Classifies tasks and picks the best strategy (ReAct vs Plan-Execute) automatically instead of static config. Branch: `feature/strategy-auto-router` |
+| `npm create` — npm registry publish | Pending | The create CLI works from the GitHub repo (`npx github:dsiddharth2/workflow-kit`). Publish to npm as `@dsiddharth2/create-fleet-agent` so `npm create @dsiddharth2/fleet-agent` works without the GitHub specifier. |
 
 ## Next Up — Phase 3: Memory + Eval
 
@@ -86,9 +92,11 @@ Four doors, one room — none of them should live inside the agent:
 
 ### Authentication
 
-- Real auth middleware for `/task` and `/mcp` endpoints (currently a pass-through stub)
-- API key or OAuth bearer token validation
+The auth injection point exists (`mcp/auth.mjs`) and `getting-started.md` documents how to plug in a custom authenticator. Still needed:
+
+- A shipped middleware implementation (API key or OAuth bearer token validation)
 - Rate limiting per caller
+- Auth for the chat UI (currently always unauthenticated)
 
 ### Task triage
 
@@ -96,18 +104,12 @@ A triage layer at the chat/input boundary should classify: question vs task vs t
 - "What is our leave policy?" → one model call, no agent needed
 - "Find the mismatched invoices" → many steps, several tools, agent needed
 
-Route accordingly instead of sending everything through the full run loop.
-
-### Workflow-as-tool pattern
-
-If you already know the steps, write it as plain code and expose it to the agent as a tool. The kit supports this but needs:
-- More examples of deterministic workflows exposed as tools
-- Documentation on when to use workflows vs agent reasoning
-- Templates for common workflow patterns
+The strategy auto-router classifies between workflows, open-ended, and plan-execute — but doesn't yet distinguish "no agent needed" questions from agent-worthy tasks.
 
 ### Observability
 
-- End-to-end correlation ID threaded from request through run loop, tool calls, and results
+Trace IDs are shipped (end-to-end correlation from request through run loop). Still needed:
+
 - Structured logging for run loop iterations
 - Cost tracking dashboard (per-run budgets exist; trend/alert across runs does not)
 - Latency breakdowns per tool call
@@ -115,8 +117,9 @@ If you already know the steps, write it as plain code and expose it to the agent
 
 ### Safety and provenance
 
+Kill switch is shipped (disable all writes across a deployment without a redeploy). Still needed:
+
 - **Provenance convention for agent-written data** — mark records created by the agent so they're distinguishable from human-created ones. Cannot be retrofitted after records are written.
-- **Kill switch** — a way to disable all writes across a deployment without a redeploy
 
 ## Future / Exploration
 

@@ -167,7 +167,7 @@ function must accept `{ fleetApi, workspace }` so it stays testable. Address
 
 ```js
 import { withStandaloneLease } from '../standalone.mjs';
-import { ensureApralabs } from '../demo/ensure-apralabs.mjs';
+import { ensureApralabs } from '../../transport/ensure-apralabs.mjs';
 
 export async function runMyWorkflow({ fleetApi, workspace, signal, reportPhase } = {}) {
   ensureApralabs();
@@ -219,9 +219,12 @@ and do not hardcode member names.
 
 ## Local state and git
 
-`node_modules/`, `.claude/`, `.env`, `.cursor/` and leftover `.fleet/` / `.fleet-src/`
-directories are all gitignored. The `.claude/settings.local.json` files that appear under
-`workdir/` after registering members are machine state — leave them out of commits.
+`node_modules/`, `.env`, `.cursor/` and leftover `.fleet/` / `.fleet-src/`
+directories are all gitignored. Claude local settings (`.claude/settings.local.json` and
+other machine state under `.claude/`) are ignored; tracked project skills under
+`.claude/skills/` are part of the repo. The `.claude/settings.local.json` files that
+appear under `workdir/` after registering members are also machine state — leave them
+out of commits.
 
 ## Docker
 
@@ -285,3 +288,21 @@ server is reachable from the host.
 | Live run prints `pong` but never exits | Transport not stopped — check the launcher's `finally`. |
 | A tool is never chosen | Improve its registry `description` so the connected model knows when to use it. |
 | A tool call times out | Set `"timeout"` in that server's `.mcp.json` entry. |
+
+## The create command
+
+`npm create @dsiddharth2/fleet-agent my-agent` generates a project from this
+repository. Two rules govern what it emits:
+
+1. **`files` in `package.json` decides what ships.** Anything not listed is
+   absent from the tarball and so cannot reach a generated project.
+2. **`template/` overlays the framework copy and wins on conflict.** A file
+   belongs in `template/` only if it has no counterpart here, or must differ
+   from the one here. There are eight such entries, nine files.
+
+`create/doctor.mjs` has one copy and two consumers — the generator, and the
+generated project, which receives it as `scripts/doctor.mjs`.
+
+When you add a framework file that generated projects need, add its path to
+`files` and to `PUBLISHED_DIRS` in `create/copy.mjs`. `tests/create-e2e.test.mjs`
+generates a project and runs its suite, so a missed path fails CI.

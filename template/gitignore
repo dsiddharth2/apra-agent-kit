@@ -1,0 +1,13 @@
+# Written as .gitignore by the generator — npm rewrites a packed .gitignore
+# to .npmignore, so it cannot ship under its real name.
+.DS_Store
+.fleet-workflow/
+.fleet/
+.fleet-src/
+node_modules/
+.env
+.claude/*
+!.claude/skills/
+.cursor/
+workdir/*
+!workdir/.gitkeep
