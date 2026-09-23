@@ -56,6 +56,9 @@ test('generate emits the framework, the overlay, and the doctor', async () => {
     '.gitignore',
     '.kit-version',
     'host.config.mjs',
+    '.claude/skills/agent-builder/SKILL.md',
+    '.claude/skills/agent-builder/references/agent-spec-template.md',
+    '.claude/skills/agent-builder/references/kit-file-conventions.md',
     'package.json',
     'README.md',
   ]) {

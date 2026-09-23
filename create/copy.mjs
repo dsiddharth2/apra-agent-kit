@@ -17,6 +17,7 @@ export const PUBLISHED_DIRS = [
   'host',
   'transport',
   'comm',
+  '.claude/skills/agent-builder',
   'workflows/standalone.mjs',
   'tools/weather',
   'tools/textstats',

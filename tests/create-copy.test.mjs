@@ -101,7 +101,7 @@ test('a missing source directory is skipped, not fatal', () => {
 });
 
 test('PUBLISHED_DIRS names the framework paths and excludes repo-only ones', () => {
-  for (const required of ['mcp', 'pool', 'host', 'transport', 'comm']) {
+  for (const required of ['mcp', 'pool', 'host', 'transport', 'comm', '.claude/skills/agent-builder']) {
     assert.ok(PUBLISHED_DIRS.includes(required), `${required} must be published`);
   }
   for (const excluded of ['tests', '.github', 'workdir', 'create', 'template']) {
