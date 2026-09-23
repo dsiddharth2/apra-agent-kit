@@ -243,6 +243,12 @@ Pass it:
      which tools to use and when, and any domain-specific rules. The default
      system prompt in `host/prompts/system.mjs` is generic — all agent-specific
      behavior comes from `agentDescription`.
+   - **Agent README** (`README.md`): replace the starter README with
+     documentation specific to this agent. The README must describe what the
+     agent does, list every tool and workflow, document all env vars, and
+     include a copy-pasteable Quick Start. Follow the Agent README template
+     in `references/kit-file-conventions.md`. This task comes after deployment
+     config and before integration testing.
    - **Stale session cleanup**: before the integration test task, include a step
      to clear any stale Fleet worker session logs so the agent starts fresh.
    - **API key propagation**: if the agent uses external APIs, the plan must

@@ -376,6 +376,73 @@ The plan should include this as a step before the integration test task.
 - **.env.example**: Document every env var with a comment
 - If the agent needs new ports or volumes, add them to docker-compose.yml
 
+## Agent README
+
+After the agent is built, the plan must include a task to **replace** the starter
+`README.md` with documentation specific to this agent. The README is the agent's
+front door — it tells the next developer (or the author in six months) what this
+agent does, how to run it, and what to configure.
+
+### Structure
+
+```markdown
+# <Agent Name>
+
+<One paragraph: what this agent does, who it's for, why it exists.>
+
+## Quick Start
+
+<Exact commands to install, configure, and run the agent. Include token setup.>
+
+## Tools
+
+<Table of tools the agent exposes: name, what it does, required env vars.>
+
+| Tool | Description | Env vars |
+|------|------------|----------|
+| `tool-name` | What it does | `API_KEY` |
+
+## Workflows
+
+<For each workflow: name, what it does, trigger, and a one-line example.>
+
+## Configuration
+
+<Key `host.config.mjs` fields the user should know about: strategy, budgets,
+agentDescription summary. Link to the full config file rather than duplicating it.>
+
+## Environment Variables
+
+<Table of every env var the agent needs, with descriptions and defaults.>
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CLAUDE_CODE_OAUTH_TOKEN` | Yes | — | Fleet worker authentication |
+
+## Testing
+
+<How to run tests: `npm test` for mock tests, integration test commands.>
+
+## Deployment
+
+<Docker and/or Azure Functions instructions specific to this agent.>
+
+## Architecture
+
+<Brief: what strategy, how many members, link to kit docs for internals.>
+
+Built on the [Fleet Agent Kit](https://github.com/dsiddharth2/workflow-kit).
+See [docs/architecture.md](docs/architecture.md) for kit internals.
+```
+
+### Rules
+
+- Write the README from the **spec**, not from generic boilerplate
+- Every tool and workflow in the registry must appear in the README
+- Every env var the agent needs must be listed
+- The Quick Start must be copy-pasteable — a new developer runs the commands and the agent starts
+- Do NOT include kit development docs (architecture internals, contributing guidelines) — those belong in `docs/` and are already shipped with the kit
+
 ## Build Order
 
 When generating an implementation plan from a spec, tasks should follow this order
@@ -387,4 +454,5 @@ so the project stays runnable at every step:
 4. **Host config** — `host.config.mjs` with agentDescription, modules, strategy
 5. **Tests** — verify each piece with mock-fleet
 6. **Deployment** — Docker, env vars, compose updates
-7. **Session cleanup + integration test** — clear stale sessions, then end-to-end run with Fleet
+7. **Documentation** — generate `README.md` from the spec (see Agent README section above)
+8. **Session cleanup + integration test** — clear stale sessions, then end-to-end run with Fleet
