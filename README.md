@@ -326,10 +326,15 @@ See [docs/development.md](docs/development.md) for the full setup, testing guide
 
 See the full **[Roadmap](docs/roadmap.md)** for what's shipped, in progress, and planned.
 
+**Recently shipped:**
+- Strategy auto-router — classifies tasks and routes to the right strategy automatically
+- `npm create` scaffolding CLI — scaffold a new agent project in one command
+- Agent-builder skill (`/agent-builder`) — interview → spec → plan → build
+- Trace IDs and kill switch — end-to-end correlation and emergency write disable
+
 **Next up — Phase 3: Memory + Eval**
 - Three kinds of memory: working context, run state, long-term
 - Eval harness: 20-50 real tasks with graded outcomes, runs on every prompt/model change
-- Strategy auto-router: classifies tasks and picks the best strategy automatically
 
 ---
 
