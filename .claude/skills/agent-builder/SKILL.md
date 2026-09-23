@@ -106,54 +106,54 @@ Store the agent name — you'll use it throughout the remaining phases.
 
 ### Stage A — Structured Wizard
 
-Ask these questions one at a time using AskUserQuestion. Each question includes a
-brief explanation of why it matters (the developer may be new to Fleet).
+Ask questions using AskUserQuestion. Batch related questions into multi-question
+calls to keep the interview fast (4 rounds instead of 7).
 
 Skip question 1 if the agent name was already collected in Phase 0.5. If skipped,
-still ask the one-liner only. Store the name for Phases 2–4 file paths
+still ask the purpose only. Store the name for Phases 2–4 file paths
 (`docs/specs/`, `docs/plans/`).
 
-**Question 1: Agent name & one-liner**
-> Ask for both: (1) a package-style agent name using the same npm name rules as
-> Phase 0.5 (lowercase, hyphens ok — e.g. `my-weather-agent`), and (2) a
-> one-sentence description: "What does this agent do in one sentence?"
-> Freeform for the one-liner. The name is used in spec/plan paths; the one-liner
-> seeds the spec's Purpose section and the project README.
+**Round 1: Purpose first** (single question, freeform)
+> "What should this agent do? Describe what it does in a sentence or two."
+> The developer's answer seeds the spec's Purpose section and the project README.
+> After the answer, YOU derive the agent name from the description (lowercase,
+> hyphens, npm name rules). Confirm it: "I'll call it `<derived-name>` — let me
+> know if you want a different name." If the name was already set in Phase 0.5,
+> still ask the purpose.
 
-**Question 2: Domain**
-> "What domain is this agent working in?"
+**Round 2: Domain + Deployment** (two questions in one AskUserQuestion call)
+> Q1: "What domain is this agent working in?"
 > Multiple choice + other: customer support, data pipeline, DevOps automation,
-> content generation, research, monitoring/alerting, integrations/glue.
+> content generation, health & wellness, research, monitoring/alerting,
+> integrations/glue.
 > This shapes the grilling questions and deployment assumptions.
+>
+> Q2: "Where will this run?"
+> Multiple choice: local dev only, Docker (single container), cloud VM,
+> Azure Functions.
 
-**Question 3: Inputs & outputs**
-> "What goes in and what comes out?"
+**Round 3: I/O + Tools** (two questions in one AskUserQuestion call)
+> Q1: "What goes in and what comes out?"
 > Freeform. Define what triggers the agent (API call, schedule, user message)
 > and what it produces (data, report, action, notification).
-
-**Question 4: Tools needed**
-> "What external things does the agent need to interact with?"
+>
+> Q2: "What external things does the agent need to interact with?"
 > Multi-select + other: REST APIs, databases, file system, web scraping, CLI tools,
 > Python scripts, other services.
 > This determines which Python tools to generate.
 
-**Question 5: Workflow shape**
-> "How does the agent's work flow?"
+**Round 4: Workflow + Members** (two questions in one AskUserQuestion call)
+> Q1: "How does the agent's work flow?"
 > Multiple choice: linear pipeline (A→B→C), loop-until-done (keep trying until
 > success), fan-out-then-merge (parallel work then combine), human-in-the-loop
 > (needs approval at a step), event-driven (reacts to triggers).
 > Explain what each means for Kit newcomers.
-
-**Question 6: Members & roles**
-> "How many Fleet members does this need and what do they do?"
+>
+> Q2: "How many Fleet members does this need and what do they do?"
 > Multiple choice: single doer (one worker does everything), doer + reviewer
 > (one builds, one checks), custom roles (describe your own).
 > Explain: "A Fleet member is a Claude Code session running on a machine. Each
 > member can run commands and answer prompts. Think of them as workers on a team."
-
-**Question 7: Deployment target**
-> "Where will this run?"
-> Multiple choice: local dev only, Docker (single container), cloud VM, Azure Functions.
 
 ### Stage B — Socratic Grilling
 
@@ -229,7 +229,27 @@ Pass it:
 2. The instruction: "Output the plan to `docs/plans/YYYY-MM-DD-<agent-name>.md`.
    Use the Kit file conventions from `references/kit-file-conventions.md` to map
    spec sections to concrete files. Follow the build order: tools → workflows →
-   registry → tests → deployment → integration test."
+   registry → host config → system prompt → tests → deployment → integration test.
+
+   **Critical — include these tasks that the build order requires:**
+   - **Host Configuration** (`host.config.mjs`): configure `name`, `description`,
+     `agentDescription` (a multi-line prompt that steers the LLM to use the
+     agent's tools — not just a one-liner), and all required `modules`
+     (`runLoop`, `dispatch`, `chat`, `router`, `budgets`, `guardrails`).
+     Pick the right `runLoop.strategy` for the workflow shape (`plan-execute`
+     for structured multi-step work, `open-ended` for conversational agents).
+   - **System prompt tuning**: the `agentDescription` field in host.config.mjs
+     IS the system prompt extension. It must tell the LLM what domain it's in,
+     which tools to use and when, and any domain-specific rules. The default
+     system prompt in `host/prompts/system.mjs` is generic — all agent-specific
+     behavior comes from `agentDescription`.
+   - **Stale session cleanup**: before the integration test task, include a step
+     to clear any stale Fleet worker session logs so the agent starts fresh.
+   - **API key propagation**: if the agent uses external APIs, the plan must
+     show how API keys reach the Python tools. `executeCommand` does NOT
+     inherit env vars from the parent shell. Pass keys via the command string
+     (e.g. `SPOONACULAR_API_KEY=xxx python3 tool.py`) or as JSON args to the
+     tool script."
 
 The writing-plans skill handles the rest — task decomposition, code examples,
 test-first approach, commit messages.

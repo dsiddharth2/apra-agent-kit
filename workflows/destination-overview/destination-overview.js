@@ -12,8 +12,13 @@ function shellEscape(value) {
 }
 
 function safeJson(text) {
-  try { return JSON.parse(typeof text === 'string' ? text : text?.content?.[0]?.text ?? text?.output ?? ''); }
-  catch { return { ok: false, error: 'parse failed', raw: String(text) }; }
+  let raw = typeof text === 'string' ? text : text?.content?.[0]?.text ?? text?.output ?? '';
+  raw = String(raw).trim();
+  const fenceRe = /^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/;
+  const m = raw.match(fenceRe);
+  if (m) raw = m[1].trim();
+  try { return JSON.parse(raw); }
+  catch { return { ok: false, error: 'parse failed', raw }; }
 }
 
 export async function main(context) {

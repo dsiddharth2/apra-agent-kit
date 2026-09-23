@@ -24,6 +24,46 @@ review, error recovery, concurrency, and deployment.
 
 ---
 
+## Two paths to build an agent
+
+| Path | Best for | What happens |
+|---|---|---|
+| **Guided** (`/agent-builder`) | New agents from scratch | Interview → spec → plan → build — all automated |
+| **Manual** (this guide) | Adding tools to an existing agent, or full control | You write config, tools, and registry entries by hand |
+
+### Guided path: `/agent-builder`
+
+The fastest way to go from idea to running agent. In Claude Code, type:
+
+```
+/agent-builder
+```
+
+The skill walks you through four rounds of questions about what your agent should
+do, then generates everything:
+
+1. **Interview** (4 rounds) — what the agent does, domain, tools, workflow shape,
+   Fleet members. Then a grilling phase probes edge cases and failure modes.
+2. **Spec** — a complete agent specification written to `docs/specs/`.
+3. **Plan** — a task-by-task implementation plan written to `docs/plans/`, covering
+   tools, workflows, registry, host config, tests, and deployment.
+4. **Build** — choose to execute with subagents, launch a Fleet Sprint, or build
+   it yourself from the plan.
+
+The guided path handles things that are easy to forget when building manually:
+
+- **Host configuration** — sets up `host.config.mjs` with the right strategy,
+  modules, and an `agentDescription` that steers the LLM to use your tools
+- **API key propagation** — `executeCommand` doesn't inherit env vars from the
+  parent shell; the plan shows how to pass keys through
+- **Session cleanup** — clears stale Fleet worker sessions before integration
+  testing so the agent starts fresh
+
+After the build completes, your agent is ready to run — skip to
+[Step 3: Run your agent](#step-3-run-your-agent).
+
+---
+
 ## Prerequisites
 
 | Requirement | Version / Notes |

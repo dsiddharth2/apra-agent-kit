@@ -41,8 +41,14 @@ function shellEscape(value) {
 }
 
 function safeJson(text) {
-  try { return JSON.parse(typeof text === 'string' ? text : text?.content?.[0]?.text ?? text?.output ?? ''); }
-  catch { return { ok: false, error: 'parse failed', raw: String(text) }; }
+  let raw = typeof text === 'string' ? text : text?.content?.[0]?.text ?? text?.output ?? '';
+  raw = String(raw).trim();
+  // Strip markdown code fences that LLMs often wrap around JSON
+  const fenceRe = /^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/;
+  const m = raw.match(fenceRe);
+  if (m) raw = m[1].trim();
+  try { return JSON.parse(raw); }
+  catch { return { ok: false, error: 'parse failed', raw }; }
 }
 
 export async function main(context) {
@@ -236,6 +242,133 @@ test('<name> addresses roles, not member names', async () => {
 
 Run tests: `node --test tests/<name>.test.mjs`
 
+## Host Configuration
+
+`host.config.mjs` in the project root. This is the runtime brain — it tells the
+host which modules to enable, how the LLM should behave, and what strategy to use.
+
+**The template ships with a bare minimum** (`name`, `fleet`, `comm`). The plan
+MUST configure the full set for any agent that uses the run loop or chat.
+
+```javascript
+export default {
+  name: '<agent-name>',
+  description: '<one-line for humans — shows in chat title>',
+
+  // This is the system prompt extension. It tells the LLM what it is,
+  // which tools to use and when, and any domain rules. Be explicit —
+  // "ALWAYS use the X tool" is better than "you can use X".
+  agentDescription: `You are a <domain> agent. When users ask for <X>, ALWAYS use the <tool-name> tool. When they want <Y>, use the <other-tool> tool. Never generate <X> from scratch — always call the tools.
+
+<Domain-specific rules, constraints, and output format instructions.>`,
+
+  fleet: {},
+
+  comm: {
+    adapter: 'express',  // or 'azure-functions' for Azure deployment
+  },
+
+  modules: {
+    runLoop: {
+      enabled: true,
+      strategy: 'plan-execute',  // or 'open-ended' for conversational agents
+      maxReplanAttempts: 3,
+      maxReviewAttempts: 2,
+      maxStepReviewAttempts: 2,
+      minReviewPolicy: 'irreversible',
+      maxNoActionTurns: 3,
+    },
+    budgets: {
+      enabled: true,
+      maxIterations: 25,
+      maxCostUsd: 5.00,
+      maxTokens: 500_000,
+      timeoutMs: 600_000,
+    },
+    guardrails: {
+      enabled: true,
+      defaultPolicy: 'allow',
+      validateInputs: true,
+      dryRunMode: false,
+    },
+    dispatch: {
+      enabled: true,
+      store: { kind: 'sqlite', dbPath: './jobs.db' },
+      concurrency: 2,
+      maxQueueSize: 10,
+    },
+    notify: {
+      sse: { enabled: true },
+    },
+    chat: {
+      enabled: true,
+      title: '<Agent Name>',
+      themes: ['apra'],
+    },
+    router: {
+      enabled: true,
+      fallbackStrategy: 'open-ended',  // match runLoop.strategy
+    },
+  },
+};
+```
+
+### Strategy selection
+
+| Workflow shape | Strategy | Why |
+|---|---|---|
+| Linear pipeline, loop-until-done, fan-out | `plan-execute` | Structured steps, LLM creates a plan then executes it |
+| Chat-driven, conversational, open-ended | `open-ended` | Free-form reasoning, no plan phase |
+| Human-in-the-loop | `plan-execute` with `minReviewPolicy: 'all'` | Every step needs approval |
+
+### `agentDescription` tips
+
+- Be directive: "ALWAYS use the X tool" beats "you can use the X tool"
+- List each tool by name and when to use it
+- Include output format requirements
+- Include domain-specific constraints and safety rules
+- This replaces the generic system prompt — don't rely on `host/prompts/system.mjs`
+
+## API Key Propagation
+
+`executeCommand` does NOT inherit environment variables from the parent shell.
+If a Python tool needs an API key, pass it via the command string:
+
+```javascript
+// In the workflow body or registry run function:
+const apiKey = process.env.MY_API_KEY || args.apiKey || '';
+const raw = await command(
+  `MY_API_KEY="${shellEscape(apiKey)}" python3 "${TOOL_PY}" "${shellEscape(args.input)}"`,
+  { member_name: 'doer' }
+);
+```
+
+Or pass it as a JSON argument to the Python script:
+
+```javascript
+const input = JSON.stringify({ query: args.input, apiKey: process.env.MY_API_KEY });
+const raw = await command(
+  `python3 "${TOOL_PY}" '${input.replace(/'/g, "'\\''")}'`,
+  { member_name: 'doer' }
+);
+```
+
+Always document required env vars in `.env.example`.
+
+## Stale Session Cleanup
+
+Fleet worker sessions from previous runs persist and can poison new runs — the
+agent resumes a stuck session instead of starting fresh. Before integration
+testing, clear stale sessions:
+
+```powershell
+# PowerShell — clear doer session logs
+$workerDir = "$env:USERPROFILE\.claude\projects\<project-hash>-workdir-worker-1-doer"
+if (Test-Path $workerDir) { Remove-Item "$workerDir\*.jsonl" -Force -ErrorAction SilentlyContinue }
+```
+
+The plan should include this as a step before the integration test task.
+
 ## Deployment
 
 - **Dockerfile**: Add any new apt/pip packages the tools need
@@ -251,6 +384,7 @@ so the project stays runnable at every step:
 1. **Tools** — no dependencies, pure Python scripts
 2. **Workflows** — depend on tools, follow the triad pattern
 3. **Registry** — imports workflows/tools, wires MCP interface
-4. **Tests** — verify each piece with mock-fleet
-5. **Deployment** — Docker, env vars, compose updates
-6. **Integration test** — end-to-end run with Fleet (if available)
+4. **Host config** — `host.config.mjs` with agentDescription, modules, strategy
+5. **Tests** — verify each piece with mock-fleet
+6. **Deployment** — Docker, env vars, compose updates
+7. **Session cleanup + integration test** — clear stale sessions, then end-to-end run with Fleet

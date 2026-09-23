@@ -40,23 +40,23 @@ test('buildSystemPrompt includes role and response format', () => {
   assert.ok(p.includes('travel-agent'));
 });
 
-test('buildSystemPrompt includes destination fidelity rule', () => {
-  const p = buildSystemPrompt({ agentName: 'travel-agent', agentDescription: '' });
-  assert.ok(p.includes('Destination Fidelity'));
+test('buildSystemPrompt without agentDescription has no domain-specific rules', () => {
+  const p = buildSystemPrompt({ agentName: 'generic-agent', agentDescription: '' });
+  assert.ok(!p.includes('Destination Fidelity'), 'generic prompt should not have travel rules');
+  assert.ok(p.includes('tool_call'), 'should still have response format');
+});
+
+test('buildSystemPrompt with agentDescription includes domain rules', () => {
+  const desc = 'Never substitute destinations. Always include a day-by-day itinerary.';
+  const p = buildSystemPrompt({ agentName: 'travel-agent', agentDescription: desc });
   assert.ok(p.includes('Never substitute'));
-});
-
-test('buildSystemPrompt includes date anchoring rule', () => {
-  const p = buildSystemPrompt({ agentName: 'travel-agent', agentDescription: '' });
-  assert.ok(p.includes('Date Anchoring'));
-  assert.ok(p.includes('concrete date'));
-});
-
-test('buildSystemPrompt includes structured travel output rule', () => {
-  const p = buildSystemPrompt({ agentName: 'travel-agent', agentDescription: '' });
-  assert.ok(p.includes('Structured Travel Output'));
   assert.ok(p.includes('day-by-day'));
-  assert.ok(p.includes('budget summary'));
+});
+
+test('buildSystemPrompt keeps generic rules regardless of agentDescription', () => {
+  const p = buildSystemPrompt({ agentName: 'any-agent', agentDescription: 'Custom domain' });
+  assert.ok(p.includes('One tool call per turn'));
+  assert.ok(p.includes('Never call tools that do not exist'));
 });
 
 test('buildSystemPrompt includes agentDescription when provided', () => {
