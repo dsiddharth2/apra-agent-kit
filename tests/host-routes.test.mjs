@@ -78,5 +78,36 @@ test('buildRoutes mounts chat routes only when given', async () => {
   const chatScript = { method: 'GET', path: '/chat/app.mjs', auth: false, handler: async () => ({ status: 200, text: 'y' }) };
   const withChat = buildRoutes({ jobs: fakeJobs(), notifier: null, runSync: async () => ({}), mcpRaw: () => {}, runLoopEnabled: true, chatRoutes: { chatPage, chatScript } });
   assert.equal(withChat.chatPage, chatPage); assert.equal(withChat.chatScript, chatScript);
-  assert.deepEqual(Object.keys(withChat), ['health', 'kit', 'mcp', 'task', 'jobGet', 'jobCancel', 'jobEvents', 'chatPage', 'chatScript']);
+  assert.deepEqual(Object.keys(withChat), [
+    'health', 'kit', 'mcp', 'task', 'jobGet', 'jobCancel', 'jobEvents',
+    'chatPage', 'chatScript',
+    'memoryStore', 'memoryQuery', 'memoryGet', 'memoryUpdate', 'memoryPromote', 'memoryRemove',
+  ]);
+});
+
+test('buildRoutes mounts memory routes only when given', async () => {
+  const base = buildRoutes({ jobs: fakeJobs(), notifier: null, runSync: async () => ({}), mcpRaw: () => {}, runLoopEnabled: true });
+  assert.equal(base.memoryStore, null);
+  assert.equal(base.memoryQuery, null);
+  assert.equal(base.memoryGet, null);
+  assert.equal(base.memoryUpdate, null);
+  assert.equal(base.memoryPromote, null);
+  assert.equal(base.memoryRemove, null);
+
+  const memoryStore = { method: 'POST', path: '/memory', handler: async () => ({ status: 201 }) };
+  const memoryQuery = { method: 'GET', path: '/memory', handler: async () => ({ status: 200 }) };
+  const memoryGet = { method: 'GET', path: '/memory/:id', handler: async () => ({ status: 200 }) };
+  const memoryUpdate = { method: 'PATCH', path: '/memory/:id', handler: async () => ({ status: 200 }) };
+  const memoryPromote = { method: 'PATCH', path: '/memory/:id/promote', handler: async () => ({ status: 200 }) };
+  const memoryRemove = { method: 'DELETE', path: '/memory/:id', handler: async () => ({ status: 200 }) };
+  const withMemory = buildRoutes({
+    jobs: fakeJobs(), notifier: null, runSync: async () => ({}), mcpRaw: () => {}, runLoopEnabled: true,
+    memoryRoutes: { memoryStore, memoryQuery, memoryGet, memoryUpdate, memoryPromote, memoryRemove },
+  });
+  assert.equal(withMemory.memoryStore, memoryStore);
+  assert.equal(withMemory.memoryQuery, memoryQuery);
+  assert.equal(withMemory.memoryGet, memoryGet);
+  assert.equal(withMemory.memoryUpdate, memoryUpdate);
+  assert.equal(withMemory.memoryPromote, memoryPromote);
+  assert.equal(withMemory.memoryRemove, memoryRemove);
 });

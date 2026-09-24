@@ -10,7 +10,7 @@ function syncResponse(result) {
   return json(200, result);
 }
 
-export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEnabled, chatRoutes = null, guardrails = null }) {
+export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEnabled, chatRoutes = null, guardrails = null, memoryRoutes = null }) {
   const routes = {
     health: { method: 'GET', path: '/health', auth: false, handler: async () => json(200, { ok: true }) },
     // Identity and operational state sit apart from the liveness probe:
@@ -27,6 +27,12 @@ export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEn
     mcp: { method: 'POST', path: '/mcp', raw: true, handler: mcpRaw, web: mcpWeb },
     task: null, jobGet: null, jobCancel: null, jobEvents: null,
     chatPage: chatRoutes?.chatPage ?? null, chatScript: chatRoutes?.chatScript ?? null,
+    memoryStore: memoryRoutes?.memoryStore ?? null,
+    memoryQuery: memoryRoutes?.memoryQuery ?? null,
+    memoryGet: memoryRoutes?.memoryGet ?? null,
+    memoryUpdate: memoryRoutes?.memoryUpdate ?? null,
+    memoryPromote: memoryRoutes?.memoryPromote ?? null,
+    memoryRemove: memoryRoutes?.memoryRemove ?? null,
   };
 
   if (runLoopEnabled) {
