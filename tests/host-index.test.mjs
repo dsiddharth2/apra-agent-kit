@@ -156,6 +156,59 @@ test('callTool returns error for unknown tool', async () => {
   }
 });
 
+test('startHost returns null memory when memory is not configured', async () => {
+  const fleetApi = makeMockFleetApi();
+  const dispatcher = await makeDispatcher();
+  const started = await startHost({ fleetApi, dispatcher, port: 0 });
+  try {
+    assert.equal(started.memory, null);
+  } finally {
+    await started.close();
+  }
+});
+
+test('close continues dispatcher cleanup when memory.close throws', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'host-mem-close-'));
+  const memDir = path.join(dir, 'memory');
+  await fs.writeFile(path.join(dir, 'host.config.mjs'), `export default {
+    name: 'mem-close-host',
+    fleet: {},
+    comm: { adapter: 'express', host: '127.0.0.1' },
+    modules: {
+      memory: {
+        longTerm: { enabled: true, store: 'filesystem', dir: ${JSON.stringify(memDir)}, decay: { mode: 'none' } },
+      },
+    },
+  };`);
+  const warnings = [];
+  const origWarn = console.warn;
+  console.warn = (msg) => warnings.push(String(msg));
+  let dispatcherClosed = 0;
+  const origClose = WorkerDispatcher.prototype.close;
+  WorkerDispatcher.prototype.close = async function (...args) {
+    dispatcherClosed += 1;
+    return origClose.apply(this, args);
+  };
+  let started;
+  try {
+    started = await startHost({
+      fleetApi: makeMockFleetApi(),
+      port: 0,
+      configDir: dir,
+      env: { ...process.env, NODE_ENV: 'test' },
+    });
+    assert.ok(started.memory);
+    started.memory.close = async () => { throw new Error('memory close failed'); };
+    await started.close();
+    assert.ok(warnings.some(w => /memory module failed to close/i.test(w)));
+    assert.equal(dispatcherClosed, 1, 'owned dispatcher must still close when memory.close throws');
+  } finally {
+    console.warn = origWarn;
+    WorkerDispatcher.prototype.close = origClose;
+    await started?.host?.stop?.().catch(() => {});
+  }
+});
+
 test('close shuts down cleanly', async () => {
   const fleetApi = makeMockFleetApi();
   const dispatcher = await makeDispatcher();
@@ -274,6 +327,73 @@ test('startHost stops the dispatcher if jobs.start fails', async () => {
     assert.equal(closed, 1, 'owned dispatcher must be closed when jobs fail to start');
   } finally {
     WorkerDispatcher.prototype.close = origClose;
+  }
+});
+
+test('startHost closes memory when jobs.start fails', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'host-jobs-fail-mem-'));
+  const dbPath = path.join(dir, 'jobs.db');
+  await fs.mkdir(dbPath);
+  await fs.writeFile(path.join(dir, 'host.config.mjs'), `export default {
+    name: 'jobs-fail-mem',
+    fleet: {},
+    comm: { adapter: 'express', host: '127.0.0.1' },
+    modules: {
+      runLoop: { enabled: true, strategy: 'open-ended' },
+      router: { enabled: false },
+      guardrails: { enabled: false },
+      budgets: { enabled: false },
+      chat: { enabled: false },
+      dispatch: { enabled: true, backend: 'in-process', store: { kind: 'sqlite', dbPath: ${JSON.stringify(dbPath)} } },
+      memory: {
+        enabled: true,
+        longTerm: {
+          enabled: true,
+          decay: { mode: 'none' },
+          dedup: { enabled: false },
+          store: () => ({
+            async open() {},
+            async close() { globalThis.__task15MemCloses = (globalThis.__task15MemCloses ?? 0) + 1; },
+            async store() {},
+            async get() { return null; },
+            async update() { return null; },
+            async remove() {},
+            async query() { return []; },
+            async purge() { return 0; },
+            async count() { return 0; },
+          }),
+        },
+      },
+    },
+  };`);
+  delete globalThis.__task15MemCloses;
+  let closed = 0;
+  const origClose = WorkerDispatcher.prototype.close;
+  WorkerDispatcher.prototype.close = async function (...args) {
+    closed += 1;
+    return origClose.apply(this, args);
+  };
+  try {
+    await assert.rejects(
+      () => startHost({
+        fleetApi: makeMockFleetApi(),
+        port: 0,
+        configDir: dir,
+        env: {
+          ...process.env,
+          WORKER_POOL_SIZE: '1',
+          WORKER_EPHEMERAL_MAX: '0',
+          WORKER_POOL_ROOT: dir,
+          NODE_ENV: 'test',
+        },
+      }),
+      /unable to open|SQLITE|not a database/i,
+    );
+    assert.equal(globalThis.__task15MemCloses, 1, 'memory must close when jobs fail to start');
+    assert.equal(closed, 1, 'owned dispatcher must be closed when jobs fail to start');
+  } finally {
+    WorkerDispatcher.prototype.close = origClose;
+    delete globalThis.__task15MemCloses;
   }
 });
 

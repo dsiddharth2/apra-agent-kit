@@ -143,6 +143,28 @@ test('onIteration fires once per progress-worthy event with a message', async ()
   assert.equal(seen[1].kind, 'step_completed');
 });
 
+test('runTask keeps an existing working context when createRunWorkingContext is absent', async () => {
+  const api = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: [
+      '```tool_call\n{"tool": "weather", "args": {"city": "London"}}\n```',
+      '```done\n{"result": "15°C", "summary": "ok"}\n```',
+    ],
+  });
+  const appended = [];
+  const workingContext = {
+    append(obs) { appended.push(obs); },
+    async forPrompt() { return appended; },
+  };
+  const result = await runTask(
+    { id: 't-1', goal: 'Weather in London' },
+    { strategy: 'open-ended', tools: makeTools(), fleetApi: api, memory: { workingContext } },
+  );
+  assert.equal(result.status, 'completed');
+  assert.equal(appended.length, 1);
+  assert.equal(appended[0].tool, 'weather');
+});
+
 test('onIteration errors do not break the run', async () => {
   const fleetApi = createMockFleetApi({
     members: rosterNames(1),

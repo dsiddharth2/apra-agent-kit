@@ -6,7 +6,8 @@ import { authenticateRequest as defaultAuthenticate } from '../mcp/auth.mjs';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { createPooledFleetApi } from '../pool/pooled-fleet-api.mjs';
 import { loadConfig, resolveChatConfig } from './config.mjs';
-import { extendRegistry, withJobTools } from './tools/registry.mjs';
+import { extendRegistry, withJobTools, withMemoryTools } from './tools/registry.mjs';
+import { createMemoryModule } from './memory/index.mjs';
 import { executeTool } from './tools/executor.mjs';
 import { createExpressAdapter } from '../comm/express.mjs';
 import { createRawHttpAdapter } from '../comm/raw-http.mjs';
@@ -139,35 +140,62 @@ export async function startHost({
   }
 
   let jobs = null;
+  let memory = null;
   const runSync = (task, { signal } = {}) => executeHostedTask(task, {
-    api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal,
+    api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal, memory,
   });
   // The run loop only observes abort between iterations. A job blocked in
   // executePrompt would otherwise stay `processing` until FORCE_SETTLE (30s).
   const runJob = (task, { signal, onProgress }) => settleWhenAborted(
     executeHostedTask(task, {
-      api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress,
+      api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress, memory,
     }),
     signal,
   );
 
+  // Notifier first so memory events can publish. Jobs stay late-bound and
+  // start only after memory is open: a restored queued job calls runJob
+  // during jobs.start(), and that run must already see the memory module.
   let notifier = null;
+  let lateJobs = null;
   if (dispatchEnabled) {
     try {
-      // Notifier and jobs reference each other: SSE reads from jobs, jobs publish to notifier.
-      const late = { jobs: null };
+      lateJobs = { jobs: null };
       notifier = createNotifier(notifyConfig, {
-        jobs: { get: (id) => late.jobs.get(id), events: (id, o) => late.jobs.events(id, o), subscribe: (id, fn) => late.jobs.subscribe(id, fn) },
+        jobs: { get: (id) => lateJobs.jobs.get(id), events: (id, o) => lateJobs.jobs.events(id, o), subscribe: (id, fn) => lateJobs.jobs.subscribe(id, fn) },
       });
+    } catch (err) {
+      try { await ownDispatcher?.close(); } catch { /* preserve original error */ }
+      try { await stopFleet?.(); } catch { /* preserve original error */ }
+      throw err;
+    }
+  }
+
+  const memoryConfig = config.modules?.memory;
+  if (memoryConfig && memoryConfig.enabled !== false) {
+    try {
+      memory = await createMemoryModule(memoryConfig, { notifier, fleetApi: api, logger: console });
+      await memory.open();
+      if (memory?.longTerm) toolRegistry.push(...withMemoryTools([], memory.longTerm, memory.events));
+    } catch (err) {
+      console.warn(`[host] memory module failed to start — continuing without memory: ${err?.message ?? err}`);
+      try { await memory?.close(); } catch { /* memory failures never halt the host */ }
+      memory = null;
+    }
+  }
+
+  if (dispatchEnabled) {
+    try {
       jobs = await createJobsBackend(dispatchConfig, {
         runJob, notifier, capacity: activeDispatcher.capacity,
         allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient, getDurableClient,
       });
-      late.jobs = jobs;
+      lateJobs.jobs = jobs;
       await jobs.start();
       toolRegistry.push(...withJobTools([], jobs));
     } catch (err) {
       try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve original error */ }
+      try { await memory?.close(); } catch { /* preserve original error */ }
       try { await ownDispatcher?.close(); } catch { /* preserve original error */ }
       try { await stopFleet?.(); } catch { /* preserve original error */ }
       throw err;
@@ -192,7 +220,7 @@ export async function startHost({
   };
 
   const chatRoutes = await buildChatRoutes({ chatConfig, hostName: config.name });
-  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes, guardrails: guardrailsMod });
+  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes, guardrails: guardrailsMod, memoryRoutes: memory?.routes ?? null });
 
   let adapter;
   const listenPort = port ?? config.comm.port;
@@ -204,6 +232,7 @@ export async function startHost({
   } catch (err) {
     try { await adapter?.stop(); } catch { /* preserve */ }
     try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve */ }
+    try { await memory?.close(); } catch { /* preserve */ }
     try { await ownDispatcher?.close(); } catch { /* preserve */ }
     try { await stopFleet?.(); } catch { /* preserve */ }
     throw err;
@@ -243,13 +272,18 @@ export async function startHost({
     await adapter.stop();
     await jobs?.stop({ drainMs: dispatchConfig?.drainMs });
     await notifier?.stop();
+    try {
+      await memory?.close();
+    } catch (err) {
+      console.warn(`[host] memory module failed to close: ${err?.message ?? err}`);
+    }
     await ownDispatcher?.close();
     await stopFleet?.();
   };
 
   const effectiveConfig = Object.freeze({ ...config, modules: Object.freeze({ ...config.modules, chat: chatConfig }) });
   return {
-    host: adapter, jobs, notifier, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry,
+    host: adapter, jobs, notifier, memory, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry,
     fleetApi: api, dispatcher: activeDispatcher, guardrailsMod, runLoopConfig, budgetsConfig, routerConfig,
   };
 }
@@ -287,7 +321,9 @@ export function createHost(options = {}) {
           if (!api || !activeDispatcher) throw new Error('fleetApi and dispatcher are required for agent.run()');
           const routerConfig = config.modules?.router ?? { enabled: false };
           return executeHostedTask(task, {
-            api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, signal: runOpts.signal,
+            api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod,
+            signal: runOpts.signal,
+            memory: runOpts.memory ?? hostOptions.memory ?? null,
           });
         },
       };

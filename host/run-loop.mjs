@@ -21,6 +21,8 @@ export async function runTask(task, {
   agentDescription,
   onIteration,
   traceId,
+  memory,
+  memories,
 } = {}) {
   // One id for the whole run, threaded into every tool call so a result in a
   // downstream system can be traced back to the plan that produced it.
@@ -28,11 +30,25 @@ export async function runTask(task, {
   // empty.
   const runTraceId = traceId ?? task?.traceId ?? `tr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+  // Working context is in-run only. Long-term memory, run state, and the
+  // learner stay shared; each run gets a fresh buffer so observations from
+  // one task cannot leak into the next.
+  const runMemory = memory
+    ? {
+        ...memory,
+        workingContext: typeof memory.createRunWorkingContext === 'function'
+          ? (memory.createRunWorkingContext() ?? null)
+          : (memory.workingContext ?? null),
+      }
+    : memory;
+
   const strategyOpts = {
     task, tools, fleetApi, guardrails, jobs, workspace,
     maxReplanAttempts, maxReviewAttempts, maxStepReviewAttempts,
     maxNoActionTurns, minReviewPolicy, agentName, agentDescription,
     traceId: runTraceId,
+    memory: runMemory,
+    memories,
   };
 
   const strat = strategy === 'plan-execute'

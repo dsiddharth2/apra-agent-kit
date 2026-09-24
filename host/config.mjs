@@ -6,7 +6,7 @@ import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config
 
 const SUPPORTED_ADAPTERS = new Set(['express', 'raw-http', 'azure-functions']);
 const KNOWN_MODULES = new Set(['runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch', 'notify', 'chat', 'router']);
-const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails', 'dispatch', 'notify', 'chat', 'router']);
+const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails', 'dispatch', 'notify', 'chat', 'router', 'memory']);
 
 export async function loadConfig(configDir, env = process.env) {
   const raw = await resolveConfig(configDir);
@@ -125,6 +125,23 @@ function validate(raw, env) {
 
   const modules = { ...(raw.modules ?? {}) };
   const runLoopEnabled = !!modules.runLoop?.enabled;
+
+  const mem = raw.modules?.memory;
+  if (mem) {
+    if (mem.workingContext?.enabled && !runLoopEnabled) {
+      console.warn('[host/config] memory.workingContext enabled but runLoop disabled — no turn history to compact');
+    }
+    if (mem.runState?.enabled && !runLoopEnabled) {
+      console.warn('[host/config] memory.runState enabled but runLoop disabled — no step sequence to checkpoint');
+    }
+    if (mem.longTerm?.autoLearn && !runLoopEnabled) {
+      console.warn('[host/config] memory.longTerm.autoLearn enabled but runLoop disabled — needs a run to learn from');
+    }
+    if (mem.longTerm?.autoLearn && !mem.longTerm?.enabled) {
+      console.warn('[host/config] memory.longTerm.autoLearn enabled but longTerm disabled — nowhere to store learned facts');
+    }
+  }
+
   const budgetsConfig = modules.budgets?.enabled ? modules.budgets : null;
 
   if (modules.dispatch?.enabled) {

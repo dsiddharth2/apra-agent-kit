@@ -1,8 +1,10 @@
 // host/tools/registry.mjs
 import { defaultRegistry } from '../../mcp/registry.mjs';
 import { jobTools } from './jobs-tools.mjs';
+import { withMemoryTools as _withMemoryTools } from './memory-tools.mjs';
 
 export { jobTools };
+export const withMemoryTools = _withMemoryTools;
 
 const DEFAULTS = {
   reversible: true,

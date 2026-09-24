@@ -33,10 +33,33 @@ export function createPlanExecuteStrategy({
   agentName = 'agent',
   agentDescription = '',
   traceId = null,
+  memory,
+  memories,
 }) {
-  const systemPrompt = buildSystemPrompt({ agentName, agentDescription });
+  const systemPrompt = buildSystemPrompt({ agentName, agentDescription, memories });
   const toolCatalog = formatTools(tools);
   const observations = [];
+  const taskKey = task.id ?? task.goal;
+
+  function remember(observation) {
+    observations.push(observation);
+    if (!memory?.workingContext) return;
+    try {
+      memory.workingContext.append(observation);
+    } catch (err) {
+      console.warn(`[host] working context append failed — continuing: ${err?.message ?? err}`);
+    }
+  }
+
+  async function historyForPrompt() {
+    if (!memory?.workingContext) return observations;
+    try {
+      return await memory.workingContext.forPrompt();
+    } catch (err) {
+      console.warn(`[host] working context failed — continuing with local history: ${err?.message ?? err}`);
+      return observations;
+    }
+  }
 
   function shouldReview(step) {
     if (step.review) return true;
@@ -67,6 +90,49 @@ export function createPlanExecuteStrategy({
   async function* iterate() {
     let replanCount = 0;
     let currentPlan = null;
+    let idempotencyKeys = new Set();
+    let resumeStart = 0;
+    let resumePending = false;
+
+    if (memory?.runState) {
+      try {
+        const checkpoint = await memory.runState.load(taskKey);
+        if (checkpoint) {
+          if (Number.isInteger(checkpoint.stepIndex)) resumeStart = checkpoint.stepIndex;
+          if (checkpoint.plan) {
+            currentPlan = checkpoint.plan;
+            resumePending = true;
+          }
+          for (const obs of checkpoint.observations ?? []) remember(obs);
+          idempotencyKeys = new Set(checkpoint.idempotencyKeys ?? []);
+        }
+      } catch (err) {
+        console.warn(`[host] run-state load failed — continuing: ${err?.message ?? err}`);
+      }
+    }
+
+    async function saveCheckpoint(stepIndex, idempotencyKey) {
+      if (!memory?.runState) return;
+      const nextKeys = new Set(idempotencyKeys);
+      nextKeys.add(idempotencyKey);
+      try {
+        const saved = await memory.runState.save(taskKey, {
+          stepIndex,
+          plan: currentPlan,
+          observations,
+          budgetSnapshot: null,
+          idempotencyKeys: [...nextKeys],
+          strategy: 'plan-execute',
+        });
+        // false means the write failed and the previous snapshot must stay.
+        // A missing return value is treated as success for test doubles.
+        if (saved === false) return;
+      } catch (err) {
+        console.warn(`[host] run-state save failed — continuing: ${err?.message ?? err}`);
+        return;
+      }
+      idempotencyKeys = nextKeys;
+    }
 
     async function* reviewPlan(plan) {
       let workingPlan = plan;
@@ -94,7 +160,7 @@ export function createPlanExecuteStrategy({
         }
 
         const replanPrompt = buildReplanPrompt({
-          task, plan: workingPlan, history: observations,
+          task, plan: workingPlan, history: await historyForPrompt(),
           failedStep: null, reviewerFeedback: feedback, systemPrompt,
         });
         let replanResult = null;
@@ -123,7 +189,7 @@ export function createPlanExecuteStrategy({
       }
 
       const replanPrompt = buildReplanPrompt({
-        task, plan: currentPlan, history: observations,
+        task, plan: currentPlan, history: await historyForPrompt(),
         failedStep, reviewerFeedback: feedback, systemPrompt,
       });
       let revisedPlan = null;
@@ -143,37 +209,49 @@ export function createPlanExecuteStrategy({
       return yield* reviewPlan(revisedPlan);
     }
 
-    // Phase 1: Plan
-    const planPrompt = buildPlanPrompt({ task, tools: toolCatalog, systemPrompt });
-    const planText = await callPrompt('doer', planPrompt);
-    yield { type: 'prompt_usage', text: planText };
-    const planParsed = parseResponse(planText);
+    // Phase 1: Plan (skipped when a checkpoint already holds a plan)
+    if (!currentPlan) {
+      const planPrompt = buildPlanPrompt({ task, tools: toolCatalog, systemPrompt });
+      const planText = await callPrompt('doer', planPrompt);
+      yield { type: 'prompt_usage', text: planText };
+      const planParsed = parseResponse(planText);
 
-    if (planParsed.type !== 'plan') {
-      yield { type: 'error', reason: 'invalid_plan', message: 'Doer did not produce a plan block' };
-      return;
+      if (planParsed.type !== 'plan') {
+        yield { type: 'error', reason: 'invalid_plan', message: 'Doer did not produce a plan block' };
+        return;
+      }
+
+      currentPlan = planParsed.payload;
+      yield { type: 'plan', plan: currentPlan, _replan: false };
+
+      const reviewedPlan = yield* reviewPlan(currentPlan);
+      if (!reviewedPlan) return;
+      currentPlan = reviewedPlan;
     }
-
-    currentPlan = planParsed.payload;
-    yield { type: 'plan', plan: currentPlan, _replan: false };
-
-    const reviewedPlan = yield* reviewPlan(currentPlan);
-    if (!reviewedPlan) return;
-    currentPlan = reviewedPlan;
 
     // Phase 3: Execute steps (restarts from the beginning after step-review replan)
     executeLoop: while (true) {
       const steps = currentPlan.steps;
+      const start = resumePending ? resumeStart : 0;
+      resumePending = false;
       let restartExecution = false;
 
-      for (let i = 0; i < steps.length; i++) {
+      for (let i = start; i < steps.length; i++) {
         const step = steps[i];
+        const idempotencyKey = `${step.tool ?? step.type}-${JSON.stringify(step.args ?? {})}-${i}`;
+        if (memory?.runState) {
+          try {
+            if (await memory.runState.hasIdempotencyKey(taskKey, idempotencyKey)) continue;
+          } catch (err) {
+            console.warn(`[host] run-state idempotency check failed — continuing: ${err?.message ?? err}`);
+          }
+        }
 
         if (step.type === 'tool') {
           let args = step.args;
 
           if (needsArgsResolution(step)) {
-            const resolvePrompt = buildResolveArgsPrompt({ task, step, history: observations, systemPrompt });
+            const resolvePrompt = buildResolveArgsPrompt({ task, step, history: await historyForPrompt(), systemPrompt });
             const resolveText = await callPrompt('doer', resolvePrompt);
             yield { type: 'prompt_usage', text: resolveText };
             const resolved = parseResponse(resolveText);
@@ -207,12 +285,12 @@ export function createPlanExecuteStrategy({
             }
           }
 
-          observations.push({ type: 'observation', stepType: 'tool', tool: step.tool, args, result });
+          remember({ type: 'observation', stepType: 'tool', tool: step.tool, args, result });
           yield { type: 'observation', stepType: 'tool', tool: step.tool, args, stepIndex: i, ...result };
 
           if (shouldReview(step)) {
             for (let retryRound = 0; retryRound <= maxStepReviewAttempts; retryRound++) {
-              const srPrompt = buildStepReviewPrompt({ task, step, result, history: observations, systemPrompt });
+              const srPrompt = buildStepReviewPrompt({ task, step, result, history: await historyForPrompt(), systemPrompt });
               const srText = await callPrompt('reviewer', srPrompt);
               yield { type: 'prompt_usage', text: srText };
               const srParsed = parseResponse(srText);
@@ -234,7 +312,7 @@ export function createPlanExecuteStrategy({
               const retryPrompt = buildResolveArgsPrompt({
                 task,
                 step: { ...step, reason: `Retry: ${feedback}` },
-                history: observations,
+                history: await historyForPrompt(),
                 systemPrompt,
               });
               const retryText = await callPrompt('doer', retryPrompt);
@@ -244,7 +322,7 @@ export function createPlanExecuteStrategy({
                 args = retryParsed.payload.args;
               }
               result = await runTool(step.tool, args);
-              observations.push({ type: 'observation', stepType: 'tool', tool: step.tool, args, result, retry: retryRound + 1 });
+              remember({ type: 'observation', stepType: 'tool', tool: step.tool, args, result, retry: retryRound + 1 });
               yield { type: 'observation', stepType: 'tool', tool: step.tool, args, ...result };
             }
 
@@ -252,16 +330,16 @@ export function createPlanExecuteStrategy({
           }
         } else if (step.type === 'reason') {
           yield { type: 'step_started', stepIndex: i, step: { type: 'reason' } };
-          const reasonPrompt = buildReasonPrompt({ task, step, history: observations, systemPrompt });
+          const reasonPrompt = buildReasonPrompt({ task, step, history: await historyForPrompt(), systemPrompt });
           let reasonText = await callPrompt('doer', reasonPrompt);
           yield { type: 'prompt_usage', text: reasonText };
-          observations.push({ type: 'observation', stepType: 'reason', text: reasonText });
+          remember({ type: 'observation', stepType: 'reason', text: reasonText });
           yield { type: 'observation', stepType: 'reason', text: reasonText, stepIndex: i };
 
           if (shouldReview(step)) {
             for (let retryRound = 0; retryRound <= maxStepReviewAttempts; retryRound++) {
               const srPrompt = buildStepReviewPrompt({
-                task, step, result: { text: reasonText }, history: observations, systemPrompt,
+                task, step, result: { text: reasonText }, history: await historyForPrompt(), systemPrompt,
               });
               const srText = await callPrompt('reviewer', srPrompt);
               yield { type: 'prompt_usage', text: srText };
@@ -284,18 +362,22 @@ export function createPlanExecuteStrategy({
               const retryPrompt = buildReasonPrompt({
                 task,
                 step: { ...step, prompt: `Retry: ${feedback}. ${step.prompt}` },
-                history: observations,
+                history: await historyForPrompt(),
                 systemPrompt,
               });
               reasonText = await callPrompt('doer', retryPrompt);
               yield { type: 'prompt_usage', text: reasonText };
-              observations.push({ type: 'observation', stepType: 'reason', text: reasonText, retry: retryRound + 1 });
+              remember({ type: 'observation', stepType: 'reason', text: reasonText, retry: retryRound + 1 });
               yield { type: 'observation', stepType: 'reason', text: reasonText };
             }
 
             if (restartExecution) break;
           }
+        } else {
+          continue;
         }
+
+        await saveCheckpoint(i, idempotencyKey);
       }
 
       if (restartExecution) {

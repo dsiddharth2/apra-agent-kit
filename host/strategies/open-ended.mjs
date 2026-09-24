@@ -19,11 +19,33 @@ export function createOpenEndedStrategy({
   agentName = 'agent',
   agentDescription = '',
   traceId = null,
+  memory,
+  memories,
 }) {
-  const systemPrompt = buildSystemPrompt({ agentName, agentDescription });
+  const systemPrompt = buildSystemPrompt({ agentName, agentDescription, memories });
   const toolCatalog = formatTools(tools);
   const observations = [];
   let noActionCount = 0;
+
+  function remember(observation) {
+    observations.push(observation);
+    if (!memory?.workingContext) return;
+    try {
+      memory.workingContext.append(observation);
+    } catch (err) {
+      console.warn(`[host] working context append failed — continuing: ${err?.message ?? err}`);
+    }
+  }
+
+  async function historyForPrompt() {
+    if (!memory?.workingContext) return observations;
+    try {
+      return await memory.workingContext.forPrompt();
+    } catch (err) {
+      console.warn(`[host] working context failed — continuing with local history: ${err?.message ?? err}`);
+      return observations;
+    }
+  }
 
   async function executeTool(name, args) {
     const tool = tools.find(t => t.name === name);
@@ -39,7 +61,8 @@ export function createOpenEndedStrategy({
 
   async function* iterate() {
     while (true) {
-      const prompt = buildActPrompt({ task, history: observations, tools: toolCatalog, systemPrompt });
+      const history = await historyForPrompt();
+      const prompt = buildActPrompt({ task, history, tools: toolCatalog, systemPrompt });
       const raw = await fleetApi.executePrompt({ member_name: 'doer', prompt });
       const text = extractText(raw);
       const parsed = parseResponse(text);
@@ -56,14 +79,14 @@ export function createOpenEndedStrategy({
         const { tool, args } = parsed.payload;
         yield { type: 'action', tool, args, reasoning: parsed.reasoning };
         const result = await executeTool(tool, args);
-        observations.push({ type: 'observation', tool, args, result });
+        remember({ type: 'observation', tool, args, result });
         yield { type: 'observation', tool, args, ...result };
         continue;
       }
 
       if (parsed.type === 'thinking' || parsed.type === 'error') {
         noActionCount++;
-        observations.push({ type: 'thinking', text: parsed.reasoning ?? parsed.message });
+        remember({ type: 'thinking', text: parsed.reasoning ?? parsed.message });
         if (noActionCount >= maxNoActionTurns) {
           yield { type: 'error', reason: 'no_action', message: `${maxNoActionTurns} consecutive turns with no tool call or done block` };
           return;
@@ -72,7 +95,7 @@ export function createOpenEndedStrategy({
       }
 
       noActionCount++;
-      observations.push({ type: 'thinking', text });
+      remember({ type: 'thinking', text });
       if (noActionCount >= maxNoActionTurns) {
         yield { type: 'error', reason: 'no_action', message: `${maxNoActionTurns} consecutive turns with no tool call or done block` };
         return;

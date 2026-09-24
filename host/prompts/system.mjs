@@ -1,7 +1,24 @@
-export function buildSystemPrompt({ agentName, agentDescription }) {
-  return `You are "${agentName}", an autonomous agent executing tasks using available tools.
-${agentDescription ? agentDescription + '\n' : ''}
-## Response format
+export function buildSystemPrompt({ agentName, agentDescription, memories }) {
+  const head = `You are "${agentName}", an autonomous agent executing tasks using available tools.
+${agentDescription ? agentDescription + '\n' : ''}`;
+
+  let memorySection = '';
+  if (memories?.length) {
+    const rules = memories.filter(m => m.kind === 'rule');
+    const facts = memories.filter(m => m.kind !== 'rule');
+    memorySection += '\n## Your Memory\n\n';
+    if (rules.length) {
+      memorySection += 'Rules (always follow these):\n';
+      memorySection += rules.map(r => `- ${r.text}`).join('\n') + '\n\n';
+    }
+    if (facts.length) {
+      memorySection += 'Relevant knowledge:\n';
+      memorySection += facts.map(f => `- ${f.text}`).join('\n') + '\n\n';
+    }
+    memorySection += 'You can recall additional facts during the task using the `recall` tool if you encounter a domain not covered above.\n';
+  }
+
+  const rest = `## Response format
 
 Wrap every decision in a fenced JSON block. Always include your reasoning BEFORE the block.
 
@@ -53,4 +70,8 @@ or
 - Never call tools that do not exist.
 - If a tool is denied by guardrails, choose an alternative or report that the task cannot be completed.
 - Never use strikethrough (~~text~~) or redline formatting. When revising, produce clean final text — not a diff of what changed.`;
+
+  if (!memorySection) return `${head}
+${rest}`;
+  return head + memorySection + rest;
 }
