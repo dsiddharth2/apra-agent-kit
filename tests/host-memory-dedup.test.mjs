@@ -70,3 +70,17 @@ test('dedup gate: merges on 75-92% match, human text wins over agent', async () 
   assert.equal(result.action, 'merged');
   assert.equal(updatedPatch.text, incoming.text);
 });
+
+test('dedup gate: creates when tags do not overlap despite identical text', async () => {
+  const existing = createMemoryEntry({ kind: 'domain', text: 'use UTC always', tags: ['timezone'] });
+  const store = {
+    query: async () => [existing],
+    update: async () => { throw new Error('should not update'); },
+    store: async (e) => e,
+  };
+  const engine = createFsrs6Engine();
+  const gate = createDedupGate({ store, engine });
+  const incoming = createMemoryEntry({ kind: 'domain', text: 'use UTC always', tags: ['scheduling'] });
+  const result = await gate.process(incoming);
+  assert.equal(result.action, 'created');
+});
