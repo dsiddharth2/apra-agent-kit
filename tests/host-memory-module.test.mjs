@@ -123,6 +123,29 @@ test('createMemoryModule closes ltm and rsStore independently', async () => {
   assert.ok(warnings.some(w => /long-term memory/i.test(w)));
 });
 
+test('createMemoryModule open resolves when preload fails with non-ENOENT error', async () => {
+  const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mem-mod-store-'));
+  const preloadPath = path.join(os.tmpdir(), `mem-mod-preload-file-${process.pid}-${Date.now()}`);
+  await fs.writeFile(preloadPath, 'not a directory');
+  const warnings = [];
+  const mod = await createMemoryModule({
+    longTerm: {
+      enabled: true,
+      store: 'filesystem',
+      dir: storeDir,
+      decay: { mode: 'none' },
+      preloadDir: preloadPath,
+    },
+  }, { logger: { info() {}, warn: (msg) => warnings.push(String(msg)) } });
+  try {
+    await assert.doesNotReject(() => mod.open());
+    assert.ok(warnings.some(w => /preload failed/i.test(w)), 'should warn when preload throws');
+  } finally {
+    await mod.close();
+    await fs.unlink(preloadPath).catch(() => {});
+  }
+});
+
 test('createMemoryModule preloads knowledge when preloadDir is set', async () => {
   const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mem-mod-store-'));
   const preloadDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mem-mod-preload-'));
