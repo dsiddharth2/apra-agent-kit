@@ -49,13 +49,13 @@ test('dedup gate: reinforces on >92% match', async () => {
   };
   const engine = createFsrs6Engine();
   const gate = createDedupGate({ store, engine });
-  const incoming = createMemoryEntry({ kind: 'domain', text: 'The staging DB resets every Sunday at 2am UTC', tags: ['db'] });
+  const incoming = createMemoryEntry({ kind: 'domain', text: 'The staging DB resets every Sunday at 2AM', tags: ['db'] });
   const result = await gate.process(incoming);
   assert.equal(result.action, 'reinforced');
 });
 
 test('dedup gate: merges on 75-92% match, human text wins over agent', async () => {
-  const existing = createMemoryEntry({ kind: 'domain', text: 'The staging DB resets weekly', tags: ['db'], source: 'agent' });
+  const existing = createMemoryEntry({ kind: 'domain', text: 'The staging DB resets every Sunday at 2am', tags: ['db'], source: 'agent' });
   existing.source = 'agent';
   let updatedPatch = null;
   const store = {
@@ -65,7 +65,7 @@ test('dedup gate: merges on 75-92% match, human text wins over agent', async () 
   };
   const engine = createFsrs6Engine();
   const gate = createDedupGate({ store, engine });
-  const incoming = createMemoryEntry({ kind: 'domain', text: 'The staging database resets every Sunday at 2am', tags: ['db'], source: 'human' });
+  const incoming = createMemoryEntry({ kind: 'domain', text: 'The staging DB resets every Sunday at 2am UTC', tags: ['db'], source: 'human' });
   const result = await gate.process(incoming);
   assert.equal(result.action, 'merged');
   assert.equal(updatedPatch.text, incoming.text);
