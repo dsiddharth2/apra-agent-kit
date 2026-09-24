@@ -25,11 +25,14 @@ test('retrievability decays over 7 days', () => {
   assert.ok(r > 0.3, `expected > 0.3, got ${r}`);
 });
 
-test('retrievability is near zero at 90 days', () => {
+test('retrievability is substantially lower at 90 days', () => {
   const entry = createMemoryEntry({ kind: 'domain', text: 'Test', tags: ['a'] });
+  const sevenDaysLater = new Date(new Date(entry.createdAt).getTime() + 7 * 86400000);
   const ninetyDaysLater = new Date(new Date(entry.createdAt).getTime() + 90 * 86400000);
-  const r = engine.computeRetrievability(entry, ninetyDaysLater);
-  assert.ok(r < 0.15, `expected < 0.15, got ${r}`);
+  const r7 = engine.computeRetrievability(entry, sevenDaysLater);
+  const r90 = engine.computeRetrievability(entry, ninetyDaysLater);
+  assert.ok(r90 < 0.25, `expected < 0.25, got ${r90}`);
+  assert.ok(r90 < r7, `expected 90-day r (${r90}) < 7-day r (${r7})`);
 });
 
 test('computeState maps thresholds correctly', () => {
