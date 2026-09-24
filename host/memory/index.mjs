@@ -8,6 +8,7 @@ import { createLongTermMemory } from './long-term.mjs';
 import { createLearner } from './learner.mjs';
 import { createMemoryEvents } from './events.mjs';
 import { buildMemoryRoutes } from './routes.mjs';
+import { preloadKnowledge } from './preloader.mjs';
 
 async function resolveStore(config) {
   if (typeof config.store === 'function') {
@@ -97,7 +98,16 @@ export async function createMemoryModule(memoryConfig, { notifier, fleetApi, log
 
     async open() {
       if (rsStore) await rsStore.open();
-      if (ltm) await ltm.open();
+      if (ltm) {
+        await ltm.open();
+        if (ltConfig?.preloadDir) {
+          try {
+            await preloadKnowledge(ltm, { dir: ltConfig.preloadDir, logger });
+          } catch (err) {
+            logger.warn?.(`[memory/preloader] preload failed: ${err?.message ?? err}`);
+          }
+        }
+      }
     },
 
     async close() {

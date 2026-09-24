@@ -123,6 +123,31 @@ test('createMemoryModule closes ltm and rsStore independently', async () => {
   assert.ok(warnings.some(w => /long-term memory/i.test(w)));
 });
 
+test('createMemoryModule preloads knowledge when preloadDir is set', async () => {
+  const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mem-mod-store-'));
+  const preloadDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mem-mod-preload-'));
+  await fs.writeFile(path.join(preloadDir, 'rules.json'), JSON.stringify([
+    { kind: 'rule', text: 'Always validate input', tags: ['safety'] },
+  ]));
+  const mod = await createMemoryModule({
+    longTerm: {
+      enabled: true,
+      store: 'filesystem',
+      dir: storeDir,
+      decay: { mode: 'none' },
+      preloadDir,
+    },
+  }, { logger: { info() {}, warn() {} } });
+  await mod.open();
+  try {
+    const entries = await mod.longTerm.query({});
+    assert.equal(entries.length, 1);
+    assert.match(entries[0].text, /validate input/);
+  } finally {
+    await mod.close();
+  }
+});
+
 test('memory module lazy-loads cosmos and does not import @azure/cosmos', async () => {
   const src = await fs.readFile(new URL('../host/memory/index.mjs', import.meta.url), 'utf8');
   assert.match(src, /await import\('\.\/store\/cosmos\.mjs'\)/);
