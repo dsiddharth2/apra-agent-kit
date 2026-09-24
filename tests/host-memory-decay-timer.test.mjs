@@ -2,7 +2,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runDecayPass, createDecayTimer } from '../host/memory/decay/timer.mjs';
-import { createFsrs6Engine } from '../host/memory/decay/fsrs6.mjs';
 import { createMemoryEntry } from '../host/memory/store/interface.mjs';
 
 async function inMemoryStore() {
@@ -77,5 +76,43 @@ test('createDecayTimer tick runs a pass', async () => {
   const timer = createDecayTimer(store, { logger: { info() {}, warn() {} } });
   const result = await timer.tick();
   assert.ok(result.updated >= 1);
+  timer.stop();
+});
+
+test('createDecayTimer tick swallows runDecayPass failures', async () => {
+  const store = {
+    async query() {
+      throw new Error('store unavailable');
+    },
+  };
+  const warnings = [];
+  const timer = createDecayTimer(store, {
+    logger: { info() {}, warn(msg) { warnings.push(msg); } },
+  });
+  const result = await timer.tick();
+  assert.equal(result, null);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /pass failed: store unavailable/);
+});
+
+test('createDecayTimer skips overlapping ticks', async () => {
+  let queryCount = 0;
+  const base = await inMemoryStore();
+  await base.open();
+  const store = {
+    ...base,
+    async query(opts) {
+      queryCount++;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return base.query(opts);
+    },
+  };
+  const timer = createDecayTimer(store, { logger: { info() {}, warn() {} } });
+  const first = timer.tick();
+  const second = timer.tick();
+  const [r1, r2] = await Promise.all([first, second]);
+  assert.equal(queryCount, 1);
+  assert.ok(r1);
+  assert.equal(r2, null);
   timer.stop();
 });

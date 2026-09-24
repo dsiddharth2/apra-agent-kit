@@ -45,8 +45,11 @@ export function createDecayTimer(store, {
   let handle = null;
 
   const opts = { engine, thresholds, purgeOnDecay, purgeAfterDays };
+  let inFlight = false;
 
   async function tick() {
+    if (inFlight) return null;
+    inFlight = true;
     try {
       const result = await runDecayPass(store, opts);
       if (result.updated > 0) {
@@ -59,6 +62,8 @@ export function createDecayTimer(store, {
     } catch (err) {
       logger.warn?.(`[memory/decay] pass failed: ${err?.message ?? err}`);
       return null;
+    } finally {
+      inFlight = false;
     }
   }
 
