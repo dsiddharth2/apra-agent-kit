@@ -259,7 +259,11 @@ export async function startHost({
     await adapter.stop();
     await jobs?.stop({ drainMs: dispatchConfig?.drainMs });
     await notifier?.stop();
-    try { await memory?.close(); } catch { /* preserve */ }
+    try {
+      await memory?.close();
+    } catch (err) {
+      console.warn(`[host] memory module failed to close: ${err?.message ?? err}`);
+    }
     await ownDispatcher?.close();
     await stopFleet?.();
   };

@@ -97,8 +97,20 @@ export async function createMemoryModule(memoryConfig, { notifier, fleetApi, log
     },
 
     async close() {
-      if (ltm) await ltm.close();
-      if (rsStore) await rsStore.close();
+      if (ltm) {
+        try {
+          await ltm.close();
+        } catch (err) {
+          logger.warn?.(`[memory] failed to close long-term memory: ${err?.message ?? err}`);
+        }
+      }
+      if (rsStore) {
+        try {
+          await rsStore.close();
+        } catch (err) {
+          logger.warn?.(`[memory] failed to close run-state store: ${err?.message ?? err}`);
+        }
+      }
     },
   };
 }

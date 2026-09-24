@@ -67,6 +67,8 @@ test('startHost mounts memory routes and tools when memory is configured', async
     configDir: dir,
   });
   try {
+    assert.ok(started.memory, 'startHost must return the memory module when memory is enabled');
+    assert.equal(typeof started.memory.close, 'function');
     assert.ok(started.registry.some(tool => tool.name === 'remember'));
     const created = await httpCall(started.host.port(), 'POST', '/memory', {
       text: 'pack layers', kind: 'domain', tags: ['travel'],
@@ -101,6 +103,7 @@ test('startHost continues when memory fails to open', async () => {
     console.warn = origWarn;
   }
   try {
+    assert.equal(started.memory, null, 'startHost must return null memory when memory fails to open');
     assert.ok(warnings.some(w => /memory/i.test(w)));
     assert.ok(!started.registry.some(tool => tool.name === 'remember'));
     const health = await httpCall(started.host.port(), 'GET', '/health');
@@ -123,6 +126,7 @@ test('startHost skips memory when enabled is false', async () => {
     configDir: dir,
   });
   try {
+    assert.equal(started.memory, null, 'startHost must return null memory when memory is disabled');
     assert.ok(!started.registry.some(tool => tool.name === 'remember'));
     const missing = await httpCall(started.host.port(), 'GET', '/memory');
     assert.equal(missing.status, 404);

@@ -98,6 +98,22 @@ test('createMemoryModule interpolates env vars in long-term config', async () =>
   }
 });
 
+test('createMemoryModule closes ltm and rsStore independently', async () => {
+  const ltmStore = fakeStore();
+  ltmStore.close = async () => { throw new Error('ltm close failed'); };
+  const rsStore = fakeStore();
+  const warnings = [];
+  const logger = { warn: (msg) => warnings.push(String(msg)) };
+  const mod = await createMemoryModule({
+    runState: { enabled: true, store: () => rsStore },
+    longTerm: { enabled: true, store: () => ltmStore, decay: { mode: 'none' } },
+  }, { logger });
+  await mod.open();
+  await mod.close();
+  assert.ok(rsStore.calls.includes('close'), 'run-state store must close even when long-term close fails');
+  assert.ok(warnings.some(w => /long-term memory/i.test(w)));
+});
+
 test('memory module lazy-loads cosmos and does not import @azure/cosmos', async () => {
   const src = await fs.readFile(new URL('../host/memory/index.mjs', import.meta.url), 'utf8');
   assert.match(src, /await import\('\.\/store\/cosmos\.mjs'\)/);
