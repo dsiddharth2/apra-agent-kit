@@ -134,7 +134,7 @@ test('unimplemented module with enabled:true logs warning', async () => {
     name: 'x',
     fleet: {},
     comm: { adapter: 'express' },
-    modules: { memory: { enabled: true } },
+    modules: { evals: { enabled: true } },
   };`);
   const warnings = [];
   const origWarn = console.warn;
@@ -144,7 +144,7 @@ test('unimplemented module with enabled:true logs warning', async () => {
   } finally {
     console.warn = origWarn;
   }
-  assert.ok(warnings.some(w => /memory/i.test(w) && /not implemented/i.test(w)));
+  assert.ok(warnings.some(w => /evals/i.test(w) && /not implemented/i.test(w)));
 });
 
 test('runLoop module accepted when enabled', async () => {

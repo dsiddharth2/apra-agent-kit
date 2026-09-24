@@ -6,7 +6,8 @@ import { authenticateRequest as defaultAuthenticate } from '../mcp/auth.mjs';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { createPooledFleetApi } from '../pool/pooled-fleet-api.mjs';
 import { loadConfig, resolveChatConfig } from './config.mjs';
-import { extendRegistry, withJobTools } from './tools/registry.mjs';
+import { extendRegistry, withJobTools, withMemoryTools } from './tools/registry.mjs';
+import { createMemoryModule } from './memory/index.mjs';
 import { executeTool } from './tools/executor.mjs';
 import { createExpressAdapter } from '../comm/express.mjs';
 import { createRawHttpAdapter } from '../comm/raw-http.mjs';
@@ -174,6 +175,20 @@ export async function startHost({
     }
   }
 
+  let memory = null;
+  const memoryConfig = config.modules?.memory;
+  if (memoryConfig && memoryConfig.enabled !== false) {
+    try {
+      memory = await createMemoryModule(memoryConfig, { notifier, fleetApi: api, logger: console });
+      await memory.open();
+      if (memory?.longTerm) toolRegistry.push(...withMemoryTools([], memory.longTerm));
+    } catch (err) {
+      console.warn(`[host] memory module failed to start — continuing without memory: ${err?.message ?? err}`);
+      try { await memory?.close(); } catch { /* memory failures never halt the host */ }
+      memory = null;
+    }
+  }
+
   const mcpExecute = guardrailsMod
     ? (tool, executorArgs) => guardrailsMod.execute(tool, executorArgs)
     : (tool, executorArgs) => executeTool(tool, executorArgs);
@@ -192,7 +207,7 @@ export async function startHost({
   };
 
   const chatRoutes = await buildChatRoutes({ chatConfig, hostName: config.name });
-  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes, guardrails: guardrailsMod });
+  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes, guardrails: guardrailsMod, memoryRoutes: memory?.routes ?? null });
 
   let adapter;
   const listenPort = port ?? config.comm.port;
@@ -204,6 +219,7 @@ export async function startHost({
   } catch (err) {
     try { await adapter?.stop(); } catch { /* preserve */ }
     try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve */ }
+    try { await memory?.close(); } catch { /* preserve */ }
     try { await ownDispatcher?.close(); } catch { /* preserve */ }
     try { await stopFleet?.(); } catch { /* preserve */ }
     throw err;
@@ -243,6 +259,7 @@ export async function startHost({
     await adapter.stop();
     await jobs?.stop({ drainMs: dispatchConfig?.drainMs });
     await notifier?.stop();
+    await memory?.close();
     await ownDispatcher?.close();
     await stopFleet?.();
   };
