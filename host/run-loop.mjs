@@ -21,6 +21,8 @@ export async function runTask(task, {
   agentDescription,
   onIteration,
   traceId,
+  memory,
+  memories,
 } = {}) {
   // One id for the whole run, threaded into every tool call so a result in a
   // downstream system can be traced back to the plan that produced it.
@@ -33,6 +35,8 @@ export async function runTask(task, {
     maxReplanAttempts, maxReviewAttempts, maxStepReviewAttempts,
     maxNoActionTurns, minReviewPolicy, agentName, agentDescription,
     traceId: runTraceId,
+    memory,
+    memories,
   };
 
   const strat = strategy === 'plan-execute'

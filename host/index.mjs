@@ -140,14 +140,15 @@ export async function startHost({
   }
 
   let jobs = null;
+  let memory = null;
   const runSync = (task, { signal } = {}) => executeHostedTask(task, {
-    api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal,
+    api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal, memory,
   });
   // The run loop only observes abort between iterations. A job blocked in
   // executePrompt would otherwise stay `processing` until FORCE_SETTLE (30s).
   const runJob = (task, { signal, onProgress }) => settleWhenAborted(
     executeHostedTask(task, {
-      api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress,
+      api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal, onProgress, memory,
     }),
     signal,
   );
@@ -175,7 +176,6 @@ export async function startHost({
     }
   }
 
-  let memory = null;
   const memoryConfig = config.modules?.memory;
   if (memoryConfig && memoryConfig.enabled !== false) {
     try {
@@ -308,7 +308,9 @@ export function createHost(options = {}) {
           if (!api || !activeDispatcher) throw new Error('fleetApi and dispatcher are required for agent.run()');
           const routerConfig = config.modules?.router ?? { enabled: false };
           return executeHostedTask(task, {
-            api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, signal: runOpts.signal,
+            api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod,
+            signal: runOpts.signal,
+            memory: runOpts.memory ?? hostOptions.memory ?? null,
           });
         },
       };

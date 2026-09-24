@@ -140,9 +140,14 @@ export function mergeBudgetConfig(baseConfig, task) {
   return merged;
 }
 
+function extractTaskTags(task) {
+  const goal = typeof task === 'string' ? task : task?.goal ?? '';
+  return goal.toLowerCase().split(/\W+/).filter(w => w.length > 3);
+}
+
 export async function executeHostedTask(task, {
   api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig,
-  budgetsConfig, guardrailsMod, jobs, signal, onProgress,
+  budgetsConfig, guardrailsMod, jobs, signal, onProgress, memory,
 }) {
   const fullTask = { id: task.id ?? `t-${Date.now().toString(36)}`, ...task };
   // Accept a caller-supplied trace id so a run can be correlated with the
@@ -234,6 +239,18 @@ export async function executeHostedTask(task, {
       return { taskId: fullTask.id, traceId, routedTo, ...wfResult };
     }
 
+    let memories = [];
+    if (memory?.longTerm) {
+      try {
+        const tags = extractTaskTags(task);
+        const recalled = await memory.longTerm.recall({ tags });
+        memories = Array.isArray(recalled) ? recalled : [];
+      } catch (err) {
+        console.warn(`[host] memory recall failed — continuing: ${err?.message ?? err}`);
+        memories = [];
+      }
+    }
+
     const result = await runTask(fullTask, {
       tools: toolRegistry,
       fleetApi: createPooledFleetApi(api, lease),
@@ -246,7 +263,27 @@ export async function executeHostedTask(task, {
       signal: combined.signal,
       workspace,
       onIteration: onProgress,
+      memory,
+      memories,
     });
+    if (memory?.learner) {
+      try {
+        await memory.learner.extract({
+          task: fullTask,
+          history: result.observations ?? result.history ?? [],
+          recalledFacts: memories,
+        });
+      } catch (err) {
+        console.warn(`[host] memory learner failed — continuing: ${err?.message ?? err}`);
+      }
+    }
+    if (memory?.runState) {
+      try {
+        await memory.runState.clear(fullTask.id ?? task.id ?? task.goal);
+      } catch (err) {
+        console.warn(`[host] memory run-state clear failed — continuing: ${err?.message ?? err}`);
+      }
+    }
     return { taskId: fullTask.id, traceId, routedTo, ...result };
   } finally {
     await lease.release();
