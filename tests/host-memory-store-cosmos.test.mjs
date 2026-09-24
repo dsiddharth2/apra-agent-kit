@@ -12,5 +12,5 @@ test('cosmos: createCosmosStore throws without key', async () => {
   assert.throws(() => createCosmosStore({ endpoint: 'https://test' }), /key/);
 });
 
-// Full contract tests require a real Cosmos instance — run via:
-// COSMOS_ENDPOINT=... COSMOS_KEY=... node --test tests/host-memory-store-cosmos.live.test.mjs
+// Shared contract coverage (store/get/update/remove/query/purge/count/open/close)
+// uses the mock client in tests/host-memory-store.test.mjs.
