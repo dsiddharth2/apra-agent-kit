@@ -100,7 +100,7 @@ export function createLongTermMemory({
         const remaining = effectiveLimit - rules.length;
 
         let facts = [];
-        if (remaining > 0) {
+        if (remaining > 0 && nonRuleKinds.length > 0) {
           const active = await store.query({ kinds: nonRuleKinds, tags, states: ['active'], limit: remaining });
           facts = [...active];
           if (facts.length < remaining) {

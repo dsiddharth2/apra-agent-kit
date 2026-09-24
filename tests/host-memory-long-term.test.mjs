@@ -33,6 +33,18 @@ test('rules always come back in recall', async () => {
   await ltm.close();
 });
 
+test('recall with kinds rule returns only rules', async () => {
+  const ltm = await makeLtm();
+  await ltm.open();
+  await ltm.store({ kind: 'rule', text: 'Never delete without backup', tags: ['safety'] });
+  await ltm.store({ kind: 'domain', text: 'DB on port 5432', tags: ['db'] });
+  const results = await ltm.recall({ kinds: ['rule'] });
+  assert.equal(results.length, 1);
+  assert.equal(results[0].kind, 'rule');
+  assert.equal(results[0].text, 'Never delete without backup');
+  await ltm.close();
+});
+
 test('recall respects recallLimit', async () => {
   const ltm = await makeLtm({ recallLimit: 3 });
   await ltm.open();
