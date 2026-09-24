@@ -1,52 +1,45 @@
 // host/tools/memory-tools.mjs
+import * as z from 'zod/v4';
+
+const memoryKind = z.enum(['domain', 'preference', 'pattern', 'procedure']);
+
 export const memoryTools = [
   {
     name: 'remember',
     description: 'Store a fact in long-term memory. Use this when you learn something reusable.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        text: { type: 'string', description: 'The fact to remember' },
-        kind: { type: 'string', enum: ['domain', 'preference', 'pattern', 'procedure'], description: 'Category of fact' },
-        tags: { type: 'array', items: { type: 'string' }, description: 'Tags for retrieval' },
-      },
-      required: ['text', 'kind'],
-    },
-    execute: null,
+    inputSchema: z.object({
+      text: z.string().describe('The fact to remember'),
+      kind: memoryKind.describe('Category of fact'),
+      tags: z.array(z.string()).optional().describe('Tags for retrieval'),
+    }),
+    run: null,
   },
   {
     name: 'recall',
     description: 'Retrieve relevant facts from long-term memory.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        tags: { type: 'array', items: { type: 'string' }, description: 'Tags to search for' },
-        kinds: { type: 'array', items: { type: 'string' }, description: 'Kinds to filter' },
-        query: { type: 'string', description: 'Text search query' },
-        limit: { type: 'number', description: 'Max results' },
-      },
-    },
-    execute: null,
+    inputSchema: z.object({
+      tags: z.array(z.string()).optional().describe('Tags to search for'),
+      kinds: z.array(z.string()).optional().describe('Kinds to filter'),
+      query: z.string().optional().describe('Text search query'),
+      limit: z.number().optional().describe('Max results'),
+    }),
+    run: null,
   },
   {
     name: 'forget',
     description: 'Remove a fact from long-term memory.',
-    inputSchema: {
-      type: 'object',
-      properties: { id: { type: 'string', description: 'Memory entry ID to remove' } },
-      required: ['id'],
-    },
-    execute: null,
+    inputSchema: z.object({
+      id: z.string().describe('Memory entry ID to remove'),
+    }),
+    run: null,
   },
   {
     name: 'promote',
     description: 'Mark a recalled fact as useful. This strengthens the memory so it stays accessible longer.',
-    inputSchema: {
-      type: 'object',
-      properties: { id: { type: 'string', description: 'Memory entry ID to promote' } },
-      required: ['id'],
-    },
-    execute: null,
+    inputSchema: z.object({
+      id: z.string().describe('Memory entry ID to promote'),
+    }),
+    run: null,
   },
 ];
 
@@ -58,7 +51,7 @@ export function withMemoryTools(registry, longTermMemory) {
     timeout: 30_000,
     retryable: false,
     tags: ['memory'],
-    execute: async ({ args }) => {
+    async run({ args }) {
       switch (tool.name) {
         case 'remember': {
           const result = await longTermMemory.store({ ...args, source: 'human' });

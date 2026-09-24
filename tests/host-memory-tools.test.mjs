@@ -26,7 +26,8 @@ test('remember tool stores with source human', async () => {
   const ltm = mockLtm();
   const registry = withMemoryTools([], ltm);
   const tool = registry.find(t => t.name === 'remember');
-  const result = await tool.execute({ args: { text: 'Test fact', kind: 'domain', tags: ['a'] } });
+  assert.equal(tool.inputSchema.safeParse({}).success, false);
+  const result = await tool.run({ args: { text: 'Test fact', kind: 'domain', tags: ['a'] } });
   assert.equal(result.ok, true);
 });
 
