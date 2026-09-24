@@ -259,14 +259,14 @@ export async function startHost({
     await adapter.stop();
     await jobs?.stop({ drainMs: dispatchConfig?.drainMs });
     await notifier?.stop();
-    await memory?.close();
+    try { await memory?.close(); } catch { /* preserve */ }
     await ownDispatcher?.close();
     await stopFleet?.();
   };
 
   const effectiveConfig = Object.freeze({ ...config, modules: Object.freeze({ ...config.modules, chat: chatConfig }) });
   return {
-    host: adapter, jobs, notifier, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry,
+    host: adapter, jobs, notifier, memory, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry,
     fleetApi: api, dispatcher: activeDispatcher, guardrailsMod, runLoopConfig, budgetsConfig, routerConfig,
   };
 }
