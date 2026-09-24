@@ -15,6 +15,7 @@ const { createPlanExecuteStrategy } = await import('../host/strategies/plan-exec
 const { runTask } = await import('../host/run-loop.mjs');
 const { executeHostedTask } = await import('../host/tasks.mjs');
 const { startHost, createHost } = await import('../host/index.mjs');
+const { createMemoryModule } = await import('../host/memory/index.mjs');
 
 function makeTools() {
   return [
@@ -244,9 +245,11 @@ test('runTask passes memory and memories through to the strategy', async () => {
       fleetApi: api,
       memories: [{ kind: 'domain', text: 'DB on port 5432' }],
       memory: {
-        workingContext: {
-          append(obs) { appended.push(obs); },
-          async forPrompt() { return appended; },
+        createRunWorkingContext() {
+          return {
+            append(obs) { appended.push(obs); },
+            async forPrompt() { return appended; },
+          };
         },
       },
     },
@@ -255,6 +258,88 @@ test('runTask passes memory and memories through to the strategy', async () => {
   assert.equal(appended.length, 1);
   assert.ok(api.promptCalls[0].prompt.includes('DB on port 5432'));
   assert.ok(api.promptCalls[0].prompt.includes('## Your Memory'));
+});
+
+test('sequential runs do not leak working-context observations', async () => {
+  const mod = await createMemoryModule({
+    workingContext: { enabled: true, maxTurns: 20 },
+  }, { fleetApi: {}, logger: console });
+  const contexts = [];
+  const create = mod.createRunWorkingContext.bind(mod);
+  mod.createRunWorkingContext = () => {
+    const ctx = create();
+    contexts.push(ctx);
+    return ctx;
+  };
+
+  const run = (city) => runTask(
+    { id: `t-${city}`, goal: `Weather in ${city}` },
+    {
+      strategy: 'open-ended',
+      tools: makeTools(),
+      fleetApi: createMockFleetApi({
+        members: rosterNames(1),
+        promptResponses: [
+          `\`\`\`tool_call\n{"tool": "weather", "args": {"city": "${city}"}}\n\`\`\``,
+          '```done\n{"result": "ok", "summary": "ok"}\n```',
+        ],
+      }),
+      memory: mod,
+    },
+  );
+
+  const first = await run('London');
+  const second = await run('Paris');
+  assert.equal(first.status, 'completed');
+  assert.equal(second.status, 'completed');
+  assert.equal(contexts.length, 2);
+
+  const promptB = await contexts[1].forPrompt();
+  assert.equal(promptB.length, 1);
+  assert.equal(promptB[0].args.city, 'Paris');
+  assert.ok(!promptB.some(obs => obs.args?.city === 'London'));
+  assert.equal((await contexts[0].forPrompt())[0].args.city, 'London');
+  assert.equal(mod.workingContext.history().length, 0);
+});
+
+test('plan-execute resume replays checkpoint observations into that run only', async () => {
+  const mod = await createMemoryModule({
+    workingContext: { enabled: true, maxTurns: 20 },
+  }, { fleetApi: {}, logger: console });
+  const prior = { type: 'observation', tool: 'archive', args: { id: 'prior-only' }, result: { ok: true } };
+  mod.runState = {
+    async load() {
+      return {
+        stepIndex: 1,
+        plan: { steps: [{ type: 'tool', tool: 'weather', args: { city: 'London' }, review: false }] },
+        observations: [prior],
+        idempotencyKeys: [],
+        strategy: 'plan-execute',
+      };
+    },
+    async hasIdempotencyKey() { return false; },
+    async save() {},
+    async addIdempotencyKey() {},
+  };
+  const contexts = [];
+  const create = mod.createRunWorkingContext.bind(mod);
+  mod.createRunWorkingContext = () => {
+    const ctx = create();
+    contexts.push(ctx);
+    return ctx;
+  };
+  const api = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: ['```done\n{"result": "ok", "summary": "ok"}\n```'],
+  });
+  const result = await runTask(
+    { id: 'resume-1', goal: 'Weather' },
+    { strategy: 'plan-execute', tools: makeTools(), fleetApi: api, memory: mod },
+  );
+  assert.equal(result.status, 'completed');
+  const replayed = await contexts[0].forPrompt();
+  assert.ok(replayed.some(obs => obs.tool === 'archive' && obs.args?.id === 'prior-only'));
+  assert.equal(mod.workingContext.history().length, 0);
 });
 
 test('executeHostedTask recalls before the run and learns after', async () => {

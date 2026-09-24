@@ -153,23 +153,18 @@ export async function startHost({
     signal,
   );
 
+  // Notifier first so memory events can publish. Jobs stay late-bound and
+  // start only after memory is open: a restored queued job calls runJob
+  // during jobs.start(), and that run must already see the memory module.
   let notifier = null;
+  let lateJobs = null;
   if (dispatchEnabled) {
     try {
-      // Notifier and jobs reference each other: SSE reads from jobs, jobs publish to notifier.
-      const late = { jobs: null };
+      lateJobs = { jobs: null };
       notifier = createNotifier(notifyConfig, {
-        jobs: { get: (id) => late.jobs.get(id), events: (id, o) => late.jobs.events(id, o), subscribe: (id, fn) => late.jobs.subscribe(id, fn) },
+        jobs: { get: (id) => lateJobs.jobs.get(id), events: (id, o) => lateJobs.jobs.events(id, o), subscribe: (id, fn) => lateJobs.jobs.subscribe(id, fn) },
       });
-      jobs = await createJobsBackend(dispatchConfig, {
-        runJob, notifier, capacity: activeDispatcher.capacity,
-        allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient, getDurableClient,
-      });
-      late.jobs = jobs;
-      await jobs.start();
-      toolRegistry.push(...withJobTools([], jobs));
     } catch (err) {
-      try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve original error */ }
       try { await ownDispatcher?.close(); } catch { /* preserve original error */ }
       try { await stopFleet?.(); } catch { /* preserve original error */ }
       throw err;
@@ -186,6 +181,24 @@ export async function startHost({
       console.warn(`[host] memory module failed to start — continuing without memory: ${err?.message ?? err}`);
       try { await memory?.close(); } catch { /* memory failures never halt the host */ }
       memory = null;
+    }
+  }
+
+  if (dispatchEnabled) {
+    try {
+      jobs = await createJobsBackend(dispatchConfig, {
+        runJob, notifier, capacity: activeDispatcher.capacity,
+        allowHttpCallbacks: notifyConfig.webhook.allowHttp, durableClient, getDurableClient,
+      });
+      lateJobs.jobs = jobs;
+      await jobs.start();
+      toolRegistry.push(...withJobTools([], jobs));
+    } catch (err) {
+      try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve original error */ }
+      try { await memory?.close(); } catch { /* preserve original error */ }
+      try { await ownDispatcher?.close(); } catch { /* preserve original error */ }
+      try { await stopFleet?.(); } catch { /* preserve original error */ }
+      throw err;
     }
   }
 

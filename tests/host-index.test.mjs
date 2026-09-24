@@ -330,6 +330,73 @@ test('startHost stops the dispatcher if jobs.start fails', async () => {
   }
 });
 
+test('startHost closes memory when jobs.start fails', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'host-jobs-fail-mem-'));
+  const dbPath = path.join(dir, 'jobs.db');
+  await fs.mkdir(dbPath);
+  await fs.writeFile(path.join(dir, 'host.config.mjs'), `export default {
+    name: 'jobs-fail-mem',
+    fleet: {},
+    comm: { adapter: 'express', host: '127.0.0.1' },
+    modules: {
+      runLoop: { enabled: true, strategy: 'open-ended' },
+      router: { enabled: false },
+      guardrails: { enabled: false },
+      budgets: { enabled: false },
+      chat: { enabled: false },
+      dispatch: { enabled: true, backend: 'in-process', store: { kind: 'sqlite', dbPath: ${JSON.stringify(dbPath)} } },
+      memory: {
+        enabled: true,
+        longTerm: {
+          enabled: true,
+          decay: { mode: 'none' },
+          dedup: { enabled: false },
+          store: () => ({
+            async open() {},
+            async close() { globalThis.__task15MemCloses = (globalThis.__task15MemCloses ?? 0) + 1; },
+            async store() {},
+            async get() { return null; },
+            async update() { return null; },
+            async remove() {},
+            async query() { return []; },
+            async purge() { return 0; },
+            async count() { return 0; },
+          }),
+        },
+      },
+    },
+  };`);
+  delete globalThis.__task15MemCloses;
+  let closed = 0;
+  const origClose = WorkerDispatcher.prototype.close;
+  WorkerDispatcher.prototype.close = async function (...args) {
+    closed += 1;
+    return origClose.apply(this, args);
+  };
+  try {
+    await assert.rejects(
+      () => startHost({
+        fleetApi: makeMockFleetApi(),
+        port: 0,
+        configDir: dir,
+        env: {
+          ...process.env,
+          WORKER_POOL_SIZE: '1',
+          WORKER_EPHEMERAL_MAX: '0',
+          WORKER_POOL_ROOT: dir,
+          NODE_ENV: 'test',
+        },
+      }),
+      /unable to open|SQLITE|not a database/i,
+    );
+    assert.equal(globalThis.__task15MemCloses, 1, 'memory must close when jobs fail to start');
+    assert.equal(closed, 1, 'owned dispatcher must be closed when jobs fail to start');
+  } finally {
+    WorkerDispatcher.prototype.close = origClose;
+    delete globalThis.__task15MemCloses;
+  }
+});
+
 test('startHost rejects Express-style authenticate middleware', async () => {
   const fleetApi = makeMockFleetApi();
   const dispatcher = await makeDispatcher();

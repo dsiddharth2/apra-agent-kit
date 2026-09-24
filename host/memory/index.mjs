@@ -44,9 +44,10 @@ export async function createMemoryModule(memoryConfig, { notifier, fleetApi, log
     level: memoryConfig?.events?.level ?? 'notifications',
   });
 
-  const wc = memoryConfig?.workingContext?.enabled
-    ? createWorkingContext({ fleetApi, ...memoryConfig.workingContext, logger })
+  const wcOptions = memoryConfig?.workingContext?.enabled
+    ? { fleetApi, ...memoryConfig.workingContext, logger }
     : null;
+  const wc = wcOptions ? createWorkingContext(wcOptions) : null;
 
   const ltConfig = memoryConfig?.longTerm
     ? interpolateConfigStrings(memoryConfig.longTerm, process.env)
@@ -85,6 +86,9 @@ export async function createMemoryModule(memoryConfig, { notifier, fleetApi, log
 
   return {
     workingContext: wc,
+    createRunWorkingContext() {
+      return wcOptions ? createWorkingContext(wcOptions) : null;
+    },
     runState: rs,
     longTerm: ltm,
     learner,

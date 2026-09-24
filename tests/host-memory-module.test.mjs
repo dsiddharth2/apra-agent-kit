@@ -41,6 +41,7 @@ test('createMemoryModule wires long-term memory, routes, and events', async () =
     },
   }, { notifier, fleetApi: {}, logger: console });
   assert.equal(mod.workingContext, null);
+  assert.equal(mod.createRunWorkingContext(), null);
   assert.equal(mod.runState, null);
   assert.equal(mod.learner, null);
   assert.ok(mod.longTerm);
@@ -62,6 +63,14 @@ test('createMemoryModule enables learner and run state only when configured', as
     longTerm: { enabled: true, autoLearn: true, store: () => fakeStore(), decay: { mode: 'none' } },
   }, { notifier: null, fleetApi: { executePrompt() {} }, logger: console });
   assert.ok(mod.workingContext);
+  const runA = mod.createRunWorkingContext();
+  const runB = mod.createRunWorkingContext();
+  assert.ok(runA);
+  assert.notEqual(runA, runB);
+  assert.notEqual(runA, mod.workingContext);
+  runA.append({ type: 'observation', tool: 'only-a' });
+  assert.equal((await runB.forPrompt()).length, 0);
+  assert.equal(mod.workingContext.history().length, 0);
   assert.ok(mod.runState);
   assert.ok(mod.learner);
   assert.ok(mod.longTerm);

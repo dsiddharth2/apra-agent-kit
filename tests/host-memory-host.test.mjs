@@ -10,6 +10,9 @@ import { WorkerPool } from '../pool/worker-pool.mjs';
 import { createMockFleetApi, rosterNames } from './helpers/mock-fleet.mjs';
 
 const { startHost } = await import('../host/index.mjs');
+const { createMemoryModule } = await import('../host/memory/index.mjs');
+const { createSqliteStore } = await import('../host/jobs/store/sqlite.mjs');
+const { createRecord } = await import('../host/jobs/record.mjs');
 
 async function makeDispatcher() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'host-mem-pool-'));
@@ -130,6 +133,53 @@ test('startHost skips memory when enabled is false', async () => {
     assert.ok(!started.registry.some(tool => tool.name === 'remember'));
     const missing = await httpCall(started.host.port(), 'GET', '/memory');
     assert.equal(missing.status, 404);
+  } finally {
+    await started.close();
+  }
+});
+
+test('restored queued job sees memory opened before jobs.start', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'host-mem-before-jobs-'));
+  const memDir = path.join(dir, 'memory');
+  const dbPath = path.join(dir, 'jobs.db');
+  const seeded = await createMemoryModule({
+    longTerm: { enabled: true, store: 'filesystem', dir: memDir, decay: { mode: 'none' } },
+  }, { logger: console });
+  await seeded.open();
+  await seeded.longTerm.store({ kind: 'rule', text: 'Never delete without backup', tags: ['safety'], source: 'human' });
+  await seeded.close();
+
+  const jobsStore = createSqliteStore({ dbPath });
+  await jobsStore.open();
+  await jobsStore.insert(createRecord({ goal: 'Inspect the weather in London' }, { id: 'job-restored' }));
+  await jobsStore.close();
+
+  await writeHostConfig(dir, `{
+    runLoop: { enabled: true, strategy: 'open-ended' },
+    router: { enabled: false },
+    guardrails: { enabled: false },
+    budgets: { enabled: false },
+    chat: { enabled: false },
+    dispatch: { enabled: true, backend: 'in-process', store: { kind: 'sqlite', dbPath: ${JSON.stringify(dbPath)} } },
+    memory: { longTerm: { enabled: true, store: 'filesystem', dir: ${JSON.stringify(memDir)}, decay: { mode: 'none' } } },
+  }`);
+
+  const fleetApi = createMockFleetApi({
+    members: rosterNames(1),
+    promptResponses: ['```done\n{"result": "done", "summary": "s"}\n```'],
+  });
+  const dispatcher = await makeDispatcher();
+  const started = await startHost({ fleetApi, dispatcher, port: 0, configDir: dir });
+  try {
+    let job = null;
+    for (let i = 0; i < 50; i++) {
+      job = await started.jobs.get('job-restored');
+      if (job && job.status !== 'queued' && job.status !== 'processing') break;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.equal(job?.status, 'completed');
+    assert.ok(fleetApi.promptCalls.some(call => call.prompt.includes('Never delete without backup')));
+    assert.ok(started.registry.some(tool => tool.name === 'remember'));
   } finally {
     await started.close();
   }
