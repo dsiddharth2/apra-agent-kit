@@ -67,6 +67,26 @@ test('runDecayPass purges unavailable entries when enabled', async () => {
   assert.equal(result.purged, 1);
 });
 
+test('createDecayTimer emits memory:decay when events are provided', async () => {
+  const store = await inMemoryStore();
+  await store.open();
+  const entry = createMemoryEntry({ kind: 'domain', text: 'Fact', tags: ['a'] });
+  entry.lastPromotedAt = new Date(Date.now() - 14 * 86400000).toISOString();
+  await store.store(entry);
+  const emitted = [];
+  const timer = createDecayTimer(store, {
+    events: { emit(type, payload) { emitted.push({ type, payload }); } },
+    logger: { info() {}, warn() {} },
+  });
+  const result = await timer.tick();
+  assert.ok(result.updated >= 1);
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0].type, 'memory:decay');
+  assert.equal(emitted[0].payload.updated, result.updated);
+  assert.equal(emitted[0].payload.processed, result.processed);
+  timer.stop();
+});
+
 test('createDecayTimer tick runs a pass', async () => {
   const store = await inMemoryStore();
   await store.open();

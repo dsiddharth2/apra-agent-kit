@@ -95,6 +95,23 @@ export function runMemoryStoreContract(label, createStore) {
     } finally { await store.close(); }
   });
 
+  test(`${label}: tag filter is applied before limit`, async () => {
+    const store = await createStore();
+    await store.open();
+    try {
+      const other = createMemoryEntry({ kind: 'domain', text: 'High strength other', tags: ['other'] });
+      other.retrievalStrength = 1;
+      const wanted = createMemoryEntry({ kind: 'domain', text: 'Lower strength wanted', tags: ['wanted'] });
+      wanted.retrievalStrength = 0.2;
+      await store.store(other);
+      await store.store(wanted);
+      const results = await store.query({ tags: ['wanted'], limit: 1 });
+      assert.equal(results.length, 1);
+      assert.equal(results[0].text, 'Lower strength wanted');
+      assert.ok(results[0].tags.includes('wanted'));
+    } finally { await store.close(); }
+  });
+
   test(`${label}: query respects limit`, async () => {
     const store = await createStore();
     await store.open();

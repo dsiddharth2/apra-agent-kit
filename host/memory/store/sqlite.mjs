@@ -78,7 +78,6 @@ export function createSqliteStore({ dbPath }) {
           get: db.prepare('SELECT * FROM memories WHERE id = ?'),
           update: db.prepare(`UPDATE memories SET kind=?, text=?, tags=?, source=?, confidence=?, storage_strength=?, retrieval_strength=?, state=?, stability=?, difficulty=?, reps=?, lapses=?, last_promoted_at=?, last_review_rating=?, last_used_at=?, use_count=?, metadata=? WHERE id=?`),
           remove: db.prepare('DELETE FROM memories WHERE id = ?'),
-          count: db.prepare('SELECT COUNT(*) as n FROM memories'),
         };
       } catch (err) {
         try { db.close(); } catch { /* preserve original */ }
@@ -130,10 +129,10 @@ export function createSqliteStore({ dbPath }) {
       let sql = 'SELECT * FROM memories';
       if (clauses.length) sql += ' WHERE ' + clauses.join(' AND ');
       sql += ' ORDER BY retrieval_strength DESC';
-      if (limit) { sql += ' LIMIT ?'; params.push(limit); }
       const rows = db.prepare(sql).all(...params);
       let results = rows.map(fromRow);
       if (tags?.length) results = results.filter(e => e.tags.some(t => tags.includes(t)));
+      if (limit) results = results.slice(0, limit);
       return results;
     },
 

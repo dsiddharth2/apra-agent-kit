@@ -199,6 +199,47 @@ test('plan-execute checkpoints after each step and skips idempotent steps on res
   assert.ok(!events.some(e => e.type === 'plan'));
 });
 
+test('failed checkpoint save does not record the idempotency key', async () => {
+  let snapshot = {
+      stepIndex: 0,
+      plan: { steps: [{ type: 'tool', tool: 'weather', args: { city: 'London' }, reason: 'x', review: false }] },
+      observations: [],
+      idempotencyKeys: ['previous-step'],
+      strategy: 'plan-execute',
+    };
+    const originalKeys = [...snapshot.idempotencyKeys];
+    let saves = 0;
+    let addCalls = 0;
+    const runState = {
+      async save() {
+        saves += 1;
+        return false;
+      },
+      async load() { return snapshot; },
+      async hasIdempotencyKey(_id, k) { return (snapshot.idempotencyKeys ?? []).includes(k); },
+      async addIdempotencyKey() {
+        addCalls += 1;
+        snapshot = { ...snapshot, idempotencyKeys: [...snapshot.idempotencyKeys, 'should-not-land'] };
+      },
+    };
+    const strategy = createPlanExecuteStrategy({
+      task: { id: 'task-save-fail', goal: 'Weather in London' },
+      tools: makeTools(),
+      fleetApi: createMockFleetApi({
+        members: rosterNames(1),
+        promptResponses: ['```done\n{"result": "ok", "summary": "ok"}\n```'],
+      }),
+      memory: { runState },
+    });
+    const events = [];
+    for await (const event of strategy.iterate()) events.push(event);
+    assert.ok(events.some(e => e.type === 'done'));
+    assert.equal(saves, 1);
+    assert.equal(addCalls, 0);
+    assert.deepEqual(snapshot.idempotencyKeys, originalKeys);
+    assert.equal(snapshot.stepIndex, 0);
+});
+
 test('plan-execute continues when run state save throws', async () => {
   const warnings = [];
   const orig = console.warn;
@@ -362,8 +403,9 @@ test('executeHostedTask recalls before the run and learns after', async () => {
       guardrailsMod: null,
       memory: {
         longTerm: {
-          async recall({ tags }) {
+          async recall({ tags, taskId }) {
             seen.tags = tags;
+            seen.taskId = taskId;
             return [
               { kind: 'rule', text: 'Never delete without backup' },
               { kind: 'domain', text: 'DB on port 5432' },
@@ -384,6 +426,7 @@ test('executeHostedTask recalls before the run and learns after', async () => {
     });
     assert.equal(out.status, 'completed');
     assert.deepEqual(seen.tags, ['inspect', 'weather', 'london']);
+    assert.equal(seen.taskId, 'task-15');
     assert.ok(api.promptCalls[0].prompt.includes('## Your Memory'));
     assert.ok(api.promptCalls[0].prompt.includes('Never delete without backup'));
     assert.equal(seen.learned.task.id, 'task-15');

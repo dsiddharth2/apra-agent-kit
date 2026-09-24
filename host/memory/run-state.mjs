@@ -1,3 +1,11 @@
+import { assertSafeMemoryId } from './store/interface.mjs';
+
+function checkpointId(taskId) {
+  const id = `rs-${taskId}`;
+  assertSafeMemoryId(id);
+  return id;
+}
+
 export function createRunState({ store, maxConsecutiveFailures = 3, logger = console } = {}) {
   let consecutiveFailures = 0;
 
@@ -5,7 +13,7 @@ export function createRunState({ store, maxConsecutiveFailures = 3, logger = con
     async save(taskId, snapshot) {
       try {
         const entry = {
-          id: `rs-${taskId}`,
+          id: checkpointId(taskId),
           kind: 'procedure',
           text: JSON.stringify(snapshot),
           tags: ['__run_state__'],
@@ -32,16 +40,18 @@ export function createRunState({ store, maxConsecutiveFailures = 3, logger = con
           await store.store(entry);
         }
         consecutiveFailures = 0;
+        return true;
       } catch (err) {
         consecutiveFailures++;
         const level = consecutiveFailures >= maxConsecutiveFailures ? 'error' : 'warn';
         logger[level]?.(`[memory/run-state] checkpoint save failed (${consecutiveFailures}x): ${err?.message ?? err}`);
+        return false;
       }
     },
 
     async load(taskId) {
       try {
-        const entry = await store.get(`rs-${taskId}`);
+        const entry = await store.get(checkpointId(taskId));
         if (!entry) return null;
         return JSON.parse(entry.text);
       } catch (err) {
@@ -52,7 +62,7 @@ export function createRunState({ store, maxConsecutiveFailures = 3, logger = con
 
     async clear(taskId) {
       try {
-        await store.remove(`rs-${taskId}`);
+        await store.remove(checkpointId(taskId));
       } catch (err) {
         logger.warn?.(`[memory/run-state] checkpoint clear failed: ${err?.message ?? err}`);
       }

@@ -31,6 +31,31 @@ test('remember tool stores with source human', async () => {
   assert.equal(result.ok, true);
 });
 
+test('remember tool returns ok false when the store rejects the entry', async () => {
+  const ltm = mockLtm();
+  ltm.store = async () => ({ action: 'rejected', reason: 'max_entries' });
+  const tool = withMemoryTools([], ltm).find(t => t.name === 'remember');
+  const result = await tool.run({ args: { text: 'Test fact', kind: 'domain' } });
+  assert.equal(result.ok, false);
+  assert.equal(result.action, 'rejected');
+  assert.equal(result.reason, 'max_entries');
+});
+
+test('recall tool emits memory:recall:tool', async () => {
+  const emitted = [];
+  const ltm = mockLtm();
+  await ltm.store({ id: 'mem-1', text: 'Fact', kind: 'domain' });
+  const events = { emit(type, payload) { emitted.push({ type, payload }); } };
+  const tool = withMemoryTools([], ltm, events).find(t => t.name === 'recall');
+  const result = await tool.run({ args: { tags: ['a'] } });
+  assert.equal(result.ok, true);
+  assert.equal(result.count, 1);
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0].type, 'memory:recall:tool');
+  assert.equal(emitted[0].payload.count, 1);
+  assert.equal(emitted[0].payload.facts.length, 1);
+});
+
 test('withMemoryTools returns original registry when ltm is null', () => {
   const base = [{ name: 'other' }];
   const registry = withMemoryTools(base, null);

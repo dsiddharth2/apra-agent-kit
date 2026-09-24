@@ -113,24 +113,25 @@ export function createPlanExecuteStrategy({
 
     async function saveCheckpoint(stepIndex, idempotencyKey) {
       if (!memory?.runState) return;
-      idempotencyKeys.add(idempotencyKey);
+      const nextKeys = new Set(idempotencyKeys);
+      nextKeys.add(idempotencyKey);
       try {
-        await memory.runState.save(taskKey, {
+        const saved = await memory.runState.save(taskKey, {
           stepIndex,
           plan: currentPlan,
           observations,
           budgetSnapshot: null,
-          idempotencyKeys: [...idempotencyKeys],
+          idempotencyKeys: [...nextKeys],
           strategy: 'plan-execute',
         });
+        // false means the write failed and the previous snapshot must stay.
+        // A missing return value is treated as success for test doubles.
+        if (saved === false) return;
       } catch (err) {
         console.warn(`[host] run-state save failed — continuing: ${err?.message ?? err}`);
+        return;
       }
-      try {
-        await memory.runState.addIdempotencyKey(taskKey, idempotencyKey);
-      } catch (err) {
-        console.warn(`[host] run-state idempotency key failed — continuing: ${err?.message ?? err}`);
-      }
+      idempotencyKeys = nextKeys;
     }
 
     async function* reviewPlan(plan) {

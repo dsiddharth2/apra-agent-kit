@@ -81,10 +81,11 @@ export function createCosmosStore({ endpoint, key, database, container: containe
         conditions.push(`CONTAINS(c.text, @pq, true)`);
         params.push({ name: '@pq', value: textQuery });
       }
-      const sql = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.retrievalStrength DESC OFFSET 0 LIMIT ${limit}`;
+      const sql = `SELECT * FROM c WHERE ${conditions.join(' AND ')} ORDER BY c.retrievalStrength DESC`;
       const { resources } = await container.items.query({ query: sql, parameters: params }).fetchAll();
       let results = resources.map(fromDoc);
       if (tags?.length) results = results.filter(e => e.tags.some(t => tags.includes(t)));
+      if (limit) results = results.slice(0, limit);
       return results;
     },
 

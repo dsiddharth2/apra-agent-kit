@@ -56,6 +56,49 @@ test('recall respects recallLimit', async () => {
   await ltm.close();
 });
 
+test('recall slices rules and facts together so the result never exceeds recallLimit', async () => {
+  const ltm = await makeLtm({ recallLimit: 2 });
+  await ltm.open();
+  await ltm.store({ kind: 'rule', text: 'Rule 1', tags: ['safety'] });
+  await ltm.store({ kind: 'rule', text: 'Rule 2', tags: ['safety'] });
+  await ltm.store({ kind: 'rule', text: 'Rule 3', tags: ['safety'] });
+  await ltm.store({ kind: 'domain', text: 'Fact', tags: ['db'] });
+  const results = await ltm.recall({ tags: ['db'] });
+  assert.equal(results.length, 2);
+  assert.ok(results.every(r => r.kind === 'rule'));
+  await ltm.close();
+});
+
+test('at maxEntries, dedup can reinforce or merge but a new entry is rejected', async () => {
+  const warnings = [];
+  const ltm = await makeLtm({ maxEntries: 1, logger: { warn(msg) { warnings.push(String(msg)); } } });
+  await ltm.open();
+  await ltm.store({ kind: 'domain', text: 'The staging DB resets every Sunday at 2am', tags: ['db'] });
+  const reinforced = await ltm.store({ kind: 'domain', text: 'The staging DB resets every Sunday at 2am x', tags: ['db'] });
+  assert.equal(reinforced.action, 'reinforced');
+  const merged = await ltm.store({ kind: 'domain', text: 'The staging DB resets every Sunday at 2am UTC', tags: ['db'], source: 'human' });
+  assert.equal(merged.action, 'merged');
+  const rejected = await ltm.store({ kind: 'domain', text: 'The UI theme is dark blue with orange accents', tags: ['ui'] });
+  assert.equal(rejected.action, 'rejected');
+  assert.equal(rejected.reason, 'max_entries');
+  assert.equal((await ltm.query({})).length, 1);
+  assert.ok(warnings.some(w => /maxEntries/.test(w)));
+  await ltm.close();
+});
+
+test('recall emits taskId when the caller provides one', async () => {
+  const emitted = [];
+  const ltm = await makeLtm({ events: { emit(type, payload) { emitted.push({ type, payload }); } } });
+  await ltm.open();
+  await ltm.store({ kind: 'domain', text: 'Port is 5432', tags: ['db'] });
+  await ltm.recall({ tags: ['db'], taskId: 'task-15' });
+  const recall = emitted.find(e => e.type === 'memory:recall');
+  assert.ok(recall);
+  assert.equal(recall.payload.taskId, 'task-15');
+  assert.equal(recall.payload.count, recall.payload.facts.length);
+  await ltm.close();
+});
+
 test('promote increases retrievalStrength', async () => {
   const ltm = await makeLtm();
   await ltm.open();

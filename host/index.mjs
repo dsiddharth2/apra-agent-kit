@@ -176,7 +176,7 @@ export async function startHost({
     try {
       memory = await createMemoryModule(memoryConfig, { notifier, fleetApi: api, logger: console });
       await memory.open();
-      if (memory?.longTerm) toolRegistry.push(...withMemoryTools([], memory.longTerm));
+      if (memory?.longTerm) toolRegistry.push(...withMemoryTools([], memory.longTerm, memory.events));
     } catch (err) {
       console.warn(`[host] memory module failed to start — continuing without memory: ${err?.message ?? err}`);
       try { await memory?.close(); } catch { /* memory failures never halt the host */ }

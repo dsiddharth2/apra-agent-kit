@@ -31,7 +31,7 @@ export function createDedupGate({
   }
 
   return {
-    async process(newEntry) {
+    async process(newEntry, { allowCreate = true } = {}) {
       const { match, score } = await findBestMatch(newEntry);
 
       if (match && score >= reinforceThreshold) {
@@ -55,6 +55,9 @@ export function createDedupGate({
         return { action: 'merged', entry: updated, matchId: match.id, score };
       }
 
+      if (!allowCreate) {
+        return { action: 'rejected', reason: 'max_entries', entry: newEntry, score: score ?? 0 };
+      }
       await store.store(newEntry);
       return { action: 'created', entry: newEntry, score: score ?? 0 };
     },

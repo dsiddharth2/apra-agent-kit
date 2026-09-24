@@ -47,8 +47,42 @@ test('save failure logs warning and continues', async () => {
     update: async () => { throw new Error('disk full'); },
   };
   const rs = createRunState({ store: failStore, logger: { warn: (m) => warnings.push(m), error: () => {} } });
-  await rs.save('task-3', { stepIndex: 1 });
+  assert.equal(await rs.save('task-3', { stepIndex: 1 }), false);
   assert.ok(warnings.length > 0);
+});
+
+test('a failed save does not rewrite the previous checkpoint', async () => {
+  const store = await makeStore();
+  let failUpdate = false;
+  const wrapped = {
+    get: (id) => store.get(id),
+    store: (entry) => store.store(entry),
+    update: async (id, patch) => {
+      if (failUpdate) throw new Error('disk full');
+      return store.update(id, patch);
+    },
+    remove: (id) => store.remove(id),
+  };
+  const rs = createRunState({ store: wrapped, logger: { warn() {}, error() {} } });
+  assert.equal(await rs.save('task-keep', { stepIndex: 0, idempotencyKeys: ['k0'] }), true);
+  failUpdate = true;
+  assert.equal(await rs.save('task-keep', { stepIndex: 1, idempotencyKeys: ['k0', 'k1'] }), false);
+  const loaded = await rs.load('task-keep');
+  assert.equal(loaded.stepIndex, 0);
+  assert.deepEqual(loaded.idempotencyKeys, ['k0']);
+  await store.close();
+});
+
+test('checkpoint ids that leave the store directory are rejected', async () => {
+  const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'mem-rs-escape-'));
+  const dir = path.join(parent, 'mem');
+  const store = createFilesystemStore({ dir });
+  await store.open();
+  const rs = createRunState({ store, logger: { warn() {}, error() {} } });
+  assert.equal(await rs.save('../outside', { stepIndex: 1, idempotencyKeys: ['k1'] }), false);
+  assert.equal(await rs.load('../outside'), null);
+  await assert.rejects(() => fs.access(path.join(parent, 'outside.json')), { code: 'ENOENT' });
+  await store.close();
 });
 
 test('idempotency key tracking', async () => {

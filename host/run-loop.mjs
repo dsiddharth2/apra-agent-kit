@@ -34,7 +34,12 @@ export async function runTask(task, {
   // learner stay shared; each run gets a fresh buffer so observations from
   // one task cannot leak into the next.
   const runMemory = memory
-    ? { ...memory, workingContext: memory.createRunWorkingContext?.() ?? null }
+    ? {
+        ...memory,
+        workingContext: typeof memory.createRunWorkingContext === 'function'
+          ? (memory.createRunWorkingContext() ?? null)
+          : (memory.workingContext ?? null),
+      }
     : memory;
 
   const strategyOpts = {

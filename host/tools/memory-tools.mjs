@@ -43,7 +43,7 @@ export const memoryTools = [
   },
 ];
 
-export function withMemoryTools(registry, longTermMemory) {
+export function withMemoryTools(registry, longTermMemory, events = null) {
   if (!longTermMemory) return registry;
   const bound = memoryTools.map(tool => ({
     ...tool,
@@ -55,10 +55,12 @@ export function withMemoryTools(registry, longTermMemory) {
       switch (tool.name) {
         case 'remember': {
           const result = await longTermMemory.store({ ...args, source: 'human' });
+          if (result?.action === 'rejected') return { ok: false, ...result };
           return { ok: true, ...result };
         }
         case 'recall': {
           const results = await longTermMemory.query(args);
+          events?.emit('memory:recall:tool', { count: results.length, facts: results });
           return { ok: true, count: results.length, facts: results };
         }
         case 'forget': {

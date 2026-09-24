@@ -15,6 +15,12 @@ export function assertMemoryStore(store) {
   return store;
 }
 
+export function assertSafeMemoryId(id) {
+  if (typeof id !== 'string' || id.length === 0 || id.includes('/') || id.includes('\\') || id.includes('..') || id.includes('\0')) {
+    throw new Error(`unsafe memory id: ${id}`);
+  }
+}
+
 export function createMemoryEntry({
   id, kind, text, tags = [], source = 'human', confidence,
   metadata = {},
@@ -22,6 +28,7 @@ export function createMemoryEntry({
   if (!VALID_KINDS.has(kind)) throw new Error(`invalid kind: ${kind}`);
   if (!VALID_SOURCES.has(source)) throw new Error(`invalid source: ${source}`);
   if (typeof text !== 'string' || !text.trim()) throw new Error('text is required');
+  if (id != null) assertSafeMemoryId(id);
   const now = new Date().toISOString();
   return {
     id: id ?? `mem-${randomUUID().slice(0, 12)}`,

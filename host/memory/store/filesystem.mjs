@@ -2,11 +2,19 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { assertSafeMemoryId } from './interface.mjs';
 
 export function createFilesystemStore({ dir }) {
   if (!dir) throw new Error('createFilesystemStore requires dir');
 
-  const filePath = (id) => path.join(dir, `${id}.json`);
+  const filePath = (id) => {
+    assertSafeMemoryId(id);
+    const root = path.resolve(dir);
+    const target = path.resolve(root, `${id}.json`);
+    const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+    if (!target.startsWith(prefix)) throw new Error(`unsafe memory id: ${id}`);
+    return target;
+  };
 
   async function readEntry(id) {
     try {

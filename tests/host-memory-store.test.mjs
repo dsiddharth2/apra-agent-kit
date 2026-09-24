@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runMemoryStoreContract } from './helpers/memory-store-contract.mjs';
 import { createMemoryEntry } from '../host/memory/store/interface.mjs';
+import { createLongTermMemory } from '../host/memory/long-term.mjs';
 
 // Redirect @azure/cosmos before the cosmos store opens. See mock-azure-cosmos-hooks.mjs.
 await register(new URL('./helpers/mock-azure-cosmos-hooks.mjs', import.meta.url), import.meta.url);
@@ -34,6 +35,46 @@ runMemoryStoreContract('cosmos', async () => {
     database: 'memory',
     container: 'entries',
   });
+});
+
+test('filesystem rejects ids that are not a single safe path segment', async () => {
+  const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'mem-fs-escape-'));
+  const dir = path.join(parent, 'mem');
+  const store = createFilesystemStore({ dir });
+  await store.open();
+  const outside = path.join(parent, 'outside.json');
+  const entry = createMemoryEntry({ kind: 'domain', text: 'stay inside', tags: ['a'] });
+  try {
+    await assert.rejects(() => store.store({ ...entry, id: '../outside' }), /unsafe memory id/);
+    await assert.rejects(() => store.get('../outside'), /unsafe memory id/);
+    await assert.rejects(() => store.get('nested/evil'), /unsafe memory id/);
+    await assert.rejects(() => store.get('nested\\evil'), /unsafe memory id/);
+    await assert.rejects(() => store.update('../outside', { text: 'nope' }), /unsafe memory id/);
+    await assert.rejects(() => store.remove('..'), /unsafe memory id/);
+    await store.store(entry);
+    await assert.rejects(() => store.update(entry.id, { id: '../outside', text: 'rewritten' }), /unsafe memory id/);
+    assert.equal((await store.get(entry.id)).text, 'stay inside');
+    await assert.rejects(() => fs.access(outside), { code: 'ENOENT' });
+    assert.throws(
+      () => createMemoryEntry({ id: '../outside', kind: 'domain', text: 'caller id' }),
+      /unsafe memory id/,
+    );
+
+    const ltm = createLongTermMemory({
+      store,
+      decayConfig: { mode: 'manual' },
+      dedupConfig: { enabled: false },
+      logger: { warn() {} },
+    });
+    await assert.rejects(() => ltm.store({
+      ...entry,
+      id: '../outside',
+      text: 'posted escape',
+    }), /unsafe memory id/);
+    await assert.rejects(() => fs.access(outside), { code: 'ENOENT' });
+  } finally {
+    await store.close();
+  }
 });
 
 test('sqlite: entries survive close and reopen', async () => {

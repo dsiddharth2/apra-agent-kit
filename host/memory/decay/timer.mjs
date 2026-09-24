@@ -7,6 +7,7 @@ export async function runDecayPass(store, {
   thresholds = DEFAULT_THRESHOLDS,
   purgeOnDecay = false,
   purgeAfterDays = 90,
+  events = null,
 } = {}) {
   const now = new Date();
   const candidates = await store.query({ states: ['active', 'dormant', 'silent'] });
@@ -31,7 +32,9 @@ export async function runDecayPass(store, {
     purged = await store.purge({ states: ['unavailable'], olderThan: cutoff });
   }
 
-  return { processed: candidates.length, updated, stateChanges, purged };
+  const result = { processed: candidates.length, updated, stateChanges, purged };
+  events?.emit('memory:decay', result);
+  return result;
 }
 
 export function createDecayTimer(store, {
@@ -40,11 +43,12 @@ export function createDecayTimer(store, {
   thresholds,
   purgeOnDecay = false,
   purgeAfterDays = 90,
+  events = null,
   logger = console,
 } = {}) {
   let handle = null;
 
-  const opts = { engine, thresholds, purgeOnDecay, purgeAfterDays };
+  const opts = { engine, thresholds, purgeOnDecay, purgeAfterDays, events };
   let inFlight = false;
 
   async function tick() {

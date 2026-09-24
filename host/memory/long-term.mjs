@@ -26,6 +26,7 @@ export function createLongTermMemory({
         thresholds: decayConfig.thresholds,
         purgeOnDecay: decayConfig.purgeOnDecay,
         purgeAfterDays: decayConfig.purgeAfterDays,
+        events,
         logger,
       })
     : null;
@@ -56,21 +57,21 @@ export function createLongTermMemory({
 
     async store(entry) {
       const memEntry = entry.id && entry.createdAt ? entry : createMemoryEntry(entry);
-      if (maxEntries) {
-        const current = await store.count({});
-        if (current >= maxEntries) {
-          logger.warn?.(`[memory/long-term] maxEntries (${maxEntries}) reached — rejecting new entry`);
-          return { action: 'rejected', reason: 'max_entries', entry: memEntry };
-        }
-      }
+      const atCap = Boolean(maxEntries) && (await store.count({})) >= maxEntries;
       let result;
       if (dedup) {
-        result = dedup.process(memEntry);
+        result = await dedup.process(memEntry, { allowCreate: !atCap });
+      } else if (atCap) {
+        result = { action: 'rejected', reason: 'max_entries', entry: memEntry };
       } else {
         await store.store(memEntry);
         result = { action: 'created', entry: memEntry };
       }
-      events?.emit('memory:store', { entry: (await result).entry ?? memEntry, dedupResult: (await result).action });
+      if (result.action === 'rejected') {
+        logger.warn?.(`[memory/long-term] maxEntries (${maxEntries}) reached — rejecting new entry`);
+        return result;
+      }
+      events?.emit('memory:store', { entry: result.entry ?? memEntry, dedupResult: result.action });
       return result;
     },
 
@@ -91,27 +92,31 @@ export function createLongTermMemory({
       return updated;
     },
 
-    async recall({ tags = [], kinds, limit } = {}) {
+    async recall({ tags = [], kinds, limit, taskId } = {}) {
       try {
         const effectiveLimit = limit ?? recallLimit;
         const rules = await store.query({ kinds: ['rule'], states: ['active'] });
 
         const nonRuleKinds = kinds?.filter(k => k !== 'rule') ?? ['domain', 'preference', 'pattern', 'procedure'];
-        const remaining = effectiveLimit - rules.length;
+        const room = Math.max(0, effectiveLimit - rules.length);
 
         let facts = [];
-        if (remaining > 0 && nonRuleKinds.length > 0) {
-          const active = await store.query({ kinds: nonRuleKinds, tags, states: ['active'], limit: remaining });
+        if (room > 0 && nonRuleKinds.length > 0) {
+          const active = await store.query({ kinds: nonRuleKinds, tags, states: ['active'], limit: room });
           facts = [...active];
-          if (facts.length < remaining) {
-            const dormant = await store.query({ kinds: nonRuleKinds, tags, states: ['dormant'], limit: remaining - facts.length });
+          if (facts.length < room) {
+            const dormant = await store.query({ kinds: nonRuleKinds, tags, states: ['dormant'], limit: room - facts.length });
             facts = [...facts, ...dormant];
           }
         }
 
         facts.sort((a, b) => b.retrievalStrength - a.retrievalStrength);
-        const result = [...rules, ...facts.slice(0, Math.max(0, remaining))];
-        events?.emit('memory:recall', { count: result.length, facts: result });
+        const result = [...rules, ...facts].slice(0, effectiveLimit);
+        events?.emit('memory:recall', {
+          count: result.length,
+          facts: result,
+          ...(taskId != null && taskId !== '' ? { taskId } : {}),
+        });
         return result;
       } catch (err) {
         events?.emit('memory:error', { tier: 'longTerm', error: err?.message ?? String(err), policy: recallFailurePolicy });

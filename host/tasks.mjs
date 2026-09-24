@@ -243,7 +243,7 @@ export async function executeHostedTask(task, {
     if (memory?.longTerm) {
       try {
         const tags = extractTaskTags(task);
-        const recalled = await memory.longTerm.recall({ tags });
+        const recalled = await memory.longTerm.recall({ tags, taskId: fullTask.id });
         memories = Array.isArray(recalled) ? recalled : [];
       } catch (err) {
         console.warn(`[host] memory recall failed — continuing: ${err?.message ?? err}`);

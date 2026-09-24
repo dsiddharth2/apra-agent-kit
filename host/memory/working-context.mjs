@@ -8,6 +8,7 @@ export function createWorkingContext({
 } = {}) {
   const raw = [];
   let compacted = null;
+  let compactedPrefixLength = -1;
 
   async function summarise(entries) {
     const text = entries.map((e, i) => `[${i + 1}] ${e.tool ?? e.type ?? 'step'}: ${e.text ?? e.result ?? JSON.stringify(e).slice(0, 200)}`).join('\n');
@@ -29,15 +30,25 @@ export function createWorkingContext({
     async forPrompt() {
       if (raw.length <= maxTurns) return [...raw];
 
-      const toCompact = raw.slice(0, raw.length - keepRecent);
+      const prefixLength = raw.length - keepRecent;
+      const toCompact = raw.slice(0, prefixLength);
       const recent = raw.slice(-keepRecent);
 
       if (compactionStrategy === 'summarise') {
+        if (compacted && compactedPrefixLength === prefixLength) {
+          return [compacted, ...recent];
+        }
         try {
           compacted = await summarise(toCompact);
+          compactedPrefixLength = prefixLength;
           return [compacted, ...recent];
         } catch (err) {
-          logger.warn?.(`[memory/working-context] summarise failed, falling back to ${fallbackStrategy}: ${err?.message ?? err}`);
+          const detail = err?.message ?? err;
+          if (fallbackStrategy !== 'sliding-window') {
+            logger.warn?.(`[memory/working-context] summarise failed; fallbackStrategy "${fallbackStrategy}" is unsupported, falling back to sliding-window: ${detail}`);
+          } else {
+            logger.warn?.(`[memory/working-context] summarise failed, falling back to sliding-window: ${detail}`);
+          }
           return slidingWindow(raw);
         }
       }
