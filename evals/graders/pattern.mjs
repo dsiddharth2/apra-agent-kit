@@ -1,0 +1,13 @@
+// evals/graders/pattern.mjs
+export default function pattern(expected, actual) {
+  const text = typeof actual.result === 'string'
+    ? actual.result
+    : JSON.stringify(actual.result ?? '');
+  const re = new RegExp(expected.pattern, expected.flags ?? '');
+  const matched = re.test(text);
+  return {
+    pass: matched,
+    score: matched ? 1 : 0,
+    reason: matched ? `matched /${expected.pattern}/` : `no match for /${expected.pattern}/`,
+  };
+}

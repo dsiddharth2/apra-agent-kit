@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import exactMatch from '../evals/graders/exact-match.mjs';
 import contains from '../evals/graders/contains.mjs';
+import pattern from '../evals/graders/pattern.mjs';
 
 test('exact-match: passes when result matches', () => {
   const expected = { result: { count: 3 } };
@@ -56,5 +57,35 @@ test('contains: stringifies non-string result', () => {
   const expected = { substrings: ['count', '3'] };
   const actual = { status: 'completed', result: { count: 3 }, history: [], budget: null };
   const r = contains(expected, actual);
+  assert.equal(r.pass, true);
+});
+
+test('pattern: passes when regex matches', () => {
+  const expected = { pattern: 'found \\d+ mismatches' };
+  const actual = { status: 'completed', result: 'found 3 mismatches in ledger', history: [], budget: null };
+  const r = pattern(expected, actual);
+  assert.equal(r.pass, true);
+  assert.equal(r.score, 1);
+});
+
+test('pattern: fails when regex does not match', () => {
+  const expected = { pattern: 'found \\d+ mismatches' };
+  const actual = { status: 'completed', result: 'no issues found', history: [], budget: null };
+  const r = pattern(expected, actual);
+  assert.equal(r.pass, false);
+  assert.equal(r.score, 0);
+});
+
+test('pattern: respects flags', () => {
+  const expected = { pattern: 'HELLO', flags: 'i' };
+  const actual = { status: 'completed', result: 'hello world', history: [], budget: null };
+  const r = pattern(expected, actual);
+  assert.equal(r.pass, true);
+});
+
+test('pattern: stringifies non-string result', () => {
+  const expected = { pattern: '"count":3' };
+  const actual = { status: 'completed', result: { count: 3 }, history: [], budget: null };
+  const r = pattern(expected, actual);
   assert.equal(r.pass, true);
 });
