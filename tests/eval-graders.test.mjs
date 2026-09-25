@@ -6,6 +6,7 @@ import contains from '../evals/graders/contains.mjs';
 import pattern from '../evals/graders/pattern.mjs';
 import trajectoryMatch from '../evals/graders/trajectory-match.mjs';
 import budgetCheck from '../evals/graders/budget-check.mjs';
+import llmJudge from '../evals/graders/llm-judge.mjs';
 
 const historyWith = (...tools) => tools.map(tool => ({ type: 'action', tool }));
 
@@ -191,4 +192,43 @@ test('budget-check: passes with warning when budget is null', () => {
   const r = budgetCheck(expected, actual);
   assert.equal(r.pass, true);
   assert.ok(r.reason.includes('no budget data'));
+});
+
+test('llm-judge: passes with positive judgment', async () => {
+  const fakeFleet = {
+    async executePrompt() {
+      return { content: [{ type: 'text', text: '{"pass": true, "score": 0.9, "reason": "correct"}' }] };
+    },
+  };
+  const expected = { rubric: 'Should return correct count', _task: { goal: 'Count items' }, _fleetApi: fakeFleet };
+  const actual = { status: 'completed', result: { count: 3 }, history: [], budget: null };
+  const r = await llmJudge(expected, actual);
+  assert.equal(r.pass, true);
+  assert.equal(r.score, 0.9);
+});
+
+test('llm-judge: fails with negative judgment', async () => {
+  const fakeFleet = {
+    async executePrompt() {
+      return { content: [{ type: 'text', text: '{"pass": false, "score": 0.2, "reason": "wrong format"}' }] };
+    },
+  };
+  const expected = { rubric: 'Should return structured data', _task: { goal: 'Format data' }, _fleetApi: fakeFleet };
+  const actual = { status: 'completed', result: 'just text', history: [], budget: null };
+  const r = await llmJudge(expected, actual);
+  assert.equal(r.pass, false);
+  assert.equal(r.score, 0.2);
+});
+
+test('llm-judge: handles unparseable response gracefully', async () => {
+  const fakeFleet = {
+    async executePrompt() {
+      return { content: [{ type: 'text', text: 'I think this is good' }] };
+    },
+  };
+  const expected = { rubric: 'test', _task: { goal: 'test' }, _fleetApi: fakeFleet };
+  const actual = { status: 'completed', result: null, history: [], budget: null };
+  const r = await llmJudge(expected, actual);
+  assert.equal(r.pass, false);
+  assert.ok(r.reason.includes('parse'));
 });
