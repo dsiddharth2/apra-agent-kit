@@ -2,11 +2,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-export async function findLatestReport(suiteName, reportDir) {
+export async function findLatestReport(suiteName, reportDir, { excludeTimestamp } = {}) {
   let files;
   try { files = await fs.readdir(reportDir); } catch { return null; }
+  const excludeSuffix = excludeTimestamp?.replace(/[:.]/g, '-');
   const matching = files
     .filter(f => f.startsWith(`${suiteName}-`) && f.endsWith('.json'))
+    .filter(f => !excludeSuffix || !f.includes(excludeSuffix))
     .sort()
     .reverse();
   if (matching.length === 0) return null;

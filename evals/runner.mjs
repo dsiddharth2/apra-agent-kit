@@ -261,7 +261,7 @@ function printReport(report) {
 async function printBaseline(report, baselineArg) {
   const reportDir = path.resolve('.', 'evals', 'reports');
   const baseline = baselineArg === 'latest'
-    ? await findLatestReport(report.suite, reportDir)
+    ? await findLatestReport(report.suite, reportDir, { excludeTimestamp: report.timestamp })
     : await findReportByTimestamp(report.suite, baselineArg, reportDir);
   if (!baseline) { console.log('  No baseline found.\n'); return; }
 
