@@ -1,8 +1,9 @@
 // evals/graders/pattern.mjs
 export default function pattern(expected, actual) {
-  const text = typeof actual.result === 'string'
+  const body = typeof actual.result === 'string'
     ? actual.result
     : JSON.stringify(actual.result ?? '');
+  const text = `${actual.status}\n${body}`;
   const re = new RegExp(expected.pattern, expected.flags ?? '');
   const matched = re.test(text);
   return {

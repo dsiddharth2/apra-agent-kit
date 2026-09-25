@@ -2,30 +2,7 @@
   "goals": {
     "Exceed budget": [
       "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"London\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Tokyo\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"NYC\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"London\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Tokyo\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"NYC\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"London\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Tokyo\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"NYC\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"London\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Tokyo\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"NYC\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"London\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Tokyo\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"NYC\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"London\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Tokyo\"}}\n```",
-      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"NYC\"}}\n```",
-      "```done\n{\"result\":\"done\",\"summary\":\"done\"}\n```"
+      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"}}\n```"
     ]
   },
   "default": [

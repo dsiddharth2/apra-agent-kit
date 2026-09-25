@@ -44,7 +44,7 @@
       "id": "demo-004",
       "description": "Task exceeds budget",
       "tags": ["error-handling"],
-      "task": { "goal": "Exceed budget" },
+      "task": { "goal": "Exceed budget", "constraints": { "maxIterations": 2 } },
       "fleet": { "script": "./scripts/demo-error.json" },
       "scorers": [
         { "name": "budget-exceeded", "grader": "exact-match", "expected": { "status": "budget_exceeded" } }

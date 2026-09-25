@@ -29,6 +29,9 @@ test('runner: loads suite and runs all cases', async () => {
   assert.notEqual(correctness.reason, 'status matched, no result check');
   assert.match(correctness.reason, /status/);
   assert.match(correctness.reason, /completed/);
+  // Host snapshots store estimatedCostUsd, not estimatedCost.
+  assert.equal(typeof s001.cost, 'number');
+  assert.ok(s001.cost > 0, `cost should use estimatedCostUsd, got ${s001.cost}`);
 
   const s002 = report.results.find((r) => r.id === 's-002');
   assert.ok(s002);
@@ -113,6 +116,97 @@ test('runner: thrown execution is not graded as a failed actual', async () => {
   } finally {
     if (prev === undefined) delete process.env.WORKER_POOL_SIZE;
     else process.env.WORKER_POOL_SIZE = prev;
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('runner: unknown grader is a scorer error, not a rejected case', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'eval-grader-'));
+  const script = path.join(fixtureDir, 'scripts', 'simple-happy.json');
+  await fs.writeFile(path.join(root, 'bad-grader.json'), JSON.stringify({
+    suite: 'bad-grader',
+    fleet: 'scripted',
+    defaults: { timeout: 5000, strategy: 'open-ended' },
+    cases: [{
+      id: 'g-001',
+      description: 'unknown grader',
+      tags: ['grader'],
+      task: { goal: 'Say hello' },
+      fleet: { script },
+      scorers: [
+        { name: 'correctness', grader: 'exact-match', expected: { status: 'completed' } },
+        { name: 'mystery', grader: 'not-a-grader' },
+      ],
+    }],
+  }));
+  try {
+    const report = await runSuite('bad-grader', {
+      suiteDir: root,
+      reportDir: null,
+      parallel: false,
+      configDir: path.join(path.dirname(fileURLToPath(import.meta.url)), '..'),
+    });
+    assert.equal(report.summary.failed, 1);
+    assert.equal(report.results[0].status, 'completed');
+    assert.equal(report.results[0].scores.correctness.pass, true);
+    const mystery = report.results[0].scores.mystery;
+    assert.equal(mystery.pass, false);
+    assert.equal(mystery.score, 0);
+    assert.match(mystery.reason, /grader error: unknown grader/);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('runner: modules.evals defaults apply and explicit options win', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'eval-cfg-'));
+  const configDir = path.join(root, 'cfg');
+  const reportDir = path.join(root, 'reports');
+  const blockedReportDir = path.join(root, 'should-not-write');
+  const overrideConfigDir = path.join(root, 'cfg-override');
+  await fs.mkdir(configDir);
+  await fs.mkdir(overrideConfigDir);
+  const hostShell = (evals) => `export default {
+    name: 'eval-defaults',
+    fleet: {},
+    comm: { adapter: 'express' },
+    modules: { evals: ${JSON.stringify(evals)} },
+  };\n`;
+  await fs.writeFile(path.join(configDir, 'host.config.mjs'), hostShell({
+    suiteDir: fixtureDir,
+    reportDir,
+    parallel: true,
+  }));
+  await fs.writeFile(path.join(overrideConfigDir, 'host.config.mjs'), hostShell({
+    suiteDir: path.join(root, 'missing-suites'),
+    reportDir: blockedReportDir,
+    parallel: true,
+  }));
+  try {
+    const fromConfig = await runSuite('simple', { configDir });
+    assert.equal(fromConfig.results.length, 2);
+    assert.equal(fromConfig.summary.passed, 2);
+    const written = await fs.readdir(reportDir);
+    assert.equal(written.length, 1);
+    assert.match(written[0], /^simple-/);
+
+    const overridden = await runSuite('simple', {
+      configDir: overrideConfigDir,
+      suiteDir: fixtureDir,
+      reportDir: null,
+    });
+    assert.equal(overridden.results.length, 2);
+    await assert.rejects(fs.access(blockedReportDir));
+
+    const missing = await runSuite('simple', {
+      configDir: path.join(root, 'absent'),
+      suiteDir: fixtureDir,
+      reportDir: null,
+    });
+    assert.equal(missing.summary.total, 2);
+    assert.match(missing.results[0].scores.correctness.reason, /task error:/);
+    assert.match(missing.results[0].scores.correctness.reason, /host\.config/);
+  } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
 });

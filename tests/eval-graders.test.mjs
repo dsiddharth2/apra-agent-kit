@@ -106,6 +106,15 @@ test('pattern: stringifies non-string result', () => {
   assert.equal(r.pass, true);
 });
 
+test('pattern: includes status before the result text', () => {
+  const expected = { pattern: 'completed|failed' };
+  const actual = { status: 'failed', result: 'destination unavailable', history: [], budget: null };
+  const r = pattern(expected, actual);
+  assert.equal(r.pass, true);
+  assert.equal(r.score, 1);
+  assert.match(r.reason, /matched/);
+});
+
 test('trajectory-match: strict passes with exact order', () => {
   const expected = { mode: 'strict', trajectory: [{ tool: 'weather' }, { tool: 'forecast' }] };
   const actual = { status: 'completed', result: null, history: historyWith('weather', 'forecast'), budget: null };

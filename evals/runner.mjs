@@ -1,5 +1,6 @@
 // evals/runner.mjs
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { resolveGrader } from './graders/index.mjs';
@@ -31,7 +32,7 @@ async function createFleet(suiteFleet, caseFleet, suiteDir) {
   return { fleetApi: createScriptedFleetApi(script), stop: async () => {} };
 }
 
-async function runCase(testCase, suite, { configDir }) {
+async function runCase(testCase, suite, { configDir, parallel }) {
   const start = Date.now();
   const timeout = testCase.timeout ?? suite.defaults?.timeout ?? 30000;
   const strategy = testCase.strategy ?? suite.defaults?.strategy ?? undefined;
@@ -53,28 +54,35 @@ async function runCase(testCase, suite, { configDir }) {
 
   const api = fleet.fleetApi ?? fleet;
   let actual;
+  let caseWorkdir;
   try {
     const { createWorkerDispatcher } = await import('../pool/index.mjs');
     const { extendRegistry } = await import('../host/tools/registry.mjs');
     const { executeHostedTask } = await import('../host/tasks.mjs');
     const { loadConfig } = await import('../host/config.mjs');
 
-    const dispatcher = await createWorkerDispatcher({ fleetApi: api, env: { ...process.env, NODE_ENV: 'test' } });
-    const config = await loadConfig(configDir ?? '.', { ...process.env, NODE_ENV: 'test' });
-    const toolRegistry = extendRegistry();
-    const runLoopConfig = {
-      ...(config.modules?.runLoop ?? {}),
-      enabled: true,
-      ...(strategy ? { strategy } : {}),
-      agentName: config.name ?? 'eval-agent',
-      agentDescription: config.agentDescription ?? '',
-    };
-    const routerConfig = config.modules?.router ?? { enabled: false };
-    const budgetsConfig = config.modules?.budgets ?? null;
-
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort('timeout'), timeout);
+    const dispatcherEnv = { ...process.env, NODE_ENV: 'test' };
+    if (parallel) {
+      caseWorkdir = await fs.mkdtemp(path.join(os.tmpdir(), 'eval-case-'));
+      dispatcherEnv.WORKER_POOL_ROOT = caseWorkdir;
+    }
+    const dispatcher = await createWorkerDispatcher({ fleetApi: api, env: dispatcherEnv });
+    let timer;
     try {
+      const ac = new AbortController();
+      timer = setTimeout(() => ac.abort('timeout'), timeout);
+      const config = await loadConfig(configDir ?? '.', { ...process.env, NODE_ENV: 'test' });
+      const toolRegistry = extendRegistry();
+      const runLoopConfig = {
+        ...(config.modules?.runLoop ?? {}),
+        enabled: true,
+        ...(strategy ? { strategy } : {}),
+        agentName: config.name ?? 'eval-agent',
+        agentDescription: config.agentDescription ?? '',
+      };
+      const routerConfig = config.modules?.router ?? { enabled: false };
+      const budgetsConfig = config.modules?.budgets ?? null;
+
       actual = await executeHostedTask(
         { id: testCase.id, ...testCase.task, ...(strategy ? { strategy } : {}) },
         { api, activeDispatcher: dispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod: null, jobs: null, signal: ac.signal },
@@ -95,12 +103,12 @@ async function runCase(testCase, suite, { configDir }) {
       status: 'failed', durationMs: Date.now() - start, cost: 0, scores: errorScores,
     };
   } finally {
+    if (caseWorkdir) await fs.rm(caseWorkdir, { recursive: true, force: true }).catch(() => {});
     await fleet.stop?.();
   }
 
   const scores = {};
   for (const scorer of testCase.scorers) {
-    const graderFn = resolveGrader(scorer.grader, { suiteDir });
     const scorerInput = {
       ...scorer,
       ...(scorer.expected ?? {}),
@@ -108,6 +116,7 @@ async function runCase(testCase, suite, { configDir }) {
       _fleetApi: api,
     };
     try {
+      const graderFn = resolveGrader(scorer.grader, { suiteDir });
       const result = await graderFn(scorerInput, actual);
       scores[scorer.name] = { ...result, grader: scorer.grader };
     } catch (err) {
@@ -118,7 +127,7 @@ async function runCase(testCase, suite, { configDir }) {
   return {
     id: testCase.id, description: testCase.description ?? '', tags: testCase.tags ?? [],
     status: actual.status, durationMs: Date.now() - start,
-    cost: actual.budget?.estimatedCost ?? 0, scores,
+    cost: actual.budget?.estimatedCost ?? actual.budget?.estimatedCostUsd ?? 0, scores,
   };
 }
 
@@ -139,11 +148,58 @@ function buildSummary(results) {
   return { total: results.length, passed, failed, cost: Math.round(cost * 1000) / 1000, wallMs, byTag };
 }
 
-export async function runSuite(suiteName, {
-  tags, parallel = false, configDir, baseline, suiteDir, reportDir,
-} = {}) {
-  const effectiveSuiteDir = suiteDir ?? path.resolve('.', 'evals', 'suites');
-  const effectiveReportDir = reportDir === null ? null : (reportDir ?? path.resolve('.', 'evals', 'reports'));
+async function readEvalsConfig(configDir) {
+  const dir = configDir ?? '.';
+  const mjsPath = path.join(dir, 'host.config.mjs');
+  try {
+    const mod = await import(pathToFileURL(mjsPath).href);
+    const evals = mod.default?.modules?.evals;
+    return evals && typeof evals === 'object' ? evals : {};
+  } catch (err) {
+    const missing = err.code === 'ERR_MODULE_NOT_FOUND' || /Cannot find module/.test(err.message ?? '');
+    if (!missing) return {};
+  }
+  try {
+    const text = await fs.readFile(path.join(dir, 'host.config.json'), 'utf8');
+    const evals = JSON.parse(text)?.modules?.evals;
+    return evals && typeof evals === 'object' ? evals : {};
+  } catch {
+    return {};
+  }
+}
+
+function configPath(value, fallback) {
+  if (typeof value === 'string' && value.length > 0) return path.resolve(value);
+  return fallback;
+}
+
+// CLI and explicit options win. Missing host config falls back to the hardcoded dirs.
+async function resolveEvalDefaults(options = {}) {
+  const needConfig = options.suiteDir === undefined
+    || options.reportDir === undefined
+    || options.parallel === undefined;
+  const evals = needConfig ? await readEvalsConfig(options.configDir) : {};
+
+  const suiteDir = options.suiteDir ?? configPath(evals.suiteDir, path.resolve('.', 'evals', 'suites'));
+  const reportDir = options.reportDir === null
+    ? null
+    : (options.reportDir !== undefined
+      ? options.reportDir
+      : configPath(evals.reportDir, path.resolve('.', 'evals', 'reports')));
+  const parallel = options.parallel !== undefined
+    ? options.parallel
+    : (typeof evals.parallel === 'boolean' ? evals.parallel : false);
+
+  return { suiteDir, reportDir, parallel };
+}
+
+export async function runSuite(suiteName, options = {}) {
+  const { tags, configDir } = options;
+  const {
+    suiteDir: effectiveSuiteDir,
+    reportDir: effectiveReportDir,
+    parallel: effectiveParallel,
+  } = await resolveEvalDefaults(options);
   const suite = await loadSuite(suiteName, effectiveSuiteDir);
   let cases = suite.cases;
   if (tags && tags.length > 0) {
@@ -152,12 +208,12 @@ export async function runSuite(suiteName, {
   }
 
   let results;
-  if (parallel) {
-    results = await Promise.all(cases.map(c => runCase(c, suite, { configDir })));
+  if (effectiveParallel) {
+    results = await Promise.all(cases.map(c => runCase(c, suite, { configDir, parallel: true })));
   } else {
     results = [];
     for (const c of cases) {
-      results.push(await runCase(c, suite, { configDir }));
+      results.push(await runCase(c, suite, { configDir, parallel: false }));
     }
   }
 
@@ -179,12 +235,17 @@ export async function runSuite(suiteName, {
 }
 
 export async function runAllSuites(options = {}) {
-  const suiteDir = options.suiteDir ?? path.resolve('.', 'evals', 'suites');
-  const files = await fs.readdir(suiteDir);
+  const resolved = await resolveEvalDefaults(options);
+  const files = await fs.readdir(resolved.suiteDir);
   const suiteNames = files.filter(f => f.endsWith('.json')).map(f => f.replace('.json', ''));
   const reports = [];
   for (const name of suiteNames) {
-    reports.push(await runSuite(name, { ...options, suiteDir }));
+    reports.push(await runSuite(name, {
+      ...options,
+      suiteDir: resolved.suiteDir,
+      reportDir: resolved.reportDir,
+      parallel: resolved.parallel,
+    }));
   }
   return reports;
 }
@@ -207,20 +268,29 @@ if (isMain) {
 
   const suiteName = get('--suite');
   const tag = get('--tag');
-  const parallel = has('--parallel');
   const baselineArg = get('--baseline');
+  const resolved = await resolveEvalDefaults({
+    parallel: has('--parallel') ? true : undefined,
+  });
+  const runOptions = {
+    tags: tag ? [tag] : undefined,
+    parallel: resolved.parallel,
+    baseline: baselineArg,
+    suiteDir: resolved.suiteDir,
+    reportDir: resolved.reportDir,
+  };
 
   try {
     if (suiteName) {
-      const report = await runSuite(suiteName, { tags: tag ? [tag] : undefined, parallel, baseline: baselineArg });
+      const report = await runSuite(suiteName, runOptions);
       printReport(report);
-      if (baselineArg) await printBaseline(report, baselineArg);
+      if (baselineArg) await printBaseline(report, baselineArg, resolved.reportDir);
       process.exit(report.summary.failed > 0 ? 1 : 0);
     } else {
-      const reports = await runAllSuites({ tags: tag ? [tag] : undefined, parallel, baseline: baselineArg });
+      const reports = await runAllSuites(runOptions);
       for (const report of reports) {
         printReport(report);
-        if (baselineArg) await printBaseline(report, baselineArg);
+        if (baselineArg) await printBaseline(report, baselineArg, resolved.reportDir);
       }
       const anyFailed = reports.some(r => r.summary.failed > 0);
       process.exit(anyFailed ? 1 : 0);
@@ -258,8 +328,8 @@ function printReport(report) {
   console.log('');
 }
 
-async function printBaseline(report, baselineArg) {
-  const reportDir = path.resolve('.', 'evals', 'reports');
+async function printBaseline(report, baselineArg, reportDir = path.resolve('.', 'evals', 'reports')) {
+  if (!reportDir) { console.log('  No baseline found.\n'); return; }
   const baseline = baselineArg === 'latest'
     ? await findLatestReport(report.suite, reportDir, { excludeTimestamp: report.timestamp })
     : await findReportByTimestamp(report.suite, baselineArg, reportDir);
