@@ -1,31 +1,12 @@
 {
   "goals": {
     "Plan a detailed world tour": [
-      "```plan\n{\"steps\":[{\"type\":\"tool\",\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"},\"reason\":\"check Paris weather\",\"review\":false},{\"type\":\"tool\",\"tool\":\"weather\",\"args\":{\"city\":\"Tokyo\"},\"reason\":\"check Tokyo weather\",\"review\":false},{\"type\":\"tool\",\"tool\":\"destination-overview\",\"args\":{\"destination\":\"Paris\"},\"reason\":\"Paris overview\",\"review\":false},{\"type\":\"tool\",\"tool\":\"destination-overview\",\"args\":{\"destination\":\"Tokyo\"},\"reason\":\"Tokyo overview\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false},{\"type\":\"reason\",\"prompt\":\".\",\"review\":false}]}\n```",
+      "```plan\n{\"steps\":[{\"type\":\"tool\",\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"},\"reason\":\"check Paris weather\",\"review\":false},{\"type\":\"tool\",\"tool\":\"weather\",\"args\":{\"city\":\"Tokyo\"},\"reason\":\"check Tokyo weather\",\"review\":false},{\"type\":\"tool\",\"tool\":\"destination-overview\",\"args\":{\"destination\":\"Paris\"},\"reason\":\"Paris overview\",\"review\":false},{\"type\":\"tool\",\"tool\":\"destination-overview\",\"args\":{\"destination\":\"Tokyo\"},\"reason\":\"Tokyo overview\",\"review\":false}]}\n```",
       "```review\n{\"approved\":true}\n```",
       "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"London\"}}\n```",
       "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"NYC\"}}\n```",
       "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Sydney\"}}\n```",
-      "```done\n{\"result\":\"World tour planned\",\"summary\":\"done\"}\n```",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      ".",
-      "."
+      "```done\n{\"result\":\"World tour planned\",\"summary\":\"done\"}\n```"
     ]
   },
   "tools": {

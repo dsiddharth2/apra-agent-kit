@@ -180,7 +180,10 @@
         "error-handling"
       ],
       "task": {
-        "goal": "Plan a detailed world tour"
+        "goal": "Plan a detailed world tour",
+        "constraints": {
+          "maxIterations": 2
+        }
       },
       "strategy": "plan-execute",
       "fleet": {
