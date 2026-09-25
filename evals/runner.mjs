@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { resolveGrader } from './graders/index.mjs';
+import { findLatestReport, findReportByTimestamp, diffReports } from './baseline.mjs';
 
 async function loadSuite(suiteName, suiteDir) {
   const suitePath = path.join(suiteDir, `${suiteName}.json`);
@@ -258,5 +259,20 @@ function printReport(report) {
 }
 
 async function printBaseline(report, baselineArg) {
-  // Baseline comparison — implemented in Task 9
+  const reportDir = path.resolve('.', 'evals', 'reports');
+  const baseline = baselineArg === 'latest'
+    ? await findLatestReport(report.suite, reportDir)
+    : await findReportByTimestamp(report.suite, baselineArg, reportDir);
+  if (!baseline) { console.log('  No baseline found.\n'); return; }
+
+  const diff = diffReports(baseline, report);
+  console.log(`  Baseline: ${baseline.timestamp}\n`);
+  for (const f of diff.fixed) console.log(`  ${f.id}  FIXED`);
+  for (const r of diff.regressions) console.log(`  ${r.id}  REGRESSION`);
+  for (const s of diff.scoreChanges) console.log(`  ${s.id}  ${s.scorer} ${s.from}→${s.to}`);
+  for (const a of diff.added) console.log(`  ${a.id}  NEW`);
+  for (const r of diff.removed) console.log(`  ${r.id}  REMOVED`);
+
+  const bSummary = baseline.summary ?? {};
+  console.log(`\n  ${report.summary.passed}/${report.summary.total} passed (was ${bSummary.passed ?? '?'}/${bSummary.total ?? '?'}) · ${diff.fixed.length} fixed · ${diff.regressions.length} regressions\n`);
 }
