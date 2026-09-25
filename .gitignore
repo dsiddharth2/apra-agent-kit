@@ -20,3 +20,4 @@ __azurite_db_*
 __blobstorage__/
 logs/
 .token
+evals/reports/
