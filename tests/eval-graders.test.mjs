@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import exactMatch from '../evals/graders/exact-match.mjs';
+import contains from '../evals/graders/contains.mjs';
 
 test('exact-match: passes when result matches', () => {
   const expected = { result: { count: 3 } };
@@ -30,5 +31,30 @@ test('exact-match: passes with status match', () => {
   const expected = { status: 'budget_exceeded' };
   const actual = { status: 'budget_exceeded', result: null, history: [], budget: null };
   const r = exactMatch(expected, actual);
+  assert.equal(r.pass, true);
+});
+
+test('contains: passes when all substrings found', () => {
+  const expected = { substrings: ['invoice', 'mismatch'] };
+  const actual = { status: 'completed', result: 'Found invoice mismatch in ledger', history: [], budget: null };
+  const r = contains(expected, actual);
+  assert.equal(r.pass, true);
+  assert.equal(r.score, 1);
+});
+
+test('contains: fails with partial match', () => {
+  const expected = { substrings: ['invoice', 'mismatch', 'total'] };
+  const actual = { status: 'completed', result: 'Found invoice in ledger', history: [], budget: null };
+  const r = contains(expected, actual);
+  assert.equal(r.pass, false);
+  assert.ok(r.score > 0.3 && r.score < 0.4); // 1/3
+  assert.ok(r.reason.includes('mismatch'));
+  assert.ok(r.reason.includes('total'));
+});
+
+test('contains: stringifies non-string result', () => {
+  const expected = { substrings: ['count', '3'] };
+  const actual = { status: 'completed', result: { count: 3 }, history: [], budget: null };
+  const r = contains(expected, actual);
   assert.equal(r.pass, true);
 });
