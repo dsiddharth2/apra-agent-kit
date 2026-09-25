@@ -16,6 +16,17 @@ test('runner: loads suite and runs all cases', async () => {
   assert.equal(report.suite, 'simple');
   assert.equal(report.results.length, 2);
   assert.equal(report.summary.total, 2);
+
+  const s001 = report.results.find((r) => r.id === 's-001');
+  assert.ok(s001);
+  assert.ok(
+    Object.values(s001.scores).every((s) => s.pass),
+    `s-001 scorers: ${JSON.stringify(s001.scores)}`,
+  );
+
+  const s002 = report.results.find((r) => r.id === 's-002');
+  assert.ok(s002);
+  assert.equal(s002.scores.content.pass, true, JSON.stringify(s002.scores.content));
 });
 
 test('runner: report has correct structure', async () => {

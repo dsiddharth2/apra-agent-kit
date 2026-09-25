@@ -91,7 +91,12 @@ async function runCase(testCase, suite, { configDir }) {
   const scores = {};
   for (const scorer of testCase.scorers) {
     const graderFn = resolveGrader(scorer.grader, { suiteDir });
-    const scorerInput = { ...scorer, _task: testCase.task, _fleetApi: api };
+    const scorerInput = {
+      ...scorer,
+      ...(scorer.expected ?? {}),
+      _task: testCase.task,
+      _fleetApi: api,
+    };
     try {
       const result = await graderFn(scorerInput, actual);
       scores[scorer.name] = { ...result, grader: scorer.grader };
