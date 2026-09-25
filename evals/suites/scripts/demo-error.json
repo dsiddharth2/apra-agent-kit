@@ -1,0 +1,18 @@
+{
+  "goals": {
+    "Exceed budget": [
+      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"London\"}}\n```",
+      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"}}\n```"
+    ]
+  },
+  "default": [
+    "```tool_call\n{\"tool\":\"nonexistent\",\"args\":{}}\n```",
+    "```done\n{\"result\":{\"error\":\"tool_not_found\"},\"summary\":\"failed\"}\n```"
+  ],
+  "tools": {
+    "weather": {
+      "ok": true,
+      "temperature": "20°C"
+    }
+  }
+}

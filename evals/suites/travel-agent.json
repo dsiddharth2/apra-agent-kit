@@ -1,0 +1,209 @@
+{
+  "suite": "travel-agent",
+  "description": "Travel research agent eval suite",
+  "fleet": "scripted",
+  "defaults": {
+    "timeout": 15000
+  },
+  "cases": [
+    {
+      "id": "travel-001",
+      "description": "Plan a 3-day trip to Manali",
+      "tags": [
+        "travel",
+        "plan-execute",
+        "happy-path"
+      ],
+      "task": {
+        "goal": "Plan a 3-day trip to Manali"
+      },
+      "strategy": "plan-execute",
+      "fleet": {
+        "script": "./scripts/travel/travel-001-manali.json"
+      },
+      "scorers": [
+        {
+          "name": "correctness",
+          "grader": "exact-match",
+          "expected": {
+            "status": "completed"
+          }
+        },
+        {
+          "name": "trajectory",
+          "grader": "trajectory-match",
+          "trajectory": [
+            {
+              "tool": "weather"
+            },
+            {
+              "tool": "destination-overview"
+            }
+          ]
+        },
+        {
+          "name": "efficiency",
+          "grader": "budget-check",
+          "maxCost": 1
+        }
+      ]
+    },
+    {
+      "id": "travel-002",
+      "description": "Pre-trip prep for Japan",
+      "tags": [
+        "travel",
+        "open-ended",
+        "happy-path"
+      ],
+      "task": {
+        "goal": "Pre-trip preparation for Japan"
+      },
+      "strategy": "open-ended",
+      "fleet": {
+        "script": "./scripts/travel/travel-002-japan-prep.json"
+      },
+      "scorers": [
+        {
+          "name": "correctness",
+          "grader": "exact-match",
+          "expected": {
+            "status": "completed"
+          }
+        },
+        {
+          "name": "trajectory",
+          "grader": "trajectory-match",
+          "trajectory": [
+            {
+              "tool": "country-info"
+            },
+            {
+              "tool": "travel-advisory"
+            },
+            {
+              "tool": "currency"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "travel-003",
+      "description": "City briefing for Tokyo",
+      "tags": [
+        "travel",
+        "open-ended"
+      ],
+      "task": {
+        "goal": "City briefing for Tokyo"
+      },
+      "strategy": "open-ended",
+      "fleet": {
+        "script": "./scripts/travel/travel-003-tokyo-brief.json"
+      },
+      "scorers": [
+        {
+          "name": "correctness",
+          "grader": "exact-match",
+          "expected": {
+            "status": "completed"
+          }
+        },
+        {
+          "name": "content",
+          "grader": "contains",
+          "substrings": [
+            "Tokyo"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "travel-004",
+      "description": "Route check Delhi to Manali",
+      "tags": [
+        "travel",
+        "open-ended"
+      ],
+      "task": {
+        "goal": "Driving route from Delhi to Manali"
+      },
+      "strategy": "open-ended",
+      "fleet": {
+        "script": "./scripts/travel/travel-004-delhi-manali.json"
+      },
+      "scorers": [
+        {
+          "name": "correctness",
+          "grader": "exact-match",
+          "expected": {
+            "status": "completed"
+          }
+        },
+        {
+          "name": "content",
+          "grader": "contains",
+          "substrings": [
+            "distance"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "travel-005",
+      "description": "Trip plan with unreachable destination",
+      "tags": [
+        "travel",
+        "error-handling"
+      ],
+      "task": {
+        "goal": "Plan a trip to an unreachable destination"
+      },
+      "strategy": "plan-execute",
+      "fleet": {
+        "script": "./scripts/travel/travel-005-unreachable.json"
+      },
+      "scorers": [
+        {
+          "name": "completes",
+          "grader": "pattern",
+          "pattern": "completed|failed"
+        }
+      ]
+    },
+    {
+      "id": "travel-006",
+      "description": "Trip plan that exceeds budget",
+      "tags": [
+        "travel",
+        "error-handling"
+      ],
+      "task": {
+        "goal": "Plan a detailed world tour",
+        "constraints": {
+          "maxIterations": 2
+        }
+      },
+      "strategy": "plan-execute",
+      "fleet": {
+        "script": "./scripts/travel/travel-006-over-budget.json"
+      },
+      "scorers": [
+        {
+          "name": "budget-exceeded",
+          "grader": "exact-match",
+          "expected": {
+            "status": "budget_exceeded"
+          }
+        },
+        {
+          "name": "efficiency",
+          "grader": "budget-check",
+          "maxCost": 0.01,
+          "maxIterations": 2
+        }
+      ]
+    }
+  ]
+}

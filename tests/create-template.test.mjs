@@ -61,6 +61,8 @@ test('the template holds exactly the agreed files', () => {
     'Dockerfile',
     'README.md',
     'docker-compose.yml',
+    'evals/suites/hello.json',
+    'evals/suites/scripts/hello-happy.json',
     'gitignore',
     'host.config.mjs',
     'mcp/registry.mjs',

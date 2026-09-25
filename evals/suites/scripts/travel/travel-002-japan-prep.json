@@ -1,0 +1,35 @@
+{
+  "goals": {
+    "Pre-trip preparation for Japan": [
+      "```tool_call\n{\"tool\":\"country-info\",\"args\":{\"country\":\"Japan\"}}\n```",
+      "```tool_call\n{\"tool\":\"travel-advisory\",\"args\":{\"country\":\"JP\"}}\n```",
+      "```tool_call\n{\"tool\":\"currency\",\"args\":{\"from\":\"INR\",\"to\":\"JPY\",\"amount\":1000}}\n```",
+      "```done\n{\"result\":\"Japan Pre-Trip Summary\\nVisa: e-Visa available for Indian passport\\nSafety: Level 1 - Exercise normal precautions\\nCurrency: 1000 INR ≈ 1,800 JPY\\nLanguage: Japanese, limited English\\nPower: Type A/B, 100V\",\"summary\":\"Japan pre-trip prep complete\"}\n```"
+    ]
+  },
+  "tools": {
+    "country-info": {
+      "ok": true,
+      "name": "Japan",
+      "capital": "Tokyo",
+      "population": 125800000,
+      "languages": [
+        "Japanese"
+      ]
+    },
+    "travel-advisory": {
+      "ok": true,
+      "country": "JP",
+      "score": 1.5,
+      "advisory": "Exercise normal precautions"
+    },
+    "currency": {
+      "ok": true,
+      "from": "INR",
+      "to": "JPY",
+      "rate": 1.8,
+      "amount": 1000,
+      "result": 1800
+    }
+  }
+}

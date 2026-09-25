@@ -1,0 +1,16 @@
+{
+  "goals": {
+    "Plan a trip to an unreachable destination": [
+      "```plan\n{\"steps\":[{\"type\":\"tool\",\"tool\":\"weather\",\"args\":{\"city\":\"Atlantis\"},\"reason\":\"check weather\",\"review\":false}]}\n```",
+      "```review\n{\"approved\":true}\n```",
+      "```done\n{\"result\":\"Unable to plan trip: weather data unavailable for Atlantis. The destination may not exist or is not accessible.\",\"summary\":\"Trip planning failed - unreachable destination\"}\n```"
+    ]
+  },
+  "tools": {
+    "weather": {
+      "ok": false,
+      "error": "city_not_found",
+      "message": "No weather data available for Atlantis"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "goals": {
+    "Say hello": [
+      "```done\n{\"result\":\"Hello! How can I help you today?\",\"summary\":\"greeted user\"}\n```"
+    ],
+    "Plan a greeting": [
+      "```plan\n{\"steps\":[{\"type\":\"tool\",\"tool\":\"weather\",\"args\":{\"city\":\"London\"},\"reason\":\"check weather\",\"review\":false}]}\n```",
+      "```review\n{\"approved\":true}\n```",
+      "```done\n{\"result\":\"Hello from London, it is 15°C\",\"summary\":\"greeted with weather\"}\n```"
+    ]
+  },
+  "tools": {
+    "weather": { "ok": true, "city": "London", "temperature": "15°C", "description": "Cloudy" }
+  }
+}

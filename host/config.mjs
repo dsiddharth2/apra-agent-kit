@@ -6,7 +6,7 @@ import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config
 
 const SUPPORTED_ADAPTERS = new Set(['express', 'raw-http', 'azure-functions']);
 const KNOWN_MODULES = new Set(['runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch', 'notify', 'chat', 'router']);
-const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails', 'dispatch', 'notify', 'chat', 'router']);
+const IMPLEMENTED_MODULES = new Set(['runLoop', 'budgets', 'guardrails', 'dispatch', 'notify', 'chat', 'router', 'evals']);
 
 export async function loadConfig(configDir, env = process.env) {
   const raw = await resolveConfig(configDir);

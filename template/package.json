@@ -10,7 +10,8 @@
     "doctor": "node scripts/doctor.mjs",
     "hello": "node workflows/hello/main.mjs",
     "mcp": "node mcp/main.mjs",
-    "host": "node host/index.mjs"
+    "host": "node host/index.mjs",
+    "eval": "node node_modules/@dsiddharth2/create-fleet-agent/evals/runner.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

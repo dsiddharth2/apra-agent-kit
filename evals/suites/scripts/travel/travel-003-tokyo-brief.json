@@ -1,0 +1,26 @@
+{
+  "goals": {
+    "City briefing for Tokyo": [
+      "```tool_call\n{\"tool\":\"weather\",\"args\":{\"city\":\"Tokyo\"}}\n```",
+      "```tool_call\n{\"tool\":\"timezone\",\"args\":{\"city\":\"Tokyo\"}}\n```",
+      "```done\n{\"result\":\"Tokyo City Briefing\\nWeather: 22°C, clear skies\\nLocal time: 14:30 JST (UTC+9)\\nTemperature comfortable for sightseeing\",\"summary\":\"Tokyo briefing complete\"}\n```"
+    ]
+  },
+  "tools": {
+    "weather": {
+      "ok": true,
+      "city": "Tokyo",
+      "temperature": "22°C",
+      "humidity": "55%",
+      "wind": "12 km/h",
+      "description": "Clear"
+    },
+    "timezone": {
+      "ok": true,
+      "city": "Tokyo",
+      "datetime": "2026-09-25T14:30:00+09:00",
+      "timezone": "JST",
+      "utc_offset": "+09:00"
+    }
+  }
+}

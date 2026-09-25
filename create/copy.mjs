@@ -24,6 +24,7 @@ export const PUBLISHED_DIRS = [
   'docs/architecture.md',
   'docs/development.md',
   '.dockerignore',
+  'evals',
 ];
 
 export function copyTree(src, dest, { overwrite = false, rename = {} } = {}) {
