@@ -38,6 +38,14 @@ test('exact-match: passes with status match', () => {
   const actual = { status: 'budget_exceeded', result: null, history: [], budget: null };
   const r = exactMatch(expected, actual);
   assert.equal(r.pass, true);
+  assert.equal(r.score, 1);
+  assert.equal(r.reason, 'status matched "budget_exceeded"');
+});
+
+test('exact-match: vacuous pass when no status and no result', () => {
+  const r = exactMatch({}, { status: 'completed', result: 'x', history: [], budget: null });
+  assert.equal(r.pass, true);
+  assert.equal(r.reason, 'status matched, no result check');
 });
 
 test('contains: passes when all substrings found', () => {
@@ -46,6 +54,9 @@ test('contains: passes when all substrings found', () => {
   const r = contains(expected, actual);
   assert.equal(r.pass, true);
   assert.equal(r.score, 1);
+  assert.match(r.reason, /substrings found/);
+  assert.match(r.reason, /invoice/);
+  assert.match(r.reason, /mismatch/);
 });
 
 test('contains: fails with partial match', () => {

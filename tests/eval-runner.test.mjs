@@ -1,6 +1,8 @@
 // tests/eval-runner.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runSuite } from '../evals/runner.mjs';
@@ -19,14 +21,23 @@ test('runner: loads suite and runs all cases', async () => {
 
   const s001 = report.results.find((r) => r.id === 's-001');
   assert.ok(s001);
-  assert.ok(
-    Object.values(s001.scores).every((s) => s.pass),
-    `s-001 scorers: ${JSON.stringify(s001.scores)}`,
-  );
+  const correctness = s001.scores.correctness;
+  assert.ok(correctness, JSON.stringify(s001.scores));
+  assert.equal(correctness.pass, true, JSON.stringify(correctness));
+  assert.equal(correctness.score, 1);
+  // Vacuous exact-match (expected.status never applied) uses this exact reason.
+  assert.notEqual(correctness.reason, 'status matched, no result check');
+  assert.match(correctness.reason, /status/);
+  assert.match(correctness.reason, /completed/);
 
   const s002 = report.results.find((r) => r.id === 's-002');
   assert.ok(s002);
-  assert.equal(s002.scores.content.pass, true, JSON.stringify(s002.scores.content));
+  const content = s002.scores.content;
+  assert.equal(content.pass, true, JSON.stringify(content));
+  assert.equal(content.score, 1);
+  assert.match(content.reason, /substrings found/);
+  assert.match(content.reason, /hello/);
+  assert.doesNotMatch(content.reason, /no substrings to check/);
 });
 
 test('runner: report has correct structure', async () => {
@@ -51,4 +62,57 @@ test('runner: filters by tag', async () => {
   });
   assert.equal(report.results.length, 1);
   assert.equal(report.results[0].id, 's-002');
+});
+
+test('runner: thrown execution is not graded as a failed actual', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'eval-throw-'));
+  const script = path.join(fixtureDir, 'scripts', 'simple-happy.json');
+  await fs.writeFile(path.join(root, 'throw.json'), JSON.stringify({
+    suite: 'throw',
+    fleet: 'scripted',
+    defaults: { timeout: 5000, strategy: 'open-ended' },
+    cases: [{
+      id: 't-001',
+      description: 'execution throws before grading',
+      tags: ['throw'],
+      task: { goal: 'Say hello' },
+      fleet: { script },
+      scorers: [
+        { name: 'correctness', grader: 'exact-match', expected: { status: 'failed' } },
+        { name: 'efficiency', grader: 'budget-check', maxCost: 1 },
+      ],
+    }],
+  }));
+
+  // Invalid pool size throws inside the execution try, before graders run.
+  // A synthetic { status: 'failed', budget: null } would pass both scorers.
+  const prev = process.env.WORKER_POOL_SIZE;
+  process.env.WORKER_POOL_SIZE = 'nope';
+  try {
+    const report = await runSuite('throw', {
+      suiteDir: root,
+      reportDir: null,
+      configDir: path.join(path.dirname(fileURLToPath(import.meta.url)), '..'),
+    });
+    assert.equal(report.summary.passed, 0);
+    assert.equal(report.summary.failed, 1);
+    const r = report.results[0];
+    assert.equal(r.status, 'failed');
+    assert.equal(typeof r.durationMs, 'number');
+    assert.equal(r.cost, 0);
+    for (const name of ['correctness', 'efficiency']) {
+      const s = r.scores[name];
+      assert.equal(s.pass, false, JSON.stringify(s));
+      assert.equal(s.score, 0);
+      assert.match(s.reason, /^task error: /);
+      assert.match(s.reason, /WORKER_POOL_SIZE/);
+      assert.match(s.reason, /nope/);
+    }
+    assert.equal(r.scores.correctness.grader, 'exact-match');
+    assert.equal(r.scores.efficiency.grader, 'budget-check');
+  } finally {
+    if (prev === undefined) delete process.env.WORKER_POOL_SIZE;
+    else process.env.WORKER_POOL_SIZE = prev;
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });

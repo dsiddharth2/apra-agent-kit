@@ -83,7 +83,16 @@ async function runCase(testCase, suite, { configDir }) {
       await dispatcher.close();
     }
   } catch (err) {
-    actual = { status: 'failed', result: { error: err.message }, history: [], budget: null };
+    // A throw is not a gradeable actual. Synthetic { status: 'failed', budget: null }
+    // still passes exact-match (expected status failed) and budget-check (null budget).
+    const errorScores = {};
+    for (const s of testCase.scorers) {
+      errorScores[s.name] = { pass: false, score: 0, grader: s.grader, reason: `task error: ${err.message}` };
+    }
+    return {
+      id: testCase.id, description: testCase.description ?? '', tags: testCase.tags ?? [],
+      status: 'failed', durationMs: Date.now() - start, cost: 0, scores: errorScores,
+    };
   } finally {
     await fleet.stop?.();
   }

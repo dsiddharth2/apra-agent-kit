@@ -9,7 +9,7 @@ export default function contains(expected, actual) {
   const found = subs.length - missing.length;
   const score = found / subs.length;
   if (missing.length === 0) {
-    return { pass: true, score: 1, reason: `all ${subs.length} substrings found` };
+    return { pass: true, score: 1, reason: `all ${subs.length} substrings found: ${subs.join(', ')}` };
   }
   return {
     pass: false,
