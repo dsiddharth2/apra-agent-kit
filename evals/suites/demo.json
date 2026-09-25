@@ -1,0 +1,54 @@
+{
+  "suite": "demo",
+  "description": "Core agent behavior tests for Fleet Agent Kit",
+  "fleet": "scripted",
+  "defaults": {
+    "timeout": 10000,
+    "strategy": "open-ended"
+  },
+  "cases": [
+    {
+      "id": "demo-001",
+      "description": "Happy path open-ended task",
+      "tags": ["happy-path"],
+      "task": { "goal": "Say hello" },
+      "fleet": { "script": "./scripts/demo-happy.json" },
+      "scorers": [
+        { "name": "correctness", "grader": "exact-match", "expected": { "status": "completed" } },
+        { "name": "efficiency", "grader": "budget-check", "maxCost": 1.00 }
+      ]
+    },
+    {
+      "id": "demo-002",
+      "description": "Happy path plan-execute task",
+      "tags": ["happy-path"],
+      "task": { "goal": "Plan a greeting" },
+      "strategy": "plan-execute",
+      "fleet": { "script": "./scripts/demo-happy.json" },
+      "scorers": [
+        { "name": "correctness", "grader": "exact-match", "expected": { "status": "completed" } },
+        { "name": "trajectory", "grader": "trajectory-match", "trajectory": [{ "tool": "weather" }] }
+      ]
+    },
+    {
+      "id": "demo-003",
+      "description": "Agent handles tool error gracefully",
+      "tags": ["error-handling"],
+      "task": { "goal": "Use a broken tool" },
+      "fleet": { "script": "./scripts/demo-error.json" },
+      "scorers": [
+        { "name": "completes", "grader": "exact-match", "expected": { "status": "completed" } }
+      ]
+    },
+    {
+      "id": "demo-004",
+      "description": "Task exceeds budget",
+      "tags": ["error-handling"],
+      "task": { "goal": "Exceed budget" },
+      "fleet": { "script": "./scripts/demo-error.json" },
+      "scorers": [
+        { "name": "budget-exceeded", "grader": "exact-match", "expected": { "status": "budget_exceeded" } }
+      ]
+    }
+  ]
+}
