@@ -1,0 +1,7 @@
+{
+  "goals": {
+    "Say hello to Ada": [
+      "```done\n{\"result\":\"Hello, Ada! Welcome aboard.\",\"summary\":\"greeted Ada\"}\n```"
+    ]
+  }
+}

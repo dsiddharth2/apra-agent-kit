@@ -11,3 +11,4 @@ node_modules/
 .cursor/
 workdir/*
 !workdir/.gitkeep
+evals/reports/

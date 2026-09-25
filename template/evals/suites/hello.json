@@ -1,0 +1,19 @@
+{
+  "suite": "hello",
+  "description": "Starter eval suite for the hello workflow",
+  "fleet": "scripted",
+  "defaults": { "timeout": 15000, "strategy": "open-ended" },
+  "cases": [
+    {
+      "id": "hello-001",
+      "description": "Hello workflow completes with a greeting",
+      "tags": ["happy-path"],
+      "task": { "goal": "Say hello to Ada" },
+      "fleet": { "script": "./scripts/hello-happy.json" },
+      "scorers": [
+        { "name": "correctness", "grader": "exact-match", "expected": { "status": "completed" } },
+        { "name": "mentions-name", "grader": "contains", "substrings": ["Ada"] }
+      ]
+    }
+  ]
+}
