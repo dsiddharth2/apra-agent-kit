@@ -232,3 +232,23 @@ test('llm-judge: handles unparseable response gracefully', async () => {
   assert.equal(r.pass, false);
   assert.ok(r.reason.includes('parse'));
 });
+
+import { resolveGrader } from '../evals/graders/index.mjs';
+
+test('resolveGrader: resolves all built-in graders by name', () => {
+  const names = ['exact-match', 'contains', 'pattern', 'trajectory-match', 'budget-check', 'llm-judge'];
+  for (const name of names) {
+    const grader = resolveGrader(name);
+    assert.equal(typeof grader, 'function', `${name} should resolve to a function`);
+  }
+});
+
+test('resolveGrader: throws on unknown name', () => {
+  assert.throws(() => resolveGrader('nonexistent'), /unknown grader/);
+});
+
+test('resolveGrader: treats ./ prefix as custom path', async () => {
+  // loadCustom returns an async import — test that the factory detects the pattern
+  // We can't easily test a real file load here, but we verify the factory branches correctly
+  assert.throws(() => resolveGrader('./does-not-exist.mjs', { suiteDir: '/tmp' }), /Cannot find module|ENOENT|ERR_MODULE_NOT_FOUND/);
+});
