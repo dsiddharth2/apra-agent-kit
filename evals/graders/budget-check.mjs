@@ -3,7 +3,8 @@ export default function budgetCheck(expected, actual) {
   if (!actual.budget) {
     return { pass: true, score: 1, reason: 'no budget data (budgets module disabled)' };
   }
-  const { estimatedCost = 0, iterations = 0 } = actual.budget;
+  const estimatedCost = actual.budget.estimatedCost ?? actual.budget.estimatedCostUsd ?? 0;
+  const iterations = actual.budget.iterations ?? 0;
   const parts = [];
   let pass = true;
 

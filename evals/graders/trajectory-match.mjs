@@ -1,8 +1,11 @@
 export default function trajectoryMatch(expected, actual) {
   const expectedTools = (expected.trajectory ?? []).map(t => t.tool);
-  const actualTools = (actual.history ?? [])
-    .filter(h => h.type === 'action')
-    .map(h => h.tool);
+  const history = actual.history ?? [];
+  const actions = history.filter(h => h.type === 'action');
+  const actualTools = (actions.length > 0
+    ? actions
+    : history.filter(h => h.type === 'observation' && (h.tool != null || h.stepType === 'tool'))
+  ).map(h => h.tool);
   const mode = expected.mode ?? 'superset';
 
   switch (mode) {

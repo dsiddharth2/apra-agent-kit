@@ -167,6 +167,13 @@ test('trajectory-match: ignores non-action history entries', () => {
   assert.equal(trajectoryMatch(expected, actual).pass, true);
 });
 
+test('trajectory-match: plan-execute observation-only history counts tools', () => {
+  const expected = { trajectory: [{ tool: 'weather' }] };
+  const history = [{ type: 'observation', stepType: 'tool', tool: 'weather' }, { type: 'observation', stepType: 'reason', text: 'ok' }];
+  const actual = { status: 'completed', result: null, history, budget: null };
+  assert.equal(trajectoryMatch(expected, actual).pass, true);
+});
+
 test('budget-check: passes within cost limit', () => {
   const expected = { maxCost: 0.10 };
   const actual = { status: 'completed', result: null, history: [], budget: { estimatedCost: 0.03, iterations: 3 } };
@@ -178,6 +185,20 @@ test('budget-check: passes within cost limit', () => {
 test('budget-check: fails over cost limit', () => {
   const expected = { maxCost: 0.05 };
   const actual = { status: 'completed', result: null, history: [], budget: { estimatedCost: 0.08, iterations: 3 } };
+  const r = budgetCheck(expected, actual);
+  assert.equal(r.pass, false);
+});
+
+test('budget-check: passes within estimatedCostUsd limit', () => {
+  const expected = { maxCost: 0.10 };
+  const actual = { status: 'completed', result: null, history: [], budget: { estimatedCostUsd: 0.03, iterations: 3 } };
+  const r = budgetCheck(expected, actual);
+  assert.equal(r.pass, true);
+});
+
+test('budget-check: fails over estimatedCostUsd limit', () => {
+  const expected = { maxCost: 0.05 };
+  const actual = { status: 'completed', result: null, history: [], budget: { estimatedCostUsd: 0.08, iterations: 3 } };
   const r = budgetCheck(expected, actual);
   assert.equal(r.pass, false);
 });
