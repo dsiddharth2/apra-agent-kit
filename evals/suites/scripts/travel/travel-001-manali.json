@@ -1,0 +1,31 @@
+{
+  "goals": {
+    "Plan a 3-day trip to Manali": [
+      "```plan\n{\"steps\":[{\"type\":\"tool\",\"tool\":\"weather\",\"args\":{\"city\":\"Manali\"},\"reason\":\"check current weather\",\"review\":false},{\"type\":\"tool\",\"tool\":\"destination-overview\",\"args\":{\"destination\":\"Manali\"},\"reason\":\"get attractions and activities\",\"review\":false},{\"type\":\"prompt\",\"prompt\":\"compile itinerary\",\"reason\":\"create day-by-day plan\",\"review\":false}]}\n```",
+      "```review\n{\"approved\":true}\n```",
+      "```done\n{\"result\":\"3-Day Manali Itinerary\\nDay 1: Arrive Manali, visit Hadimba Temple, Old Manali\\nDay 2: Solang Valley, paragliding, Rohtang Pass viewpoint\\nDay 3: Naggar Castle, hot springs, depart\\nBudget: INR 8,000-12,000/day\\nWeather: 12°C, partly cloudy\",\"summary\":\"Planned 3-day Manali trip\"}\n```"
+    ]
+  },
+  "tools": {
+    "weather": {
+      "ok": true,
+      "city": "Manali",
+      "temperature": "12°C",
+      "humidity": "65%",
+      "wind": "8 km/h",
+      "description": "Partly cloudy"
+    },
+    "destination-overview": {
+      "ok": true,
+      "destination": "Manali",
+      "summary": "Hill station in Himachal Pradesh",
+      "attractions": [
+        "Hadimba Temple",
+        "Solang Valley",
+        "Rohtang Pass",
+        "Old Manali",
+        "Naggar Castle"
+      ]
+    }
+  }
+}

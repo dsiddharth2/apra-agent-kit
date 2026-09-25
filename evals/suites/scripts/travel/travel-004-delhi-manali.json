@@ -1,0 +1,18 @@
+{
+  "goals": {
+    "Driving route from Delhi to Manali": [
+      "```tool_call\n{\"tool\":\"route-distance\",\"args\":{\"from\":\"Delhi\",\"to\":\"Manali\"}}\n```",
+      "```done\n{\"result\":\"Delhi to Manali Route\\ndistance: 530 km\\nEstimated driving time: 12 hours 30 minutes\\nRoute: Delhi → Chandigarh → Mandi → Manali\\nRoad conditions: NH3 mostly good, mountain roads after Mandi\",\"summary\":\"Route check complete\"}\n```"
+    ]
+  },
+  "tools": {
+    "route-distance": {
+      "ok": true,
+      "from": "Delhi",
+      "to": "Manali",
+      "distance_km": 530,
+      "duration_hours": 12.5,
+      "duration_text": "12 hours 30 minutes"
+    }
+  }
+}
