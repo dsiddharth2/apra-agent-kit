@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 import exactMatch from '../evals/graders/exact-match.mjs';
 import contains from '../evals/graders/contains.mjs';
 import pattern from '../evals/graders/pattern.mjs';
+import trajectoryMatch from '../evals/graders/trajectory-match.mjs';
+
+const historyWith = (...tools) => tools.map(tool => ({ type: 'action', tool }));
 
 test('exact-match: passes when result matches', () => {
   const expected = { result: { count: 3 } };
@@ -88,4 +91,65 @@ test('pattern: stringifies non-string result', () => {
   const actual = { status: 'completed', result: { count: 3 }, history: [], budget: null };
   const r = pattern(expected, actual);
   assert.equal(r.pass, true);
+});
+
+test('trajectory-match: strict passes with exact order', () => {
+  const expected = { mode: 'strict', trajectory: [{ tool: 'weather' }, { tool: 'forecast' }] };
+  const actual = { status: 'completed', result: null, history: historyWith('weather', 'forecast'), budget: null };
+  assert.equal(trajectoryMatch(expected, actual).pass, true);
+});
+
+test('trajectory-match: strict fails with wrong order', () => {
+  const expected = { mode: 'strict', trajectory: [{ tool: 'weather' }, { tool: 'forecast' }] };
+  const actual = { status: 'completed', result: null, history: historyWith('forecast', 'weather'), budget: null };
+  assert.equal(trajectoryMatch(expected, actual).pass, false);
+});
+
+test('trajectory-match: unordered passes regardless of order', () => {
+  const expected = { mode: 'unordered', trajectory: [{ tool: 'weather' }, { tool: 'forecast' }] };
+  const actual = { status: 'completed', result: null, history: historyWith('forecast', 'weather'), budget: null };
+  assert.equal(trajectoryMatch(expected, actual).pass, true);
+});
+
+test('trajectory-match: unordered fails with missing tool', () => {
+  const expected = { mode: 'unordered', trajectory: [{ tool: 'weather' }, { tool: 'forecast' }] };
+  const actual = { status: 'completed', result: null, history: historyWith('weather'), budget: null };
+  const r = trajectoryMatch(expected, actual);
+  assert.equal(r.pass, false);
+  assert.ok(r.reason.includes('forecast'));
+});
+
+test('trajectory-match: subset passes when no extra tools', () => {
+  const expected = { mode: 'subset', trajectory: [{ tool: 'weather' }, { tool: 'forecast' }] };
+  const actual = { status: 'completed', result: null, history: historyWith('weather'), budget: null };
+  assert.equal(trajectoryMatch(expected, actual).pass, true);
+});
+
+test('trajectory-match: subset fails with unexpected tool', () => {
+  const expected = { mode: 'subset', trajectory: [{ tool: 'weather' }] };
+  const actual = { status: 'completed', result: null, history: historyWith('weather', 'delete-all'), budget: null };
+  const r = trajectoryMatch(expected, actual);
+  assert.equal(r.pass, false);
+  assert.ok(r.reason.includes('delete-all'));
+});
+
+test('trajectory-match: superset (default) passes with extra tools', () => {
+  const expected = { trajectory: [{ tool: 'weather' }] };
+  const actual = { status: 'completed', result: null, history: historyWith('weather', 'forecast', 'geocode'), budget: null };
+  assert.equal(trajectoryMatch(expected, actual).pass, true);
+});
+
+test('trajectory-match: superset fails when expected tool missing', () => {
+  const expected = { trajectory: [{ tool: 'weather' }, { tool: 'forecast' }] };
+  const actual = { status: 'completed', result: null, history: historyWith('weather'), budget: null };
+  const r = trajectoryMatch(expected, actual);
+  assert.equal(r.pass, false);
+  assert.ok(r.reason.includes('forecast'));
+});
+
+test('trajectory-match: ignores non-action history entries', () => {
+  const expected = { trajectory: [{ tool: 'weather' }] };
+  const history = [{ type: 'observation', tool: 'weather' }, { type: 'action', tool: 'weather' }, { type: 'plan' }];
+  const actual = { status: 'completed', result: null, history, budget: null };
+  assert.equal(trajectoryMatch(expected, actual).pass, true);
 });
