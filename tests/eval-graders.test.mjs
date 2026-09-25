@@ -5,6 +5,7 @@ import exactMatch from '../evals/graders/exact-match.mjs';
 import contains from '../evals/graders/contains.mjs';
 import pattern from '../evals/graders/pattern.mjs';
 import trajectoryMatch from '../evals/graders/trajectory-match.mjs';
+import budgetCheck from '../evals/graders/budget-check.mjs';
 
 const historyWith = (...tools) => tools.map(tool => ({ type: 'action', tool }));
 
@@ -152,4 +153,42 @@ test('trajectory-match: ignores non-action history entries', () => {
   const history = [{ type: 'observation', tool: 'weather' }, { type: 'action', tool: 'weather' }, { type: 'plan' }];
   const actual = { status: 'completed', result: null, history, budget: null };
   assert.equal(trajectoryMatch(expected, actual).pass, true);
+});
+
+test('budget-check: passes within cost limit', () => {
+  const expected = { maxCost: 0.10 };
+  const actual = { status: 'completed', result: null, history: [], budget: { estimatedCost: 0.03, iterations: 3 } };
+  const r = budgetCheck(expected, actual);
+  assert.equal(r.pass, true);
+  assert.ok(r.score > 0.5);
+});
+
+test('budget-check: fails over cost limit', () => {
+  const expected = { maxCost: 0.05 };
+  const actual = { status: 'completed', result: null, history: [], budget: { estimatedCost: 0.08, iterations: 3 } };
+  const r = budgetCheck(expected, actual);
+  assert.equal(r.pass, false);
+});
+
+test('budget-check: checks iterations when maxIterations set', () => {
+  const expected = { maxCost: 1.00, maxIterations: 3 };
+  const actual = { status: 'completed', result: null, history: [], budget: { estimatedCost: 0.01, iterations: 5 } };
+  const r = budgetCheck(expected, actual);
+  assert.equal(r.pass, false);
+  assert.ok(r.reason.includes('iterations'));
+});
+
+test('budget-check: passes when both within limits', () => {
+  const expected = { maxCost: 0.50, maxIterations: 10 };
+  const actual = { status: 'completed', result: null, history: [], budget: { estimatedCost: 0.20, iterations: 5 } };
+  const r = budgetCheck(expected, actual);
+  assert.equal(r.pass, true);
+});
+
+test('budget-check: passes with warning when budget is null', () => {
+  const expected = { maxCost: 0.10 };
+  const actual = { status: 'completed', result: null, history: [], budget: null };
+  const r = budgetCheck(expected, actual);
+  assert.equal(r.pass, true);
+  assert.ok(r.reason.includes('no budget data'));
 });
