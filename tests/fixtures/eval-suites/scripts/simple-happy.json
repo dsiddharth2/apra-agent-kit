@@ -1,0 +1,7 @@
+{
+  "goals": {
+    "__default__": [
+      "```done\n{\"result\":\"hello world\",\"summary\":\"greeted\"}\n```"
+    ]
+  }
+}

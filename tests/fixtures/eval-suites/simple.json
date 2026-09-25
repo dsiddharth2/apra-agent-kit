@@ -1,0 +1,29 @@
+{
+  "suite": "simple",
+  "description": "Test fixture suite",
+  "fleet": "scripted",
+  "defaults": { "timeout": 5000, "strategy": "open-ended" },
+  "cases": [
+    {
+      "id": "s-001",
+      "description": "Simple happy path",
+      "tags": ["happy-path"],
+      "task": { "goal": "Say hello" },
+      "fleet": { "script": "./scripts/simple-happy.json" },
+      "scorers": [
+        { "name": "correctness", "grader": "exact-match", "expected": { "status": "completed" } }
+      ]
+    },
+    {
+      "id": "s-002",
+      "description": "With contains check",
+      "tags": ["output-check"],
+      "task": { "goal": "Say hello world" },
+      "fleet": { "script": "./scripts/simple-happy.json" },
+      "scorers": [
+        { "name": "correctness", "grader": "exact-match", "expected": { "status": "completed" } },
+        { "name": "content", "grader": "contains", "substrings": ["hello"] }
+      ]
+    }
+  ]
+}
