@@ -217,6 +217,8 @@ export function createInProcessJobs({
 
     async get(jobId) { return store.get(jobId); },
 
+    async listByStatus(status) { return store.listByStatus(status); },
+
     async cancel(jobId) {
       const record = await store.get(jobId);
       if (!record) return { ok: false, status: null };

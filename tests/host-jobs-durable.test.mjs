@@ -75,6 +75,37 @@ test('mapDurableStatus maps runtime statuses and merges customStatus + output', 
   assert.equal(mapDurableStatus(null), null);
 });
 
+test('listByStatus maps active instances and keeps only the requested status', async () => {
+  const client = fakeClient({
+    instances: {
+      q: {
+        instanceId: 'q',
+        runtimeStatus: 'Pending',
+        input: { record: { id: 'q', status: 'queued', metadata: { schedule: { name: 'morning' } } } },
+      },
+      p: {
+        instanceId: 'p',
+        runtimeStatus: 'Running',
+        input: { record: { id: 'p', status: 'processing', metadata: { schedule: { name: 'morning' } } } },
+        customStatus: { status: 'processing' },
+      },
+      d: {
+        instanceId: 'd',
+        runtimeStatus: 'Completed',
+        input: { record: { id: 'd', status: 'completed', metadata: { schedule: { name: 'morning' } } } },
+        output: { status: 'completed' },
+      },
+    },
+  });
+  const jobs = createDurableJobs({ client, config: cfg, notifier: null, logger: quiet });
+  const queued = await jobs.listByStatus('queued');
+  const processing = await jobs.listByStatus('processing');
+  assert.deepEqual(queued.map(r => r.id), ['q']);
+  assert.equal(queued[0].metadata.schedule.name, 'morning');
+  assert.deepEqual(processing.map(r => r.id), ['p']);
+  assert.deepEqual(await jobs.listByStatus('completed'), []);
+});
+
 test('get returns the mapped record or null', async () => {
   const client = fakeClient();
   const jobs = createDurableJobs({ client, config: cfg, notifier: null, logger: quiet });
