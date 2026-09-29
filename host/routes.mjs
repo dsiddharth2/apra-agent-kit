@@ -10,7 +10,7 @@ function syncResponse(result) {
   return json(200, result);
 }
 
-export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEnabled, chatRoutes = null, guardrails = null, memoryRoutes = null }) {
+export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEnabled, chatRoutes = null, guardrails = null, memoryRoutes = null, scheduler = null }) {
   const routes = {
     health: { method: 'GET', path: '/health', auth: false, handler: async () => json(200, { ok: true }) },
     // Identity and operational state sit apart from the liveness probe:
@@ -83,6 +83,13 @@ export function buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb, runLoopEn
     if (notifier?.sseHandler) {
       routes.jobEvents = { method: 'GET', path: '/jobs/:id/events', handler: notifier.sseHandler };
     }
+  }
+
+  if (scheduler) {
+    routes.schedules = {
+      method: 'GET', path: '/schedules', auth: false,
+      handler: async () => json(200, scheduler.getSchedules()),
+    };
   }
   return routes;
 }

@@ -111,3 +111,17 @@ test('buildRoutes mounts memory routes only when given', async () => {
   assert.equal(withMemory.memoryPromote, memoryPromote);
   assert.equal(withMemory.memoryRemove, memoryRemove);
 });
+
+test('buildRoutes mounts GET /schedules only when a scheduler is given', async () => {
+  const base = buildRoutes({ jobs: fakeJobs(), notifier: null, runSync: async () => ({}), mcpRaw: () => {}, runLoopEnabled: true });
+  assert.equal(base.schedules, undefined);
+  const schedules = [{ name: 'morning', workflow: 'city-briefing', cron: '0 8 * * *' }];
+  const withScheduler = buildRoutes({
+    jobs: fakeJobs(), notifier: null, runSync: async () => ({}), mcpRaw: () => {}, runLoopEnabled: true,
+    scheduler: { getSchedules: () => schedules },
+  });
+  assert.equal(withScheduler.schedules.method, 'GET');
+  assert.equal(withScheduler.schedules.path, '/schedules');
+  assert.equal(withScheduler.schedules.auth, false);
+  assert.deepEqual(await withScheduler.schedules.handler(), { status: 200, body: schedules });
+});

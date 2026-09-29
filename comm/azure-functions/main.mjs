@@ -36,6 +36,10 @@ await registerDurableFunctions({
   }),
 });
 
+if (started.scheduler?.registerTimerFunctions) {
+  started.scheduler.registerTimerFunctions(app);
+}
+
 app.http('resetWorkers', {
   methods: ['POST'], route: 'reset-workers', authLevel: 'anonymous',
   handler: async () => {

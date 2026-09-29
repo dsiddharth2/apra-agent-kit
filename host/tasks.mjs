@@ -185,6 +185,11 @@ export async function executeHostedTask(task, {
     let workflowArgs = null;
     let routedTo = null;
 
+    if (strategy === 'workflow' && task.workflow) {
+      workflowName = task.workflow;
+      workflowArgs = task.inputs ?? {};
+    }
+
     let routeDebug = null;
     if (!strategy && routerConfig?.enabled) {
       const route = await classify(task.goal ?? task.id, {
