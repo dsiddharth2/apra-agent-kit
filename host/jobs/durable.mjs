@@ -139,6 +139,11 @@ export function createDurableJobs({ client, getClient, config, notifier = null, 
       return mapDurableStatus(await requireClient().getStatus(jobId, STATUS_OPTS));
     },
 
+    async listByStatus(status) {
+      const active = await activeInstances(requireClient());
+      return active.map(mapDurableStatus).filter(rec => rec?.status === status);
+    },
+
     async cancel(jobId) {
       const bound = requireClient();
       const inst = await bound.getStatus(jobId, STATUS_OPTS);

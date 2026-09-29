@@ -403,6 +403,19 @@ test('cancel during claim window aborts the reserved processing job', async () =
   }
 });
 
+test('listByStatus returns store records for the requested status', async () => {
+  const { jobs, runner } = await setup({ concurrency: 1, capacity: 1 });
+  const { jobId } = await jobs.submit({ goal: 'hold' });
+  await runner.waitFor(jobId);
+  const queued = await jobs.submit({ goal: 'wait' });
+  assert.deepEqual((await jobs.listByStatus('processing')).map(r => r.id), [jobId]);
+  assert.deepEqual((await jobs.listByStatus('queued')).map(r => r.id), [queued.jobId]);
+  await runner.finish(jobId);
+  await runner.waitFor(queued.jobId);
+  await runner.finish(queued.jobId);
+  await jobs.stop();
+});
+
 test('stop during claim window aborts reserved jobs and does not close the store under in-flight runOne', async () => {
   const store = createMemoryStore();
   const gate = gateClaim(store);
