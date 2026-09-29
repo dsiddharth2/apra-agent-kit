@@ -2,7 +2,7 @@
 
 What's built, what's next, and what's on the horizon.
 
-Last updated: 2026-09-23
+Last updated: 2026-09-29
 
 ## Shipped
 
@@ -29,6 +29,7 @@ These are live in the kit today.
 | Trace IDs (end-to-end correlation) | Done | [CONTRACT](CONTRACT.md) |
 | Kill switch (disable all writes without redeploy) | Done | [CONTRACT](CONTRACT.md) |
 | Concurrency acceptance tests | Done | [concurrency](concurrency.md) |
+| Scheduled workflows | Done | [scheduled-workflows-spec](specs/scheduled-workflows-spec.md) |
 
 ## In Progress
 
@@ -87,7 +88,7 @@ Four doors, one room — none of them should live inside the agent:
 |------|--------|---------------|
 | Chat input (person types) | Done | Chat UI ships today |
 | Queue (another service sends) | Partial | Job queue exists; needs Redis Streams consumer group for production dispatch |
-| Schedule (cron fires) | Not started | Azure cron job or Logic App → calls `/task` endpoint. Needs overlap policy and idempotency key |
+| Schedule (cron fires) | Done | Config-driven cron in `host.config.mjs`. Each tick submits a named workflow through the jobs API (`queue` or `skip` overlap). In-process croner timers or Azure Timer Triggers; backend follows `JOBS_BACKEND`. See [scheduled-workflows](scheduled-workflows.md). |
 | MCP (another agent calls) | Done | `/mcp` endpoint ships today |
 
 ### Authentication

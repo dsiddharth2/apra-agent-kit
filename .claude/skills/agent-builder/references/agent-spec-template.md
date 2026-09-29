@@ -114,6 +114,17 @@ not "you can use X". This is the most important configuration for agent behavior
 - **Enabled**: {{true for crash recovery, false if not needed}}
 - **Store**: {{sqlite — same adapter as long-term}}
 
+## Scheduled Workflows
+
+{{Fill if the agent needs recurring runs. Omit this entire section if no schedules.}}
+
+| Schedule | Workflow | Args | Cron | Timezone | Overlap |
+|----------|----------|------|------|----------|---------|
+| {{name}} | {{workflow}} | {{args}} | {{cron expression}} | {{IANA tz}} | {{queue or skip}} |
+
+- **Why scheduled**: {{why this workflow needs to run on a timer}}
+- **Result delivery**: {{webhook URL, or "poll via jobs API", or "SSE"}}
+
 ## Error Handling & Edge Cases
 
 {{Failure modes identified during grilling:}}

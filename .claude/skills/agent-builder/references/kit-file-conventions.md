@@ -402,6 +402,57 @@ modules: {
 | `filesystem` | Simplest option. JSON files in a directory. Long-term memory only. |
 | function | Custom adapter. Receives config, must return an object implementing the store contract. |
 
+## Scheduler Configuration
+
+The `modules.scheduler` block in `host.config.mjs` fires named workflows on a
+cron schedule. Each tick calls `jobs.submit` — the scheduler does not run the
+workflow itself. Omit the block (or leave `enabled: false`) when the agent has
+no recurring work.
+
+Requires `dispatch.enabled`. The host refuses to start if the scheduler is
+enabled and dispatch is not. The scheduler backend follows the jobs backend
+(`JOBS_BACKEND`, default `in-process`). There is no `SCHEDULER_BACKEND`.
+
+`SCHEDULER_ENABLED` overrides the file: `true` or `1` forces the scheduler on;
+`false` or `0` forces it off.
+
+```javascript
+modules: {
+  dispatch: { enabled: true },
+
+  scheduler: {
+    enabled: false,                 // default false
+    schedules: [
+      {
+        name: 'morning-brief',      // unique, non-empty
+        workflow: 'city-briefing',  // registered workflow with routing config
+        args: { city: 'Tokyo' },    // default {}
+        cron: '0 9 * * *',          // 5-field cron (minute hour day month weekday)
+        timezone: 'Asia/Tokyo',     // IANA timezone (required)
+        overlap: 'queue',           // 'queue' (default) or 'skip'
+      },
+    ],
+  },
+}
+```
+
+| Field | Required | Default | Meaning |
+|---|---|---|---|
+| `enabled` | no | `false` | Turn the scheduler on. Empty `schedules` warns and starts nothing. |
+| `schedules[].name` | yes | — | Unique schedule name. Used in job metadata and `GET /schedules`. |
+| `schedules[].workflow` | yes | — | Named workflow already in the tool registry, with a `routing` config. |
+| `schedules[].args` | no | `{}` | Workflow inputs, stored on the job as `task.inputs`. |
+| `schedules[].cron` | yes | — | 5-field cron expression. Validated with croner at startup. |
+| `schedules[].timezone` | yes | — | IANA zone. Honored by the in-process backend (croner). |
+| `schedules[].overlap` | no | `queue` | `queue` always submits; `skip` drops the tick when a previous run of this schedule is still `queued` or `processing`. Any other value falls back to `queue`. |
+
+Overlap policies:
+
+- **`queue`** — every tick submits a job, even if an earlier run of the same schedule is still active.
+- **`skip`** — if a non-terminal job has `metadata.schedule.name` equal to this schedule, the tick is logged and not submitted.
+
+Startup validation rejects duplicate names, unknown or non-routable workflows, invalid cron, and invalid timezones. On Azure Functions the durable backend registers one Timer Trigger per schedule (`schedule-<name>`). Per-schedule IANA timezones are not applied to those timers; see [scheduled workflows](../../../../docs/scheduled-workflows.md).
+
 ## Memory Tools
 
 When long-term memory is enabled, the host automatically registers four tools
@@ -617,6 +668,8 @@ so the project stays runnable at every step:
 5. **Memory config** — configure `modules.memory` tiers (conversation context,
    run state, long-term), set up preload directory if needed, add memory tool
    coaching to `agentDescription`
+5.5. **Scheduler config** — configure `modules.scheduler` with schedule entries
+     (name, workflow, args, cron, timezone, overlap). Requires dispatch enabled.
 6. **Tests** — verify each piece with mock-fleet
 7. **Deployment** — Docker, env vars, compose updates
 8. **Documentation** — generate `README.md` from the spec (see Agent README section)

@@ -23,6 +23,8 @@
     --rose-bg: #ffe4e6;
     --slate: #334155;
     --slate-bg: #e2e8f0;
+    --cyan: #0891b2;
+    --cyan-bg: #cffafe;
     --svg-fg: #111827;
     --svg-muted: #374151;
     --arrow: #6b7280;
@@ -50,6 +52,8 @@
       --rose-bg: #3d1520;
       --slate: #94a3b8;
       --slate-bg: #1e2a3a;
+      --cyan: #22d3ee;
+      --cyan-bg: #083344;
       --svg-fg: #f0f2f8;
       --svg-muted: #b0b8cc;
       --arrow: #5a6580;
@@ -77,6 +81,8 @@
     --rose-bg: #3d1520;
     --slate: #94a3b8;
     --slate-bg: #1e2a3a;
+    --cyan: #22d3ee;
+    --cyan-bg: #083344;
     --svg-fg: #f0f2f8;
     --svg-muted: #b0b8cc;
     --arrow: #5a6580;
@@ -194,7 +200,7 @@
 <p class="subtitle">apra-agent-kit — autonomous AI agent server built on Apra Fleet</p>
 
 <figure>
-  <svg viewBox="0 0 780 630" role="img" aria-label="Component diagram showing how a client request flows through HTTP layer, job queue, strategy engine, worker pool, Fleet, and tools, with SSE/webhook callback to client" style="max-width:100%;height:auto;display:block;margin:0 auto">
+  <svg viewBox="0 0 780 630" role="img" aria-label="Component diagram showing how a client request flows through HTTP layer, scheduler, job queue, strategy engine, worker pool, Fleet, and tools, with SSE/webhook callback to client" style="max-width:100%;height:auto;display:block;margin:0 auto">
     <defs>
       <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
         <polygon points="0 0, 10 3.5, 0 7" fill="var(--arrow)"/>
@@ -235,6 +241,12 @@
     <text x="200" y="200" text-anchor="middle" font-size="13" font-weight="600" fill="var(--amber)">Job Queue</text>
     <text x="200" y="218" text-anchor="middle" font-size="10" fill="var(--svg-muted)">SQLite FIFO (VM/Docker)</text>
     <text x="200" y="232" text-anchor="middle" font-size="10" fill="var(--svg-muted)">Azure Durable Functions (Cloud)</text>
+
+    <!-- Scheduler: clock that submits into the queue -->
+    <rect x="64" y="114" width="148" height="42" rx="8" fill="var(--cyan-bg)" stroke="var(--cyan)" stroke-width="1.5"/>
+    <text x="138" y="131" text-anchor="middle" font-size="12" font-weight="600" fill="var(--cyan)">Scheduler</text>
+    <text x="138" y="146" text-anchor="middle" font-size="9" fill="var(--svg-muted)" class="label-mono">cron → jobs.submit</text>
+    <line x1="138" y1="156" x2="138" y2="178" stroke="var(--arrow)" stroke-width="1.5" marker-end="url(#arrow)"/>
 
     <!-- Arrow: Job Queue → Strategy -->
     <line x1="200" y1="248" x2="200" y2="270" stroke="var(--arrow)" stroke-width="1.5"/>
@@ -325,6 +337,10 @@
   <div class="comp">
     <span class="comp-name"><span class="dot" style="background:var(--amber)"></span>Job Queue</span>
     <span class="comp-desc">Handles async tasks. When you fire-and-forget a task, it gets queued here and a worker picks it up. SQLite-backed locally, Azure Durable Functions in the cloud. Jobs go through: queued → processing → completed/failed.</span>
+  </div>
+  <div class="comp">
+    <span class="comp-name"><span class="dot" style="background:var(--cyan)"></span>Scheduler</span>
+    <span class="comp-desc">Fires named workflows on cron. Submits jobs through the jobs pipeline. In-process croner or Azure Timer Triggers.</span>
   </div>
   <div class="comp">
     <span class="comp-name"><span class="dot" style="background:var(--purple)"></span>MCP Server</span>

@@ -37,6 +37,13 @@ Handles async tasks. When you fire-and-forget a task, it gets queued and a worke
 SQLite-backed locally, Azure Durable Functions in the cloud.
 Jobs go through: `queued → processing → completed / failed / cancelled / budget_exceeded`.
 
+**Scheduler** (`host/scheduler/`) —
+Fires named workflows on cron schedules. Config-driven (schedules live in
+`host.config.mjs`). Each tick submits a job through the jobs pipeline — the
+scheduler is a clock, nothing more. Two backends: in-process (croner timers
+in Node) for VM/Docker, Azure Timer Triggers for Functions.
+See [scheduled-workflows.md](scheduled-workflows.md) for configuration and usage.
+
 **MCP Server** (`mcp/`) —
 Exposes 15 tools as an MCP catalog so an external AI (like Claude Code) can call them directly,
 without the agent doing its own planning.
