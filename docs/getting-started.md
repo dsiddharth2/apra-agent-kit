@@ -19,6 +19,7 @@ The kit gives you an agent that can:
 - Stream progress to a real-time chat UI
 - Respect cost, token, and time budgets
 - Remember prior chat turns and learn facts across sessions (optional memory)
+- Run workflows on a schedule (cron-based, timezone-aware)
 
 You supply: **the tools** and **the config**. The kit handles planning, execution,
 review, error recovery, concurrency, and deployment.
@@ -238,6 +239,35 @@ memory: {
 }
 ```
 
+### Scheduled Workflows
+
+Run any registered workflow on a cron schedule. Scheduled runs create normal jobs
+— they appear in `GET /jobs/:id`, stream events over SSE, and deliver results via
+webhook.
+
+```js
+// host.config.mjs
+modules: {
+  scheduler: {
+    enabled: true,
+    schedules: [
+      {
+        name: 'morning-briefing',
+        workflow: 'city-briefing',
+        args: { city: 'Tokyo' },
+        cron: '0 9 * * *',          // 9am daily
+        timezone: 'Asia/Tokyo',
+        overlap: 'queue',            // or 'skip'
+      },
+    ],
+  },
+}
+```
+
+The scheduler requires `dispatch` to be enabled (it submits jobs through the jobs
+pipeline). See [scheduled-workflows.md](scheduled-workflows.md) for the full
+reference.
+
 ### Config reference
 
 | Field | What it does |
@@ -254,6 +284,7 @@ memory: {
 | `memory.conversationContext` | Carries chat turns across tasks within a session. Mode: `store` (server persists) or `passthrough` (caller sends) |
 | `memory.runState` | Crash recovery — resumes interrupted tasks from the last checkpoint |
 | `memory.longTerm` | Cross-session fact storage with FSRS-6 decay. Adds `remember`/`recall`/`forget`/`promote` tools |
+| `modules.scheduler` | Cron schedules that fire named workflows (timezone-aware, `queue` or `skip` overlap). Requires `dispatch` enabled. See [scheduled-workflows.md](scheduled-workflows.md) |
 
 ---
 

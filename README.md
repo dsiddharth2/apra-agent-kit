@@ -16,7 +16,8 @@
   <a href="#write-your-own-agent"><strong>Write Your Own Agent</strong></a> · 
   <a href="#contributing"><strong>Contribute</strong></a> · 
   <a href="docs/architecture.md"><strong>Architecture</strong></a> · 
-  <a href="docs/roadmap.md"><strong>Roadmap</strong></a>
+  <a href="docs/roadmap.md"><strong>Roadmap</strong></a> · 
+  <a href="docs/scheduled-workflows.md"><strong>Scheduled Workflows</strong></a>
 </p>
 
 ---
@@ -281,6 +282,8 @@ up to 10 ephemeral overflow pairs, then a wait queue.
 
 **The job queue** handles async tasks with real-time progress via SSE and webhook callbacks.
 Two backends: SQLite (local/Docker) or Azure Durable Functions (cloud).
+
+- **Scheduled workflows** — fire named workflows on cron schedules with timezone support and overlap policies. Config-driven, works on VM/Docker and Azure Functions. See [docs/scheduled-workflows.md](docs/scheduled-workflows.md).
 
 **Memory** gives the agent context across turns and sessions. Three independent tiers:
 - **Conversation context** — prior chat turns within a session, with LLM summarisation
