@@ -33,12 +33,13 @@ test('the bin points at the CLI', () => {
   assert.ok(fs.existsSync(path.join(repoRoot, 'bin/create.mjs')));
 });
 
-test('no runtime dependency was added', () => {
+test('runtime dependencies stay on the known allow-list', () => {
   assert.deepEqual(Object.keys(pkg.dependencies).sort(), [
     '@modelcontextprotocol/client',
     '@modelcontextprotocol/express',
     '@modelcontextprotocol/node',
     '@modelcontextprotocol/server',
+    'croner',
     'express',
     'proper-lockfile',
     'zod',

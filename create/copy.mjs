@@ -24,6 +24,7 @@ export const PUBLISHED_DIRS = [
   'docs/architecture.md',
   'docs/development.md',
   'docs/getting-started.md',
+  'docs/scheduled-workflows.md',
   'docs/memory.md',
   '.dockerignore',
   'evals',
