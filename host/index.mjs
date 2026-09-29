@@ -15,6 +15,8 @@ import { createGuardrails } from './guardrails.mjs';
 import { executeHostedTask, settleWhenAborted } from './tasks.mjs';
 import { createJobsBackend } from './jobs/index.mjs';
 import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config.mjs';
+import { createSchedulerBackend } from './scheduler/index.mjs';
+import { resolveSchedulerConfig } from './scheduler/config.mjs';
 import { createNotifier } from './notify/index.mjs';
 import { buildRoutes } from './routes.mjs';
 import { buildChatRoutes } from './chat/routes.mjs';
@@ -144,6 +146,7 @@ export async function startHost({
 
   let jobs = null;
   let memory = null;
+  let scheduler = null;
   const runSync = (task, { signal } = {}) => executeHostedTask(task, {
     api, activeDispatcher, toolRegistry, runLoopConfig, routerConfig, budgetsConfig, guardrailsMod, jobs, signal, memory, logger,
   });
@@ -205,6 +208,23 @@ export async function startHost({
     }
   }
 
+  const schedulerConfig = resolveSchedulerConfig(config.modules?.scheduler, { env, dispatchConfig });
+  if (schedulerConfig.enabled && jobs) {
+    try {
+      scheduler = await createSchedulerBackend(schedulerConfig, {
+        jobs, toolRegistry, logger,
+      });
+      await scheduler.start();
+    } catch (err) {
+      try { await scheduler?.stop(); } catch { /* preserve original error */ }
+      try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve */ }
+      try { await memory?.close(); } catch { /* preserve */ }
+      try { await ownDispatcher?.close(); } catch { /* preserve */ }
+      try { await stopFleet?.(); } catch { /* preserve */ }
+      throw err;
+    }
+  }
+
   const mcpExecute = guardrailsMod
     ? (tool, executorArgs) => guardrailsMod.execute(tool, executorArgs)
     : (tool, executorArgs) => executeTool(tool, executorArgs);
@@ -223,7 +243,7 @@ export async function startHost({
   };
 
   const chatRoutes = await buildChatRoutes({ chatConfig, hostName: config.name });
-  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes, guardrails: guardrailsMod, memoryRoutes: memory?.routes ?? null });
+  const routes = buildRoutes({ jobs, notifier, runSync, mcpRaw, mcpWeb: null, runLoopEnabled, chatRoutes, guardrails: guardrailsMod, memoryRoutes: memory?.routes ?? null, scheduler });
 
   let adapter;
   const listenPort = port ?? config.comm.port;
@@ -234,6 +254,7 @@ export async function startHost({
     await adapter.start({ routes, port: listenPort, host: bindHost, authenticate, mcpServerFactory });
   } catch (err) {
     try { await adapter?.stop(); } catch { /* preserve */ }
+    try { await scheduler?.stop(); } catch { /* preserve */ }
     try { await jobs?.stop({ drainMs: 0 }); } catch { /* preserve */ }
     try { await memory?.close(); } catch { /* preserve */ }
     try { await ownDispatcher?.close(); } catch { /* preserve */ }
@@ -272,6 +293,7 @@ export async function startHost({
     if (closed) return;
     closed = true;
     activeDispatcher.beginShutdown();
+    await scheduler?.stop();
     await adapter.stop();
     await jobs?.stop({ drainMs: dispatchConfig?.drainMs });
     await notifier?.stop();
@@ -286,7 +308,7 @@ export async function startHost({
 
   const effectiveConfig = Object.freeze({ ...config, modules: Object.freeze({ ...config.modules, chat: chatConfig }) });
   return {
-    host: adapter, jobs, notifier, memory, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry,
+    host: adapter, jobs, notifier, memory, scheduler, callTool, close, stop: close, config: effectiveConfig, registry: toolRegistry,
     fleetApi: api, dispatcher: activeDispatcher, guardrailsMod, runLoopConfig, budgetsConfig, routerConfig, logger,
   };
 }

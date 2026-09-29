@@ -78,6 +78,10 @@ When completing a travel planning task, your done result MUST include:
       enabled: true,
       fallbackStrategy: 'open-ended',
     },
+    // scheduler: {
+    //   enabled: false,
+    //   schedules: [],
+    // },
     memory: {
       conversationContext: {
         enabled: true,

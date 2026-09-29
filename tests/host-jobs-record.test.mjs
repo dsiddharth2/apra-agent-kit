@@ -25,6 +25,21 @@ test('createRecord produces the spec shape with queued status', () => {
   assert.equal(r.error, null);
 });
 
+test('createRecord keeps strategy and workflow when present', () => {
+  const r = rec.createRecord(
+    { goal: 'g', workflow: 'city-briefing', inputs: { city: 'Tokyo' }, strategy: 'workflow' },
+    { id: 'job-wf', now: NOW },
+  );
+  assert.deepEqual(r.task, {
+    goal: 'g',
+    inputs: { city: 'Tokyo' },
+    constraints: {},
+    budget: {},
+    strategy: 'workflow',
+    workflow: 'city-briefing',
+  });
+});
+
 test('newJobId has the job- prefix and is unique', () => {
   const a = rec.newJobId(); const b = rec.newJobId();
   assert.match(a, /^job-[a-f0-9]{12}$/);

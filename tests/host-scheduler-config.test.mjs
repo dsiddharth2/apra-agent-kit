@@ -96,3 +96,14 @@ test('loadConfig rejects scheduler without dispatch', async () => {
   });
   await assert.rejects(loadConfig(dir, { NODE_ENV: 'test' }), /scheduler enabled but dispatch disabled/);
 });
+
+test('loadConfig rejects SCHEDULER_ENABLED when the file disables scheduler and dispatch', async () => {
+  const dir = await configInTmpDir({
+    ...BASE_CONFIG,
+    modules: { ...BASE_CONFIG.modules, dispatch: { enabled: false }, scheduler: { enabled: false, schedules: [] } },
+  });
+  await assert.rejects(
+    loadConfig(dir, { SCHEDULER_ENABLED: 'true', NODE_ENV: 'test' }),
+    /scheduler enabled but dispatch disabled/,
+  );
+});

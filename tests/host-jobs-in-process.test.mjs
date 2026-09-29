@@ -453,3 +453,32 @@ test('stop during claim window aborts reserved jobs and does not close the store
     await finishPending(runner);
   }
 });
+
+test('submit with workflow strategy reaches runJob after persistence', async () => {
+  const runner = makeRunner();
+  const seen = [];
+  const inner = runner.runJob;
+  runner.runJob = (task, opts) => {
+    seen.push(task);
+    return inner(task, opts);
+  };
+  const { jobs } = await setup({}, runner);
+  try {
+    const workflow = 'city-briefing';
+    const { jobId } = await jobs.submit({
+      goal: 'Scheduled workflow: city-briefing',
+      workflow,
+      inputs: { city: 'Tokyo' },
+      strategy: 'workflow',
+    });
+    await runner.waitFor(jobId);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].strategy, 'workflow');
+    assert.equal(seen[0].workflow, workflow);
+    assert.deepEqual(seen[0].inputs, { city: 'Tokyo' });
+    const stored = await jobs.get(jobId);
+    assert.equal(stored.task.strategy, 'workflow');
+    assert.equal(stored.task.workflow, workflow);
+    await runner.finish(jobId);
+  } finally { await jobs.stop(); }
+});
