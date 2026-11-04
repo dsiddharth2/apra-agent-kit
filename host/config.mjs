@@ -4,6 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { resolveDispatchConfig, resolveNotifyConfigWithEnv } from './jobs/config.mjs';
 import { resolveSchedulerConfig } from './scheduler/config.mjs';
+import { parseAllowedHosts, validateAllowedHosts } from '../comm/allowed-hosts.mjs';
 
 const SUPPORTED_ADAPTERS = new Set(['express', 'raw-http', 'azure-functions']);
 const KNOWN_MODULES = new Set(['runLoop', 'memory', 'budgets', 'guardrails', 'evals', 'dispatch', 'notify', 'chat', 'router', 'scheduler', 'humanInput']);
@@ -83,6 +84,7 @@ function validate(raw, env) {
 
   const port = raw.comm.port ?? Number(env.PORT ?? 3000);
   const host = raw.comm.host ?? env.MCP_BIND_HOST ?? '127.0.0.1';
+  const allowedHosts = validateAllowedHosts(raw.comm.allowedHosts ?? parseAllowedHosts(env.MCP_ALLOWED_HOSTS));
 
   if (raw.modules && typeof raw.modules === 'object') {
     for (const key of Object.keys(raw.modules)) {
@@ -216,6 +218,7 @@ function validate(raw, env) {
       adapter: raw.comm.adapter,
       port,
       host,
+      allowedHosts,
     }),
     modules: Object.freeze(modules),
   });

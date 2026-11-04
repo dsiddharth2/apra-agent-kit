@@ -23,8 +23,12 @@ jobs:
         run: $COMPOSE --profile vm build
       - name: Start agent
         run: $COMPOSE --profile vm up -d --wait agent-vm
+      # shell: bash runs with -o pipefail, so a failing suite fails the step
+      # instead of reporting tee's exit code (#89). --use-aliases registers the
+      # "e2e" service name so the agent can reach the webhook receiver.
       - name: Run e2e suite
-        run: $COMPOSE run --rm e2e | tee e2e-vm.log
+        shell: bash
+        run: $COMPOSE run --rm --use-aliases e2e | tee e2e-vm.log
       - name: Collect logs on failure
         if: failure()
         run: $COMPOSE --profile vm logs --no-color > agent-vm.log || true

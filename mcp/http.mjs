@@ -2,14 +2,16 @@ import { createMcpExpressApp } from '@modelcontextprotocol/express';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { authenticate as defaultAuthenticate } from './auth.mjs';
 
-export function createMcpHttpApp({ buildServer, authenticate = defaultAuthenticate } = {}) {
+export function createMcpHttpApp({ buildServer, authenticate = defaultAuthenticate, host = '127.0.0.1', allowedHosts } = {}) {
   if (typeof buildServer !== 'function') {
     throw new Error('createMcpHttpApp requires a buildServer function');
   }
 
-  // createMcpExpressApp() enables Host header validation (DNS rebinding
-  // protection) for localhost and parses JSON bodies, so no express.json().
-  const app = createMcpExpressApp();
+  // createMcpExpressApp() parses JSON bodies, so no express.json(). It picks
+  // Host header validation (DNS rebinding protection) from the bind host:
+  // localhost binds accept only localhost names, 0.0.0.0 binds rely on auth.
+  // allowedHosts overrides both (#89).
+  const app = createMcpExpressApp({ host, allowedHosts });
 
   app.get('/health', (req, res) => {
     res.json({ ok: true });

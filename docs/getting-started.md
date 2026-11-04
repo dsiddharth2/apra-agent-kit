@@ -280,6 +280,8 @@ reference.
 | `description` | Short label for the chat UI title and log output |
 | `agentDescription` | **The agent's personality and domain knowledge.** Injected into the system prompt. This is how you tell the LLM what it is, what it knows, and how it should respond. Can be a multi-line template literal. |
 | `comm.adapter` | `'express'` (local/Docker) or `'azure-functions'` |
+| `comm.host` | Bind address, default `MCP_BIND_HOST` or `'127.0.0.1'`. Use `'0.0.0.0'` in Docker or on a VM |
+| `comm.allowedHosts` | Optional list of hostnames the server answers to (default `MCP_ALLOWED_HOSTS`, comma-separated). See [Host header validation](mcp-interface.md#host-header-validation) |
 | `dispatch.backend` | `'in-process'` (default for express) or `'durable'` (Azure only) |
 | `dispatch.store.kind` | `'sqlite'` (persists jobs) or `'memory'` (testing only) |
 | `dispatch.concurrency` | Max parallel tasks |

@@ -2,6 +2,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createWorkerDispatcher } from '../pool/index.mjs';
 import { ensureApralabs } from '../transport/ensure-apralabs.mjs';
+import { parseAllowedHosts } from '../comm/allowed-hosts.mjs';
 import { createMcpHttpApp } from './http.mjs';
 import { buildMcpServer } from './server.mjs';
 
@@ -36,11 +37,13 @@ export async function startMcpServer({ fleetApi, dispatcher, port, env = process
     }
   }
 
-  const app = createMcpHttpApp({
-    buildServer: () => buildMcpServer({ fleetApi: api, dispatcher: activeDispatcher, registry }),
-  });
   const listenPort = port ?? Number(env.PORT ?? 3000);
   const bindHost = env.MCP_BIND_HOST || '127.0.0.1';
+  const app = createMcpHttpApp({
+    buildServer: () => buildMcpServer({ fleetApi: api, dispatcher: activeDispatcher, registry }),
+    host: bindHost,
+    allowedHosts: parseAllowedHosts(env.MCP_ALLOWED_HOSTS),
+  });
   let server;
   try {
     server = app.listen(listenPort, bindHost);

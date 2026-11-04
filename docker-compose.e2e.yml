@@ -2,7 +2,8 @@
 # Profiles:  vm       → agent-vm (in-process jobs, SQLite)
 #            durable  → azurite + agent-durable (Azure Functions host + Durable)
 # Run:       docker compose -f docker-compose.e2e.yml --profile vm up -d --wait agent-vm
-#            docker compose -f docker-compose.e2e.yml run --rm e2e
+#            docker compose -f docker-compose.e2e.yml run --rm --use-aliases e2e
+#            (--use-aliases lets the agent reach the webhook receiver at http://e2e:9000)
 name: apra-agent-kit-e2e
 
 # ${VAR-default} (no colon) so an explicitly empty FLEET_MOCK_SCRIPT disables the mock (live mode).
@@ -22,6 +23,9 @@ services:
     environment:
       <<: *agent-env
       MCP_BIND_HOST: "0.0.0.0"
+      # Exercise the strict path: the e2e runner uses the service name, the
+      # healthcheck uses localhost; anything else gets 403 Invalid Host.
+      MCP_ALLOWED_HOSTS: "agent-vm,localhost"
       PORT: "3000"
       JOBS_MAX_QUEUE_SIZE: "1"
       JOBS_CONCURRENCY: "1"

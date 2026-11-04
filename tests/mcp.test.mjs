@@ -534,3 +534,45 @@ test('tools see a pooled fleetApi that resolves role keywords', async () => {
     assert.equal(fleetApi.commandCalls[0].member_name, 'WORKER-1-DOER');
   });
 });
+
+// #89: the standalone MCP server honours its bind host and MCP_ALLOWED_HOSTS.
+function healthWithHost(port, hostHeader) {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ host: '127.0.0.1', port, path: '/health', headers: { Host: hostHeader } }, (res) => {
+      res.resume();
+      res.on('end', () => resolve(res.statusCode));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('createMcpHttpApp bound to 0.0.0.0 accepts a non-localhost Host header', async () => {
+  const app = createMcpHttpApp({ buildServer: () => { throw new Error('unused'); }, host: '0.0.0.0' });
+  const httpServer = app.listen(0, '0.0.0.0');
+  await once(httpServer, 'listening');
+  try {
+    assert.equal(await healthWithHost(httpServer.address().port, 'agent-vm:3000'), 200);
+  } finally { await new Promise((r) => httpServer.close(r)); }
+});
+
+test('createMcpHttpApp with allowedHosts refuses other hosts', async () => {
+  const app = createMcpHttpApp({ buildServer: () => { throw new Error('unused'); }, host: '0.0.0.0', allowedHosts: ['agent-vm'] });
+  const httpServer = app.listen(0, '0.0.0.0');
+  await once(httpServer, 'listening');
+  try {
+    assert.equal(await healthWithHost(httpServer.address().port, 'agent-vm'), 200);
+    assert.equal(await healthWithHost(httpServer.address().port, 'evil.example'), 403);
+  } finally { await new Promise((r) => httpServer.close(r)); }
+});
+
+test('startMcpServer passes MCP_BIND_HOST and MCP_ALLOWED_HOSTS to host validation', async () => {
+  const { server, close } = await startMcpServer({
+    fleetApi: createMockFleetApi(), dispatcher: await makeDispatcher(), port: 0,
+    env: { ...process.env, MCP_BIND_HOST: '0.0.0.0', MCP_ALLOWED_HOSTS: 'agent-vm' },
+  });
+  try {
+    assert.equal(await healthWithHost(server.address().port, 'agent-vm:3000'), 200);
+    assert.equal(await healthWithHost(server.address().port, 'evil.example'), 403);
+  } finally { await close(); }
+});

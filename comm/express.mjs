@@ -5,8 +5,10 @@ export function createExpressAdapter() {
   let server = null;
 
   return {
-    async start({ routes, port, host, authenticate }) {
-      const app = createMcpExpressApp();
+    async start({ routes, port, host, allowedHosts, authenticate }) {
+      // Pass the real bind host so a 0.0.0.0 bind is not given localhost-only
+      // Host validation (#89); allowedHosts tightens it when set.
+      const app = createMcpExpressApp({ host, allowedHosts });
 
       for (const route of Object.values(routes)) {
         if (!route) continue;

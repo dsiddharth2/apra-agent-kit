@@ -337,7 +337,7 @@ export async function startHost({
 
   try {
     adapter = createAdapter ? createAdapter() : await resolveAdapter(adapterName ?? config.comm.adapter);
-    await adapter.start({ routes, port: listenPort, host: bindHost, authenticate, mcpServerFactory });
+    await adapter.start({ routes, port: listenPort, host: bindHost, allowedHosts: config.comm.allowedHosts, authenticate, mcpServerFactory });
   } catch (err) {
     try { await adapter?.stop(); } catch { /* preserve */ }
     try { await scheduler?.stop(); } catch { /* preserve */ }

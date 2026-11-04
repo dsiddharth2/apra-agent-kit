@@ -153,6 +153,22 @@ deployment also needs bearer-token authentication: build the middleware with
 and configure its token verifier. Do not expose the pass-through stub on a non-loopback
 interface.
 
+### Host header validation
+
+Both the agent host (`comm.adapter: 'express'`) and the standalone MCP launcher check the
+`Host` header to block DNS-rebinding attacks. What they accept follows the bind address:
+
+| Bind host | `allowedHosts` unset | `allowedHosts` set |
+|---|---|---|
+| `127.0.0.1`, `localhost`, `::1` | Only `localhost`, `127.0.0.1`, `[::1]` | Only the listed names |
+| `0.0.0.0`, `::` | Any host; the authenticator is the guard | Only the listed names |
+| A specific IP | Any host | Only the listed names |
+
+Set the list with `comm.allowedHosts` in `host.config.mjs` or with
+`MCP_ALLOWED_HOSTS=agent.example.com,10.0.0.5` (hostnames only, no ports; IPv6 in brackets).
+Include `localhost` if a container healthcheck calls the server on `localhost`. A request
+with any other `Host` gets `403 Invalid Host`.
+
 Give the matching token to Claude Code when registering the remote endpoint:
 
 ```bash

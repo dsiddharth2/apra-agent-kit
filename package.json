@@ -60,8 +60,8 @@
     "test:e2e": "node --test tests/e2e/task.e2e.test.mjs",
     "smoke": "node scripts/smoke-test.mjs",
     "smoke:live": "node scripts/smoke-test.mjs --live",
-    "e2e:vm": "docker compose -f docker-compose.e2e.yml --profile vm up -d --wait agent-vm && docker compose -f docker-compose.e2e.yml run --rm e2e; docker compose -f docker-compose.e2e.yml --profile vm down -v",
-    "e2e:durable": "docker compose -f docker-compose.e2e.yml --profile durable up -d --wait agent-durable && BASE_URL=http://agent-durable/api E2E_TARGET=durable docker compose -f docker-compose.e2e.yml run --rm e2e; docker compose -f docker-compose.e2e.yml --profile durable down -v"
+    "e2e:vm": "docker compose -f docker-compose.e2e.yml --profile vm up -d --wait agent-vm && docker compose -f docker-compose.e2e.yml run --rm --use-aliases e2e; docker compose -f docker-compose.e2e.yml --profile vm down -v",
+    "e2e:durable": "docker compose -f docker-compose.e2e.yml --profile durable up -d --wait agent-durable && BASE_URL=http://agent-durable/api E2E_TARGET=durable docker compose -f docker-compose.e2e.yml run --rm --use-aliases e2e; docker compose -f docker-compose.e2e.yml --profile durable down -v"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",

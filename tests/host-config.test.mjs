@@ -413,3 +413,30 @@ test('router config resolves from env overrides', async () => {
   assert.equal(config.modules.router.enabled, true);
   assert.equal(config.modules.router.fallbackStrategy, 'plan-execute');
 });
+
+test('comm.allowedHosts defaults to undefined', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' } };`);
+  const config = await loadConfig(dir, {});
+  assert.equal(config.comm.allowedHosts, undefined);
+});
+
+test('comm.allowedHosts is read from env MCP_ALLOWED_HOSTS as a comma list', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express' } };`);
+  const config = await loadConfig(dir, { MCP_ALLOWED_HOSTS: ' agent-vm , 10.0.0.5,' });
+  assert.deepEqual(config.comm.allowedHosts, ['agent-vm', '10.0.0.5']);
+});
+
+test('comm.allowedHosts in config wins over env', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express', allowedHosts: ['myapp.local'] } };`);
+  const config = await loadConfig(dir, { MCP_ALLOWED_HOSTS: 'agent-vm' });
+  assert.deepEqual(config.comm.allowedHosts, ['myapp.local']);
+});
+
+test('comm.allowedHosts that is not an array of strings throws', async () => {
+  const dir = await tmpDir();
+  await writeConfig(dir, 'host.config.mjs', `export default { name: 'x', fleet: {}, comm: { adapter: 'express', allowedHosts: 'agent-vm' } };`);
+  await assert.rejects(() => loadConfig(dir, {}), /allowedHosts/);
+});
